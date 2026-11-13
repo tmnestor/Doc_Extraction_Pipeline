@@ -316,6 +316,7 @@ def print_config(config: PipelineConfig) -> None:
         str(config.batch_size) if config.batch_size else "[dim]auto[/dim]",
     )
     config_table.add_row("Bank V2", str(config.bank_v2))
+    config_table.add_row("Bank strategy", str(config.bank_strategy))
     config_table.add_row("Balance correction", str(config.balance_correction))
     config_table.add_row(
         "GPUs",

@@ -21,9 +21,29 @@ from pathlib import Path
 from typing import Any
 
 from .bank_corrector import BalanceCorrector, TransactionFilter
-from .bank_types import ColumnMapping, ExtractionResult, ExtractionStrategy
+from .bank_types import (
+    BANK_STRATEGY_SINGLE_PASS,
+    ColumnMapping,
+    ExtractionResult,
+    ExtractionStrategy,
+    validate_bank_strategy,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def serialise_bank_response(schema_fields: dict[str, str], metadata: dict[str, Any]) -> str:
+    """Build the ``raw_response`` text of a bank statement's extraction record.
+
+    The two-turn path returns structured fields, written as flat ``FIELD: value``
+    lines for the clean stage's parser. The single-pass path returns the model's
+    reply unaltered in ``metadata["verbatim_response"]``, and that is written
+    as it stands.
+    """
+    verbatim = metadata.get("verbatim_response")
+    if verbatim is not None:
+        return verbatim
+    return "\n".join(f"{field}: {value}" for field, value in schema_fields.items())
 
 
 def _warn_dropped_rows(strategy: str, *, kept: int, total: int) -> None:
@@ -527,9 +547,14 @@ class UnifiedBankExtractor:
             Typically ``processor.generate`` from a DocumentProcessor.
         use_balance_correction: Enable balance-based mathematical correction
         verbose: Enable verbose output
+        bank_strategy: ``two_turn`` (header detection, then a layout-specific
+            extraction) or ``single_pass`` (one call with the schema prompt, the
+            reply kept as written). Required: pass the value of
+            ``pipeline.processing.bank_strategy``. None, which is what a run
+            without that key carries, fails here with a diagnostic.
 
     Example:
-        extractor = UnifiedBankExtractor(generate_fn=processor.generate)
+        extractor = UnifiedBankExtractor(generate_fn=processor.generate, bank_strategy="two_turn")
         schema, metadata = extractor.extract_bank_statement(image_path)
     """
 
@@ -541,7 +566,10 @@ class UnifiedBankExtractor:
         token_budgets: dict[str, int] | None = None,
         max_tiles: int | None = None,
         min_tiles: int | None = None,
+        *,
+        bank_strategy: str | None,
     ):
+        self.bank_strategy = validate_bank_strategy(bank_strategy)
         self.generate_fn = generate_fn
         self.use_balance_correction = use_balance_correction
         self.verbose = verbose
@@ -1174,6 +1202,36 @@ class UnifiedBankExtractor:
             raw_responses={"schema_fallback": response},
         )
 
+    def _extract_single_pass(self, image: Any) -> tuple[dict[str, str], dict[str, Any]]:
+        """Read a statement in one model call, keeping the reply as written.
+
+        Sends the schema prompt alone: no header detection, no layout-specific
+        second turn. Unlike the schema fallback of the two-turn path, nothing is
+        repaired afterwards: the lists are not cut to a common length and the
+        statement period is not recomputed from the transaction dates. The reply
+        goes to the clean stage as the model wrote it, so a model read this way
+        is scored on exactly what it returned.
+
+        Returns:
+            Tuple of (schema_fields, metadata). ``metadata["verbatim_response"]``
+            holds the unaltered reply, which ``serialise_bank_response`` writes
+            to the extraction record in place of the parsed fields.
+        """
+        self._log("[UBE] Single pass: extracting with the schema prompt alone...")
+        with _bypass_rich_stdout():
+            response = self._gen(image, self._prompts["schema_fallback"], self._extract_tokens)
+        self._log(f"[UBE]   Raw response length: {len(response)} chars")
+
+        metadata: dict[str, Any] = {
+            "strategy_used": BANK_STRATEGY_SINGLE_PASS,
+            "turns_executed": 1,
+            "headers_detected": [],
+            "column_mapping": {},
+            "raw_responses": {BANK_STRATEGY_SINGLE_PASS: response},
+            "verbatim_response": response,
+        }
+        return self._parse_schema_response(response), metadata
+
     def _parse_schema_response(self, response: str) -> dict[str, str]:
         """Parse schema-format response into field dictionary."""
         result = {}
@@ -1334,6 +1392,9 @@ class UnifiedBankExtractor:
 
         # Load image
         image = Image.open(image_path).convert("RGB")
+
+        if self.bank_strategy == BANK_STRATEGY_SINGLE_PASS:
+            return self._extract_single_pass(image)
 
         # Execute extraction with stdout bypass to prevent Rich console recursion
         with _bypass_rich_stdout():

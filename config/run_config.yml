@@ -707,6 +707,13 @@ pipeline:
   processing:
     batch_size: null             # Images per batch (null = auto-detect from VRAM, 1 = sequential)
     bank_v2: true              # Use V2 bank statement extraction
+    # Model calls per bank statement on the V2 path (read only when bank_v2 is true):
+    #   two_turn    = header detection, then a layout-specific extraction that also
+    #                 reads the balance column. The path every run to date has used.
+    #   single_pass = one call with prompts/bank_prompts.yaml schema_fallback_extraction
+    #                 (debits only), the reply passed to the clean stage as written:
+    #                 no header detection, no balance column, no repair of the lists.
+    bank_strategy: two_turn
     balance_correction: false  # Disable balance validation (reduces accuracy)
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)

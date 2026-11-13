@@ -75,6 +75,7 @@ def run_batch(
             generate_fn=processor.generate,
             verbose=config.verbose,
             use_balance_correction=config.balance_correction,
+            bank_strategy=config.bank_strategy,
         )
 
         console.print("[green]V2: Sophisticated bank statement extraction enabled[/green]")

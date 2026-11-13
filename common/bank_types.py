@@ -19,6 +19,42 @@ class ExtractionStrategy(Enum):
     TABLE_EXTRACTION = auto()  # 3-turn: header + format classify + table
 
 
+# How many model calls a bank statement gets: pipeline.processing.bank_strategy.
+BANK_STRATEGY_TWO_TURN = "two_turn"  # header detection, then a layout-specific extraction
+BANK_STRATEGY_SINGLE_PASS = "single_pass"  # one call with the schema prompt, reply kept as written
+BANK_STRATEGIES = (BANK_STRATEGY_TWO_TURN, BANK_STRATEGY_SINGLE_PASS)
+
+
+def validate_bank_strategy(value: Any, config_path: Any = None) -> str:
+    """Return ``value`` if it names a bank strategy, else fail with a diagnostic.
+
+    Args:
+        value: The configured ``pipeline.processing.bank_strategy``.
+        config_path: The run config it was read from, named in the error. None
+            when the caller holds only the merged config.
+
+    Returns:
+        The validated strategy name.
+
+    Raises:
+        ValueError: If the value is missing or not one of ``BANK_STRATEGIES``.
+    """
+    if isinstance(value, str) and value in BANK_STRATEGIES:
+        return value
+    where = config_path if config_path is not None else "the run config (config/run_config.yml)"
+    raise ValueError(
+        f"What: bank_strategy is {value!r}, which is not a bank extraction strategy.\n"
+        f"Where: {where} -> pipeline.processing.bank_strategy\n"
+        f"Expected: one of {', '.join(BANK_STRATEGIES)}, e.g.:\n"
+        f"  pipeline:\n"
+        f"    processing:\n"
+        f"      bank_strategy: {BANK_STRATEGY_TWO_TURN}\n"
+        f"How to fix: set bank_strategy under 'pipeline.processing:' in that file to "
+        f"'{BANK_STRATEGY_TWO_TURN}' (header detection, then extraction) or "
+        f"'{BANK_STRATEGY_SINGLE_PASS}' (one call per statement)."
+    )
+
+
 @dataclass
 class ColumnMapping:
     """Mapped column names from detected headers."""

@@ -773,7 +773,7 @@ to a Python dataclass default. Enforced for:
 | `inference` | `max_new_tokens` |
 | `pipeline.information_extraction.input` | `dir`, `ground_truth`, `max_images`, `document_types` |
 | `pipeline.information_extraction.output` | `dir`, `skip_visualizations`, `skip_reports` |
-| `pipeline.processing` | `batch_size`, `bank_v2`, `balance_correction`, `verbose`, `debug` |
+| `pipeline.processing` | `batch_size`, `bank_v2`, `bank_strategy`, `balance_correction`, `verbose`, `debug` |
 
 There is no silent fallback for any of these — a missing required key fails before any GPU work
 begins. `pipeline.linking` is validated separately by `stages/transaction_link.py` (every key
@@ -824,9 +824,10 @@ inference:
         limit_mm_per_prompt: 19   # 18 detail tiles + 1 thumbnail (required when pre_tiling on)
 
 pipeline:
-  processing:                     # present section ⇒ ALL five keys must be declared
+  processing:                     # present section ⇒ ALL six keys must be declared
     batch_size: null              # null = auto-detect from VRAM, 1 = sequential
     bank_v2: true
+    bank_strategy: two_turn       # or single_pass: one call per statement, reply kept as written
     balance_correction: false     # NOTE: explicitly disabled (reduces accuracy)
     verbose: false
     debug: false

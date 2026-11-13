@@ -227,6 +227,7 @@ All results have been saved to: `{output_base}`
                 "flash_attn": config.flash_attn,
                 "dtype": config.dtype,
                 "bank_v2": config.bank_v2,
+                "bank_strategy": config.bank_strategy,
                 "balance_correction": config.balance_correction,
             },
             "summary_statistics": summary_dict,

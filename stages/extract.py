@@ -352,8 +352,9 @@ def run(
                 use_balance_correction=config.balance_correction,
                 max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
                 min_tiles=(bank_budget["min_tiles"] if config.pre_tiling_enabled else None),
+                bank_strategy=config.bank_strategy,
             )
-            logger.info("Bank adapter enabled")
+            logger.info("Bank adapter enabled (bank_strategy=%s)", bank_adapter.bank_strategy)
 
             # Phase 7: per-bank column-mapping cache
             from common.bank_header_cache import BankHeaderCache
@@ -545,7 +546,9 @@ def _extract_bank_with_adapter(
     # Serialize structured fields into flat FIELD: value text that the
     # standard hybrid parser already handles.  This keeps the stage contract
     # clean: extract produces a parseable raw_response, clean parses it.
-    raw_response_str = "\n".join(f"{field}: {value}" for field, value in schema_fields.items())
+    from common.unified_bank_extractor import serialise_bank_response
+
+    raw_response_str = serialise_bank_response(schema_fields, metadata)
 
     strategy = metadata.get("strategy_used", "unknown")
 

@@ -348,7 +348,7 @@ def classified_extract_worker(
     from cli import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_ops import create_processor, load_model
-    from common.unified_bank_extractor import UnifiedBankExtractor
+    from common.unified_bank_extractor import UnifiedBankExtractor, serialise_bank_response
 
     # Force single-GPU in this worker
     overrides = dict(cli_overrides)
@@ -391,8 +391,11 @@ def classified_extract_worker(
                 use_balance_correction=config.balance_correction,
                 max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
                 min_tiles=(bank_budget["min_tiles"] if config.pre_tiling_enabled else None),
+                bank_strategy=config.bank_strategy,
             )
-            logger.info("Bank adapter enabled (GPU %d)", gpu_id)
+            logger.info(
+                "Bank adapter enabled (GPU %d, bank_strategy=%s)", gpu_id, bank_adapter.bank_strategy
+            )
 
         records: list[dict[str, Any]] = []
         total = len(my_classifications)
@@ -456,9 +459,7 @@ def classified_extract_worker(
                     with prompt_trace.trace_context(**trace_ctx):
                         schema_fields, metadata = bank_adapter.extract_bank_statement(image_path)
                     img_time = time.time() - img_start
-                    raw_response_str = "\n".join(
-                        f"{field}: {value}" for field, value in schema_fields.items()
-                    )
+                    raw_response_str = serialise_bank_response(schema_fields, metadata)
                     strategy = metadata.get("strategy_used", "unknown")
                     records.append(
                         {

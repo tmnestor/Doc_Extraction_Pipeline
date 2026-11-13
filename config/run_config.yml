@@ -713,7 +713,8 @@ pipeline:
     #   single_pass = one call with prompts/bank_prompts.yaml schema_fallback_extraction
     #                 (debits only), the reply passed to the clean stage as written:
     #                 no header detection, no balance column, no repair of the lists.
-    bank_strategy: two_turn
+    # bank_strategy: two_turn
+    bank_strategy: single_pass
     balance_correction: false  # Disable balance validation (reduces accuracy)
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)

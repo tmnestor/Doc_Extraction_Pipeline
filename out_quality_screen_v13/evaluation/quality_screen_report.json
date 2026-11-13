@@ -1,0 +1,179 @@
+{
+  "counts": {
+    "total": 330,
+    "scored": 330,
+    "malformed": 0,
+    "missing": 0,
+    "think_drift": 0
+  },
+  "per_criterion": {
+    "blur": {
+      "true_positives": 197,
+      "false_positives": 133,
+      "false_negatives": 0,
+      "precision": 0.5969696969696969,
+      "recall": 1.0,
+      "f1": 0.747628083491461
+    },
+    "shadow": {
+      "true_positives": 110,
+      "false_positives": 0,
+      "false_negatives": 110,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6666666666666666
+    },
+    "crease": {
+      "true_positives": 3,
+      "false_positives": 0,
+      "false_negatives": 107,
+      "precision": 1.0,
+      "recall": 0.02727272727272727,
+      "f1": 0.053097345132743355
+    },
+    "faded": {
+      "true_positives": 156,
+      "false_positives": 0,
+      "false_negatives": 64,
+      "precision": 1.0,
+      "recall": 0.7090909090909091,
+      "f1": 0.8297872340425533
+    },
+    "tilt": {
+      "true_positives": 120,
+      "false_positives": 161,
+      "false_negatives": 0,
+      "precision": 0.42704626334519574,
+      "recall": 1.0,
+      "f1": 0.5985037406483791
+    },
+    "speckle": {
+      "true_positives": 188,
+      "false_positives": 105,
+      "false_negatives": 22,
+      "precision": 0.6416382252559727,
+      "recall": 0.8952380952380953,
+      "f1": 0.7475149105367793
+    }
+  },
+  "by_document_type": {
+    "invoice": {
+      "blur": {
+        "true_positives": 110,
+        "false_positives": 55,
+        "false_negatives": 0,
+        "precision": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 0.8
+      },
+      "shadow": {
+        "true_positives": 110,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "crease": {
+        "true_positives": 2,
+        "false_positives": 0,
+        "false_negatives": 53,
+        "precision": 1.0,
+        "recall": 0.03636363636363636,
+        "f1": 0.07017543859649122
+      },
+      "faded": {
+        "true_positives": 93,
+        "false_positives": 0,
+        "false_negatives": 17,
+        "precision": 1.0,
+        "recall": 0.8454545454545455,
+        "f1": 0.916256157635468
+      },
+      "tilt": {
+        "true_positives": 61,
+        "false_positives": 55,
+        "false_negatives": 0,
+        "precision": 0.5258620689655172,
+        "recall": 1.0,
+        "f1": 0.6892655367231638
+      },
+      "speckle": {
+        "true_positives": 91,
+        "false_positives": 40,
+        "false_negatives": 19,
+        "precision": 0.6946564885496184,
+        "recall": 0.8272727272727273,
+        "f1": 0.7551867219917012
+      }
+    },
+    "receipt": {
+      "blur": {
+        "true_positives": 87,
+        "false_positives": 78,
+        "false_negatives": 0,
+        "precision": 0.5272727272727272,
+        "recall": 1.0,
+        "f1": 0.6904761904761904
+      },
+      "shadow": {
+        "true_positives": 0,
+        "false_positives": 0,
+        "false_negatives": 110,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null
+      },
+      "crease": {
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 54,
+        "precision": 1.0,
+        "recall": 0.01818181818181818,
+        "f1": 0.03571428571428572
+      },
+      "faded": {
+        "true_positives": 63,
+        "false_positives": 0,
+        "false_negatives": 47,
+        "precision": 1.0,
+        "recall": 0.5727272727272728,
+        "f1": 0.7283236994219653
+      },
+      "tilt": {
+        "true_positives": 59,
+        "false_positives": 106,
+        "false_negatives": 0,
+        "precision": 0.3575757575757576,
+        "recall": 1.0,
+        "f1": 0.5267857142857143
+      },
+      "speckle": {
+        "true_positives": 97,
+        "false_positives": 65,
+        "false_negatives": 3,
+        "precision": 0.5987654320987654,
+        "recall": 0.97,
+        "f1": 0.7404580152671756
+      }
+    }
+  },
+  "overall_confusion": {
+    "FAIR->FAIR": 81,
+    "FAIR->GOOD": 10,
+    "FAIR->POOR": 19,
+    "GOOD->FAIR": 1,
+    "GOOD->GOOD": 109,
+    "POOR->FAIR": 17,
+    "POOR->GOOD": 1,
+    "POOR->POOR": 92
+  },
+  "variant": "quality_screen_v13",
+  "screening_runs": [
+    "2026-09-10T05:56:36"
+  ],
+  "composition": null,
+  "composition_tally": {
+    "SINGLE": 330
+  }
+}

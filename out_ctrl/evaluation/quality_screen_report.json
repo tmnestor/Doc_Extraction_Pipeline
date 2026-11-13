@@ -1,0 +1,23 @@
+{
+  "counts": {
+    "total": 330,
+    "scored": 60,
+    "malformed": 0,
+    "missing": 270,
+    "think_drift": 0
+  },
+  "per_criterion": {},
+  "by_document_type": {
+    "invoice": {},
+    "receipt": {}
+  },
+  "overall_confusion": {
+    "HEAVY->HEAVY": 12,
+    "HEAVY->MODERATE": 8,
+    "MODERATE->HEAVY": 5,
+    "MODERATE->MODERATE": 15,
+    "NONE->MODERATE": 18,
+    "NONE->NONE": 2
+  },
+  "variant": "quality_screen_overall_only"
+}

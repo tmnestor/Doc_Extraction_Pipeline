@@ -578,7 +578,8 @@ pipeline:
       # against the first model's 165 and report a plausible comparison.
       # max_images: 12       # smoke only, and never while a comparison is open
       max_images: null       # null = process all images
-      document_types: null   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
+      # document_types: null   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
+      document_types: [BANK_STATEMENT]   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
     # Output settings
     output:
       # dir: ../evaluation_data/output

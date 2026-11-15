@@ -568,9 +568,14 @@ class UnifiedBankExtractor:
         min_tiles: int | None = None,
         *,
         bank_strategy: str | None,
+        generate_many_fn: Any = None,
     ):
         self.bank_strategy = validate_bank_strategy(bank_strategy)
         self.generate_fn = generate_fn
+        # Optional Callable(images, prompts, max_tokens, extra) -> list[str]: several
+        # independent calls submitted to the engine together. Only the single-pass
+        # strategy can use it; a two-turn statement's second call needs its first.
+        self.generate_many_fn = generate_many_fn
         self.use_balance_correction = use_balance_correction
         self.verbose = verbose
         self._header_tokens = (token_budgets or {}).get("bank_header_detection", 500)
@@ -606,10 +611,18 @@ class UnifiedBankExtractor:
 
     def _gen(self, image: Any, prompt: str, max_tokens: int) -> str:
         """Call the backend, forwarding the pre-tiling tile budget when set."""
-        extra = (
-            {"max_tiles": self._max_tiles, "min_tiles": self._min_tiles or 1} if self._max_tiles else None
-        )
-        return self.generate_fn(image, prompt, max_tokens=max_tokens, extra=extra)
+        return self.generate_fn(image, prompt, max_tokens=max_tokens, extra=self._tile_extra())
+
+    def _tile_extra(self) -> dict[str, int] | None:
+        """The pre-tiling tile budget forwarded to the backend, or None when unset."""
+        if not self._max_tiles:
+            return None
+        return {"max_tiles": self._max_tiles, "min_tiles": self._min_tiles or 1}
+
+    @property
+    def can_batch(self) -> bool:
+        """Whether statements can share an engine call: single pass, and a batched call to make it."""
+        return self.bank_strategy == BANK_STRATEGY_SINGLE_PASS and self.generate_many_fn is not None
 
     def _extract_rows(
         self, image: Any, prompt: str, parse_fn: Any
@@ -1221,7 +1234,10 @@ class UnifiedBankExtractor:
         with _bypass_rich_stdout():
             response = self._gen(image, self._prompts["schema_fallback"], self._extract_tokens)
         self._log(f"[UBE]   Raw response length: {len(response)} chars")
+        return self._single_pass_result(response)
 
+    def _single_pass_result(self, response: str) -> tuple[dict[str, str], dict[str, Any]]:
+        """The (schema_fields, metadata) of one single-pass reply, batched or not."""
         metadata: dict[str, Any] = {
             "strategy_used": BANK_STRATEGY_SINGLE_PASS,
             "turns_executed": 1,
@@ -1231,6 +1247,57 @@ class UnifiedBankExtractor:
             "verbatim_response": response,
         }
         return self._parse_schema_response(response), metadata
+
+    def extract_bank_statements_single_pass(
+        self, image_paths: list[str | Path]
+    ) -> list[tuple[dict[str, str], dict[str, Any]]]:
+        """Read several statements single pass in one engine call.
+
+        Every statement gets the request the one-at-a-time path gives it: the
+        schema prompt alone, the same completion budget and tile budget. They
+        are submitted together so the engine can run them concurrently, and each
+        reply is kept as written.
+
+        Args:
+            image_paths: Paths of the statement images.
+
+        Returns:
+            One (schema_fields, metadata) per image, in input order, each equal
+            to what extract_bank_statement returns for that reply.
+
+        Raises:
+            ValueError: If the strategy is not single pass, or no batched call
+                was supplied.
+        """
+        from PIL import Image
+
+        if not self.can_batch:
+            raise ValueError(
+                f"What: bank statements cannot share an engine call with "
+                f"bank_strategy {self.bank_strategy!r}"
+                f"{'' if self.generate_many_fn else ' and no batched call (generate_many_fn)'}.\n"
+                f"Where: pipeline.processing.bank_strategy in config/run_config.yml, and "
+                f"the generate_many_fn given to UnifiedBankExtractor.\n"
+                f"Expected: bank_strategy: {BANK_STRATEGY_SINGLE_PASS} with a backend that has "
+                f"generate_many. A two-turn statement's second call depends on its "
+                f"first, so it has nothing to batch.\n"
+                f"How to fix: call extract_bank_statement once per image, or set "
+                f"bank_strategy: {BANK_STRATEGY_SINGLE_PASS}."
+            )
+
+        images = [Image.open(path).convert("RGB") for path in image_paths]
+        prompts = [self._prompts["schema_fallback"]] * len(images)
+        self._log(f"[UBE] Single pass: {len(images)} statements in one engine call...")
+        with _bypass_rich_stdout():
+            responses = self.generate_many_fn(
+                images, prompts, max_tokens=self._extract_tokens, extra=self._tile_extra()
+            )
+        if len(responses) != len(images):
+            raise ValueError(
+                f"backend returned {len(responses)} replies for {len(images)} statements; "
+                f"matching by position is unsafe"
+            )
+        return [self._single_pass_result(response) for response in responses]
 
     def _parse_schema_response(self, response: str) -> dict[str, str]:
         """Parse schema-format response into field dictionary."""

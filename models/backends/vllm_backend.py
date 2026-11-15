@@ -342,6 +342,86 @@ class VllmBackend:
         del outputs, conversations
         return texts
 
+    def generate_many(
+        self,
+        images: list[Image.Image],
+        prompts: list[str],
+        params: GenerationParams,
+    ) -> list[str]:
+        """Run several generate() calls as one engine call.
+
+        Each request is built exactly as generate() builds it: the same content
+        order (the model's own default unless extra["image_first"] says
+        otherwise) and the same chat-template kwargs. Only the submission
+        differs: the conversations go to the engine together, so its scheduler
+        runs up to max_num_seqs of them at once. That makes a batched run
+        the same measurement as an unbatched one, which generate_batch (text
+        before image, no chat-template kwargs) does not promise.
+
+        Args:
+            images: One PIL image per request.
+            prompts: One prompt per image, same order and length.
+            params: Generation hyper-parameters, shared by every request.
+
+        Returns:
+            Raw response strings, in submission order.
+
+        Raises:
+            ValueError: If the image and prompt counts differ.
+        """
+        if len(images) != len(prompts):
+            raise ValueError(
+                f"What: generate_many got {len(images)} images and {len(prompts)} "
+                f"prompts.\n"
+                f"Where: models/backends/vllm_backend.py.\n"
+                f"Expected: one prompt per image, in the same order.\n"
+                f"How to fix: build both lists from the same iteration. Responses "
+                f"are matched to inputs by position, so a length mismatch would "
+                f"score answers against the wrong images."
+            )
+
+        if not images:
+            return []
+
+        conversations = [
+            self._build_messages(
+                image,
+                prompt,
+                image_first=params.extra.get("image_first", self._default_image_first),
+                max_tiles=params.extra.get("max_tiles"),
+                min_tiles=params.extra.get("min_tiles", 1),
+            )
+            for image, prompt in zip(images, prompts, strict=True)
+        ]
+
+        from vllm import SamplingParams
+
+        sampling = SamplingParams(max_tokens=params.max_tokens, temperature=0)
+
+        outputs = self.model.chat(
+            messages=conversations,
+            sampling_params=sampling,
+            chat_template=self._chat_template,
+            use_tqdm=False,
+            **self._chat_kwargs(),
+        )
+
+        texts = []
+        for output, prompt in zip(outputs, prompts, strict=True):
+            self._record_cache_stats(output)
+            text = output.outputs[0].text.strip()
+            self._emit_trace(
+                prompt,
+                text,
+                getattr(output, "prompt_token_ids", None),
+                output.outputs[0].token_ids,
+            )
+            texts.append(text)
+
+        # Free vLLM output objects to release shared memory buffer slots.
+        del outputs, conversations
+        return texts
+
     def generate_for_graph(
         self,
         image: Image.Image,

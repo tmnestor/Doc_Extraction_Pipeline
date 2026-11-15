@@ -16,8 +16,10 @@ works rather than from taste:
   bank header cache depends on a bank's statements arriving together.
   Batching consecutive runs preserves that order exactly.
 
-Some types cannot be batched at all: bank statements run multi-turn through
-UnifiedBankExtractor, where turn N depends on turn N-1's answer.
+Some types cannot be batched: a two-turn bank statement runs multi-turn through
+UnifiedBankExtractor, where turn N depends on turn N-1's answer. The caller
+names them in unbatchable; a single-pass bank statement is one independent
+call and is left out of that set.
 """
 
 from pathlib import Path

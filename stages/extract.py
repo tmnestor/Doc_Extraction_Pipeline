@@ -348,6 +348,9 @@ def run(
             bank_budget = app_cfg.get_image_budget("bank_statement")
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
+                generate_many_fn=(
+                    processor.generate_many if getattr(processor, "supports_generate_many", False) else None
+                ),
                 verbose=effective_verbose,
                 use_balance_correction=config.balance_correction,
                 max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
@@ -370,15 +373,19 @@ def run(
         count = 0
         total = len(classifications)
 
-        batches = _plan_batches(classifications, config_path)
+        batches = _plan_batches(classifications, config_path, _unbatchable_types(bank_adapter))
 
         with StreamingJsonlWriter(output_path) as writer:
             for batch in batches:
                 # A multi-document batch is one engine call. Singletons —
-                # bank statements, and any type whose batch size is 1 — fall
-                # through to the per-image path below, unchanged.
+                # two-turn bank statements, and any type whose batch size is 1,
+                # fall through to the per-image path below, unchanged.
                 if len(batch) > 1:
-                    _extract_standard_batch(writer, processor, batch, effective_verbose)
+                    if batch[0]["document_type"].upper() == "BANK_STATEMENT":
+                        # Only planned when the adapter can batch (single pass).
+                        _extract_bank_single_pass_batch(writer, bank_adapter, batch)
+                    else:
+                        _extract_standard_batch(writer, processor, batch, effective_verbose)
                     count += len(batch)
                     logger.info(
                         "[%d/%d] batch of %d %s",
@@ -565,15 +572,95 @@ def _extract_bank_with_adapter(
     )
 
 
-# Types that can never share an engine call. Bank statements run multi-turn
-# through UnifiedBankExtractor (or the graph executor), where turn N depends
-# on turn N-1's answer, so there is nothing to batch.
+# Types that cannot share an engine call by default. Bank statements run
+# multi-turn through UnifiedBankExtractor (or the graph executor), where turn N
+# depends on turn N-1's answer, so there is nothing to batch.
 UNBATCHABLE_TYPES = {"BANK_STATEMENT"}
+
+
+def _unbatchable_types(bank_adapter: Any) -> set[str]:
+    """The document types that must each be their own engine call in this run.
+
+    Bank statements are the exception to their own rule when read single pass:
+    each is then one independent call, so several can be submitted together and
+    run concurrently. That needs the adapter (not the graph executor, not the
+    standard path) and a backend with a batched call; otherwise they stay
+    unbatched.
+    """
+    if bank_adapter is not None and bank_adapter.can_batch:
+        return UNBATCHABLE_TYPES - {"BANK_STATEMENT"}
+    return set(UNBATCHABLE_TYPES)
+
+
+def _extract_bank_single_pass_batch(
+    writer: StreamingJsonlWriter,
+    bank_adapter: Any,
+    batch: list[dict[str, Any]],
+) -> None:
+    """Read a batch of bank statements single pass in one engine call.
+
+    Writes the record _extract_bank_with_adapter writes for each statement,
+    so batched and unbatched runs are indistinguishable in the output file. A
+    batch that raises is retried one statement at a time, and a statement that
+    still fails is recorded as an error, as on the per-image path.
+    """
+    from common.unified_bank_extractor import serialise_bank_response
+
+    started = time.time()
+    try:
+        results = bank_adapter.extract_bank_statements_single_pass([c["image_path"] for c in batch])
+    except Exception as err:  # noqa: BLE001 - one batch must not end the run
+        logger.warning(
+            "Batch of %d BANK_STATEMENT failed (%s); retrying one at a time",
+            len(batch),
+            err,
+        )
+        for classification in batch:
+            retry_started = time.time()
+            try:
+                _extract_bank_with_adapter(
+                    writer,
+                    bank_adapter,
+                    classification["image_path"],
+                    classification["image_name"],
+                    classification["document_type"],
+                )
+            except Exception as retry_err:  # noqa: BLE001 - recorded, not raised
+                logger.error("Error extracting %s: %s", classification["image_name"], retry_err)
+                writer.write(
+                    {
+                        "image_name": classification["image_name"],
+                        "image_path": classification["image_path"],
+                        "document_type": classification["document_type"],
+                        "raw_response": "",
+                        "processing_time": time.time() - retry_started,
+                        "prompt_used": "error",
+                        "error": str(retry_err),
+                    }
+                )
+        return
+
+    # Inside a batch the requests overlap, so per-image timing is not
+    # separable; charge each an equal share of the call's wall clock.
+    share = (time.time() - started) / len(batch)
+    for classification, (schema_fields, metadata) in zip(batch, results, strict=True):
+        writer.write(
+            {
+                "image_name": classification["image_name"],
+                "image_path": classification["image_path"],
+                "document_type": classification["document_type"],
+                "raw_response": serialise_bank_response(schema_fields, metadata),
+                "processing_time": share,
+                "prompt_used": f"unified_bank_{metadata.get('strategy_used', 'unknown')}",
+                "error": None,
+            }
+        )
 
 
 def _plan_batches(
     classifications: list[dict[str, Any]],
     config_path: Path | None,
+    unbatchable: set[str],
 ) -> list[list[dict[str, Any]]]:
     """Group classifications into engine-call batches.
 
@@ -590,7 +677,7 @@ def _plan_batches(
     batches = plan_extraction_batches(
         classifications,
         batch_sizes=batch_sizes,
-        unbatchable=UNBATCHABLE_TYPES,
+        unbatchable=unbatchable,
     )
     logger.info(
         "Extraction batching: %d documents in %d calls (sizes: %s)",

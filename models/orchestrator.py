@@ -318,6 +318,48 @@ class DocumentOrchestrator:
             return self._resilient_generate(image, prompt, params)
         return self._backend.generate(image, prompt, params)
 
+    @property
+    def supports_generate_many(self) -> bool:
+        """Whether the backend can run several generate() calls as one engine call."""
+        return callable(getattr(self._backend, "generate_many", None))
+
+    def generate_many(
+        self,
+        images: list[Image.Image],
+        prompts: list[str],
+        max_tokens: int = 1024,
+        extra: dict | None = None,
+    ) -> list[str]:
+        """Run several generate() calls as one engine call, replies in input order.
+
+        The batched counterpart of generate(): the backend builds each request
+        as it would for a single call, and submits them together so the engine
+        can run them concurrently. There is no out-of-memory retry here; a
+        caller that needs one falls back to generate() per image.
+
+        Args:
+            images: One PIL image per request.
+            prompts: One prompt per image, same order and length.
+            max_tokens: Completion budget of every request.
+            extra: Optional dict passed through to GenerationParams.extra.
+
+        Raises:
+            TypeError: If the backend has no generate_many.
+        """
+        if not self.supports_generate_many:
+            raise TypeError(
+                f"What: backend {type(self._backend).__name__} does not implement "
+                f"generate_many, so independent calls cannot share an engine call.\n"
+                f"Where: models/orchestrator.py.\n"
+                f"Expected: a backend with generate_many(images, prompts, params), "
+                f"as models/backends/vllm_backend.py has.\n"
+                f"How to fix: implement generate_many on that backend, or set "
+                f"pipeline.batching.bank_statement to 1 so each statement is its "
+                f"own call."
+            )
+        params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
+        return self._backend.generate_many(images, prompts, params)  # type: ignore[attr-defined]
+
     @staticmethod
     def tile_extra_from_classification(classification_info: dict) -> dict | None:
         """Build GenerationParams.extra from an injected per-type tile budget.

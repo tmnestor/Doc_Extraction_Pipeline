@@ -697,12 +697,15 @@ pipeline:
   batching:
     receipt: 10
     invoice: 10
-    # Bank statements are NOT batched: with processing.bank_v2 they run
-    # multi-turn through UnifiedBankExtractor, where turn N depends on turn
-    # N-1's answer, so a batch has nothing to batch. This value is a
-    # documented ceiling for anyone who later makes that path batchable —
-    # it is NOT in effect today.
-    bank_statement: 2
+    # Bank statements share an engine call ONLY when read single pass
+    # (processing.bank_strategy: single_pass, vLLM backend): each statement is
+    # then one independent call, so the engine runs up to max_num_seqs of them
+    # at once. With bank_strategy: two_turn this value is not used: turn N
+    # depends on turn N-1's answer, so each statement stays its own call.
+    # Larger than max_num_seqs is fine and keeps the engine full as short
+    # statements finish; the engine queues the rest. A crash loses at most one
+    # batch, which the next run redoes.
+    bank_statement: 16
     default: 10
 
   processing:

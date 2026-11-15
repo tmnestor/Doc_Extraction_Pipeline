@@ -263,11 +263,16 @@ inference:
         # full-attention model where EVERY layer carries a cache, while Qwen keeps
         # one in only 16 of 64 layers. Hence Gemma holds 4.5x FEWER KV tokens
         # despite having 4.7x more KV memory.
-        # 8 is kept rather than the reported 2.33x because that figure is a
-        # worst-case reservation (KV tokens / max_model_len), not a cap, and
-        # matching the Qwen block keeps scheduling out of the comparison.
+        # The reported 2.33x is a worst-case reservation (KV tokens /
+        # max_model_len), not a cap: what fits is set by the real request size.
+        # MEASURED 2026-11-16, 55 single-pass bank statements in one engine call
+        # (about 1,500 characters a reply), model seconds for the 55:
+        #   max_num_seqs   8    12    16    24    32
+        #   seconds      418   370   315   315   316
+        # F1 was unchanged across all five. The gain stops at 16: the KV cache
+        # holds about 16 such statements, so a higher value only queues.
         # max_num_seqs: 1            # pre-2026-08-14 behaviour, one at a time
-        max_num_seqs: 8
+        max_num_seqs: 16
         enable_prefix_caching: true
         mm_processor_kwargs:
           # Gemma 4 accepts a DISCRETE set of visual token budgets:
@@ -702,10 +707,12 @@ pipeline:
     # then one independent call, so the engine runs up to max_num_seqs of them
     # at once. With bank_strategy: two_turn this value is not used: turn N
     # depends on turn N-1's answer, so each statement stays its own call.
-    # Larger than max_num_seqs is fine and keeps the engine full as short
-    # statements finish; the engine queues the rest. A crash loses at most one
-    # batch, which the next run redoes.
-    bank_statement: 16
+    # Keep this several times max_num_seqs: the engine queues the rest and stays
+    # full as short statements finish, whereas every call ends with a few long
+    # statements running alone. MEASURED 2026-11-16 on 55 statements with 8 in
+    # flight: 16 a call took 484 s, one call of 55 took 418 s. A crash loses at
+    # most one batch, which the next run redoes.
+    bank_statement: 64
     default: 10
 
   processing:

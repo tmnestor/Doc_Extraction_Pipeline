@@ -80,7 +80,7 @@ def run(
     if batch_size is not None:
         cli_args["batch_size"] = batch_size
 
-    app_cfg = AppConfig.load(cli_args, config_path=config_path)
+    app_cfg = AppConfig.load(cli_args, config_path=config_path).for_stage("classify")
     config = app_cfg.pipeline
     # Tier B gate — resolved from CLI > YAML > defaults.
     effective_verbose = config.verbose

@@ -287,6 +287,25 @@ inference:
           vision_soft_tokens_per_image: 560
           vision_config:
             default_output_length: 560
+        # Settings one stage loads differently from the model's own, above.
+        # Each GPU stage loads its own engine, so this touches no other stage.
+        # classify is the only stage that takes overrides, and an override may
+        # only change a key the model's own block states.
+        #
+        # The classify stage is stated at 560, the same as extraction, so it
+        # changes nothing as shipped. Measured on 165 clean pages (55 each of
+        # bank statement, invoice, receipt): at 280 the stage's model time fell
+        # from 209 s to 123 s and all 165 pages kept the right type. Not yet
+        # measured on photographed pages, which is why it is not 280 here. The
+        # three values must move together.
+        stage_overrides:
+          classify:
+            mm_processor_kwargs:
+              max_soft_tokens: 560
+            hf_overrides:
+              vision_soft_tokens_per_image: 560
+              vision_config:
+                default_output_length: 560
       # Gemma 4 12B-it "Unified" (encoder-free, model_type gemma4_unified) on
       # 1xL40S, tp=1. ~24 GB BF16 — fits unquantised on a 40 GB+ card.
       # Needs vLLM >= 0.23.0 (support landed in vllm-project/vllm#44429, released

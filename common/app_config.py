@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from common.field_schema import FieldSchema, get_field_schema
+from common.vllm_stage_overrides import STAGES, apply_stage_overrides, validate_stage_overrides
 
 if TYPE_CHECKING:
     from common.pipeline_config import PipelineConfig
@@ -228,6 +229,7 @@ class AppConfig:
         "_extraction_skip_labels",
         "_image_budgets",
         "_bank_header_cache",
+        "_stage",
     )
 
     _DEFAULT_VLLM_CONFIG: ClassVar[dict[str, Any]] = {
@@ -277,6 +279,7 @@ class AppConfig:
         self._extraction_skip_labels = extraction_skip_labels or []
         self._image_budgets = image_budgets or {}
         self._bank_header_cache = bank_header_cache or {"enabled": False, "key_pattern": ""}
+        self._stage: str | None = None
 
     @classmethod
     def load(
@@ -371,6 +374,9 @@ class AppConfig:
             vllm_models=vllm_models,
             generation_models=gen.get("models", {}),
         )
+        validate_stage_overrides(
+            vllm_models, config_path=str(resolved) if resolved else "config/run_config.yml"
+        )
         vllm_config: dict[str, dict] = {"__defaults__": dict(vllm_defaults)}
         for model_name, overrides in vllm_models.items():
             vllm_config[model_name] = {**vllm_defaults, **overrides}
@@ -448,16 +454,37 @@ class AppConfig:
 
     # -- vLLM config (Phase 3) -------------------------------------------------
 
+    def for_stage(self, stage: str) -> AppConfig:
+        """Return a copy whose vLLM settings are the ones *stage* loads its engine with.
+
+        A model may state settings one stage loads differently, in
+        ``inference.vllm.models.<model>.stage_overrides``. Everything else is shared
+        with this config.
+
+        Args:
+            stage: The stage about to load an engine.
+
+        Raises:
+            ValueError: If *stage* is not a stage that takes overrides.
+        """
+        if stage not in STAGES:
+            msg = f"Unknown stage {stage!r} for vLLM stage overrides. Known stages: {', '.join(STAGES)}"
+            raise ValueError(msg)
+        staged = copy.copy(self)
+        staged._stage = stage
+        return staged
+
     def get_vllm_config(self, model_type: str) -> dict[str, Any]:
         """Return vLLM engine parameters for *model_type*.
 
         Falls back to ``vllm.defaults`` (or class-level defaults) if
-        no per-model override exists.
+        no per-model override exists. On a config made by ``for_stage``, the
+        model's overrides for that stage are applied.
         """
         defaults = self._vllm_config.get("__defaults__", dict(self._DEFAULT_VLLM_CONFIG))
         per_model = self._vllm_config.get(model_type, {})
         if per_model:
-            return {**defaults, **per_model}
+            return apply_stage_overrides({**defaults, **per_model}, self._stage)
         return dict(defaults)
 
     # -- Infrastructure (Phase 5) -----------------------------------------------

@@ -50,7 +50,7 @@ def classify_worker(
     overrides["num_gpus"] = 1
 
     cfg_path = Path(config_path) if config_path else None
-    app_cfg = AppConfig.load(overrides, config_path=cfg_path)
+    app_cfg = AppConfig.load(overrides, config_path=cfg_path).for_stage("classify")
     config = app_cfg.pipeline
 
     prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)

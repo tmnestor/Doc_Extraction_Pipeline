@@ -319,6 +319,10 @@ def build_vllm_loader(spec: VllmSpec):
                     effective_hf.update(vllm_overrides["hf_overrides"])
                 if effective_hf:
                     llm_kwargs["hf_overrides"] = effective_hf
+                if effective_mm_proc or effective_hf:
+                    console.print(
+                        f"[dim]mm_processor_kwargs: {effective_mm_proc}; hf_overrides: {effective_hf}[/dim]"
+                    )
 
                 llm = LLM(**llm_kwargs)
 

@@ -30,6 +30,12 @@ prompts:
       - Find date: Use DD/MM/YYYY format
       - Find line items: List with " | " separator
       - Find amounts: Include $ symbol
+      - Find IS_GST_INCLUDED: Does TOTAL_AMOUNT include GST? Answer true if GST
+        is part of the total, whether it is added to a subtotal ("Subtotal",
+        "GST (10%)", "Total") or stated as included in the prices ("GST
+        INCLUDED", "Incl. GST"). Answer false only if the document says no GST
+        was charged. Answer NOT_FOUND if GST is not mentioned. Use lower case:
+        true or false
       - Replace NOT_FOUND with actual values
 
   # ============================================================================
@@ -77,6 +83,12 @@ prompts:
         a unit price. Keep one entry per item so the list stays the same length
         as the item name list
       - Find amounts: Include $ symbol
+      - Find IS_GST_INCLUDED: Does TOTAL_AMOUNT include GST? Answer true if GST
+        is part of the total, whether it is added to a subtotal ("Subtotal",
+        "GST (10%)", "Total") or stated as included in the prices ("GST
+        INCLUDED", "Incl. GST"). Answer false only if the document says no GST
+        was charged. Answer NOT_FOUND if GST is not mentioned. Use lower case:
+        true or false
       - Replace NOT_FOUND with actual values
 
   # ============================================================================

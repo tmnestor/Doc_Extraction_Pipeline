@@ -421,23 +421,81 @@ class DocumentOrchestrator:
 
     # -- Detection pipeline ----------------------------------------------------
 
+    def _detection_inputs(self) -> tuple[str, dict, str, int]:
+        """The detection prompt, its YAML config, its key and the classify token budget."""
+        detection_path = Path(self.prompt_config["detection_file"])
+        detection_key = self.prompt_config["detection_key"]
+
+        with detection_path.open("r") as f:
+            detection_config = yaml.safe_load(f)
+
+        detection_prompt = detection_config["prompts"][detection_key]["prompt"]
+        max_tokens = self.app_config.get_token_budget("classify")
+        return detection_prompt, detection_config, detection_key, max_tokens
+
+    def _detection_result(self, response: str, detection_config: dict, detection_key: str) -> dict:
+        """Turn one detection reply into a classification result.
+
+        Shared by the single and the batched detection call, so a page is
+        classified by the same rules whichever way its reply was obtained.
+        """
+        # Try enriched parsing (COLUMNS/PAID/ROWS) first, then legacy keywords
+        from common.turn_parsers import ClassificationParser
+
+        parser = ClassificationParser(fallback_type=self._fallback_type)
+        enriched = parser._parse_enriched(response)
+        if enriched is not None:
+            document_type = enriched["DOCUMENT_TYPE"]
+        else:
+            document_type = self._parse_document_type_response(response, detection_config)
+
+        result = {
+            "document_type": document_type,
+            "confidence": 1.0,
+            "raw_response": response,
+            "prompt_used": detection_key,
+        }
+        if enriched and "column_mapping" in enriched:
+            result["column_mapping"] = enriched["column_mapping"]
+        return result
+
+    def detect_many(self, image_paths: list[str], verbose: bool = False) -> list[dict]:
+        """Detect the document type of several pages in one engine call.
+
+        The batched counterpart of detect_and_classify_document(): the same
+        prompt and token budget for every page, each request built as the
+        single call builds it (generate_many), each reply parsed by the same
+        rules. Unlike the single call it does not catch a failure: the caller
+        decides whether to retry one page at a time.
+
+        Args:
+            image_paths: Pages to classify.
+            verbose: Print each page's detected type.
+
+        Returns:
+            One result per page, in input order, in the single call's shape.
+        """
+        if not image_paths:
+            return []
+
+        detection_prompt, detection_config, detection_key, max_tokens = self._detection_inputs()
+        images = [self.load_document_image(p) for p in image_paths]
+        responses = self.generate_many(images, [detection_prompt] * len(images), max_tokens)
+
+        results = [self._detection_result(r, detection_config, detection_key) for r in responses]
+        if verbose:
+            for path, result in zip(image_paths, results, strict=True):
+                sys.stdout.write(f"Detected document type: {Path(path).name}: {result['document_type']}\n")
+            sys.stdout.flush()
+        return results
+
     def detect_and_classify_document(self, image_path: str, verbose: bool = False) -> dict:
         """Detect document type by running the detection prompt through generate()."""
         try:
-            detection_path = Path(self.prompt_config["detection_file"])
-            detection_key = self.prompt_config["detection_key"]
+            detection_prompt, detection_config, detection_key, max_tokens = self._detection_inputs()
 
             if verbose:
                 sys.stdout.write(f"CONFIG DEBUG - detection_key='{detection_key}'\n")
-                sys.stdout.flush()
-
-            with detection_path.open("r") as f:
-                detection_config = yaml.safe_load(f)
-
-            detection_prompt = detection_config["prompts"][detection_key]["prompt"]
-            max_tokens = self.app_config.get_token_budget("classify")
-
-            if verbose:
                 sys.stdout.write(f"Using document detection prompt: {detection_key}\n")
                 sys.stdout.write(f"Prompt: {detection_prompt[:100]}...\n")
                 sys.stdout.flush()
@@ -449,28 +507,12 @@ class DocumentOrchestrator:
                 sys.stdout.write(f"Model response: {response}\n")
                 sys.stdout.flush()
 
-            # Try enriched parsing (COLUMNS/PAID/ROWS) first, then legacy keywords
-            from common.turn_parsers import ClassificationParser
-
-            parser = ClassificationParser(fallback_type=self._fallback_type)
-            enriched = parser._parse_enriched(response)
-            if enriched is not None:
-                document_type = enriched["DOCUMENT_TYPE"]
-            else:
-                document_type = self._parse_document_type_response(response, detection_config)
+            result = self._detection_result(response, detection_config, detection_key)
 
             if verbose:
-                sys.stdout.write(f"Detected document type: {document_type}\n")
+                sys.stdout.write(f"Detected document type: {result['document_type']}\n")
                 sys.stdout.flush()
 
-            result = {
-                "document_type": document_type,
-                "confidence": 1.0,
-                "raw_response": response,
-                "prompt_used": detection_key,
-            }
-            if enriched and "column_mapping" in enriched:
-                result["column_mapping"] = enriched["column_mapping"]
             return result
 
         except Exception as e:

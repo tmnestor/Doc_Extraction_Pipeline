@@ -170,11 +170,16 @@ def run(
         records: list[dict[str, Any]] = []
 
         effective_batch = config.batch_size or 1
-        can_batch = getattr(processor, "supports_batch", False) and effective_batch > 1
+        shares_calls = getattr(processor, "supports_generate_many", False)
+        can_batch = not shares_calls and getattr(processor, "supports_batch", False) and effective_batch > 1
 
         start = time.time()
 
-        if can_batch:
+        if shares_calls:
+            records = _classify_images(
+                processor, image_paths, _classify_batch_size(config_path), effective_verbose
+            )
+        elif can_batch:
             for batch_start in range(0, len(image_paths), effective_batch):
                 batch_end = min(batch_start + effective_batch, len(image_paths))
                 batch = image_paths[batch_start:batch_end]
@@ -208,36 +213,7 @@ def run(
                         result["document_type"],
                     )
         else:
-            for idx, image_path in enumerate(image_paths):
-                logger.info(
-                    "Sending image %d/%d to engine: %s",
-                    idx + 1,
-                    len(image_paths),
-                    Path(image_path).name,
-                )
-                result = processor.detect_and_classify_document(
-                    image_path,
-                    verbose=effective_verbose,
-                )
-                image_name = Path(image_path).name
-                records.append(
-                    {
-                        "image_path": image_path,
-                        "image_name": image_name,
-                        "document_type": result["document_type"],
-                        "confidence": result.get("confidence", 1.0),
-                        "raw_response": result.get("raw_response", ""),
-                        "prompt_used": result.get("prompt_used", "detection"),
-                    }
-                )
-                # Tier A: always-on per-image progress.
-                logger.info(
-                    "[%d/%d] %s -> %s",
-                    idx + 1,
-                    len(image_paths),
-                    image_name,
-                    result["document_type"],
-                )
+            records = _classify_images(processor, image_paths, 1, effective_verbose)
 
         elapsed = time.time() - start
         logger.info(
@@ -256,6 +232,92 @@ def run(
     logger.info("Wrote %d classifications to %s", count, output_path)
 
     return output_path
+
+
+def _classify_batch_size(config_path: Path | None) -> int:
+    """Pages per classify engine call, from pipeline.batching.classify."""
+    from common.extraction_batching import read_classify_batch_size
+    from common.pipeline_config import load_yaml_config
+
+    resolved = config_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
+    _, raw_config = load_yaml_config(resolved)
+    return read_classify_batch_size(raw_config, config_path=resolved)
+
+
+def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "image_path": image_path,
+        "image_name": Path(image_path).name,
+        "document_type": result["document_type"],
+        "confidence": result.get("confidence", 1.0),
+        "raw_response": result.get("raw_response", ""),
+        "prompt_used": result.get("prompt_used", "detection"),
+    }
+
+
+def _classify_images(
+    processor: Any, image_paths: list[str], batch_size: int, verbose: bool
+) -> list[dict[str, Any]]:
+    """Classify pages, several to an engine call when the backend allows it.
+
+    A page is one independent model call. With a batch size above 1 and a
+    backend that can share an engine call, each batch is submitted together so
+    the engine runs the pages concurrently; each request is built as the
+    one-at-a-time call builds it. A batch that fails is retried one page at a
+    time, so a single bad page costs its batch only the concurrency.
+
+    Args:
+        processor: The document processor (orchestrator).
+        image_paths: Pages to classify, in order.
+        batch_size: Pages per engine call. 1 means one call a page.
+        verbose: Passed through to the processor.
+
+    Returns:
+        One classification record per page, in input order.
+    """
+    total = len(image_paths)
+    share = batch_size > 1 and getattr(processor, "supports_generate_many", False)
+    step = batch_size if share else 1
+    if share:
+        logger.info(
+            "Classification batching: %d pages in %d calls (%d a call)",
+            total,
+            -(-total // step),
+            step,
+        )
+
+    records: list[dict[str, Any]] = []
+    for start in range(0, total, step):
+        batch = image_paths[start : start + step]
+        results = None
+        if share:
+            try:
+                results = processor.detect_many(batch, verbose=verbose)
+            except Exception as err:  # noqa: BLE001 - any batch failure falls back to single calls
+                logger.warning(
+                    "Classify batch of %d failed (%s: %s); retrying one at a time",
+                    len(batch),
+                    type(err).__name__,
+                    err,
+                )
+        if results is None:
+            results = []
+            for offset, image_path in enumerate(batch):
+                logger.info(
+                    "Sending image %d/%d to engine: %s", start + offset + 1, total, Path(image_path).name
+                )
+                results.append(processor.detect_and_classify_document(image_path, verbose=verbose))
+        for offset, (image_path, result) in enumerate(zip(batch, results, strict=True)):
+            records.append(_record(image_path, result))
+            # Tier A: always-on per-image progress.
+            logger.info(
+                "[%d/%d] %s -> %s",
+                start + offset + 1,
+                total,
+                Path(image_path).name,
+                result["document_type"],
+            )
+    return records
 
 
 @app.command()

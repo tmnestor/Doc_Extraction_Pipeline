@@ -700,6 +700,12 @@ pipeline:
   # unbatched (0.8485, SD 0.44 — bimodal) and DERIVABLE from GST_AMOUNT,
   # which is the real fix.
   batching:
+    # Pages the classify stage submits in one engine call (vLLM backend). A
+    # page is one independent call, so the engine runs up to max_num_seqs of
+    # them at once; one at a time, 55 pages took 157 s on Gemma 4 31B
+    # (2026-11-13). 1 = one call a page. Keep it several times max_num_seqs so
+    # the engine stays full. Not a document type: the extract stage ignores it.
+    classify: 64
     receipt: 10
     invoice: 10
     # Bank statements share an engine call ONLY when read single pass

@@ -27,9 +27,12 @@ from typing import Any
 
 _SECTION = "pipeline.batching"
 
+_CLASSIFY_KEY = "classify"
+
 _EXAMPLE = """\
 pipeline:
   batching:
+    classify: 64
     receipt: 4
     invoice: 2
     bank_statement: 2
@@ -76,6 +79,8 @@ def read_batch_sizes(raw_config: dict[str, Any], *, config_path: Path) -> dict[s
 
     sizes = {}
     for key, value in block.items():
+        if key == _CLASSIFY_KEY:
+            continue  # pages per classify call, not a document type: read_classify_batch_size
         # bool is an int subclass; a YAML `true` here is a config error.
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise BatchingConfigError(
@@ -89,6 +94,34 @@ def read_batch_sizes(raw_config: dict[str, Any], *, config_path: Path) -> dict[s
         sizes[str(key).lower()] = value
 
     return sizes
+
+
+def read_classify_batch_size(raw_config: dict[str, Any], *, config_path: Path) -> int:
+    """Read how many pages the classify stage submits in one engine call.
+
+    Args:
+        raw_config: Parsed run_config.yml contents.
+        config_path: Path to that file, quoted in diagnostics.
+
+    Returns:
+        Pages per classify call. 1 means one call a page.
+
+    Raises:
+        BatchingConfigError: If the key is missing or not a positive integer.
+    """
+    block = raw_config.get("pipeline", {}).get("batching")
+    value = block.get(_CLASSIFY_KEY) if isinstance(block, dict) else None
+    # bool is an int subclass; a YAML `true` here is a config error.
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        found = "missing" if value is None else f"{value!r}, not a positive integer"
+        raise BatchingConfigError(
+            f"What: {_SECTION}.{_CLASSIFY_KEY} is {found}, so the classify stage "
+            f"does not know how many pages to submit in one engine call.\n"
+            f"Where: {config_path}, under the {_SECTION} section.\n"
+            f"Expected: classify: 64 (a positive integer; 1 means one call a page).\n"
+            f"How to fix: set that value in {config_path}:\n\n{_EXAMPLE}"
+        )
+    return value
 
 
 def plan_extraction_batches(

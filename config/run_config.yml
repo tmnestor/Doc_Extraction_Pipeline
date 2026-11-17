@@ -775,6 +775,107 @@ pipeline:
     trust_classify: 300
     trust_field_extract: 500
 
+  # Photographs of receipts. A phone photograph holds one sheet or several, each at its
+  # own angle on a desk, seen off-axis. The sheet finder (common/receipt_finder.py)
+  # finds each sheet's four corners so it can be warped upright and read as a page of
+  # its own. Nothing in the pipeline calls the finder yet: these are its settings, read
+  # by common/receipt_finder_config.py. Every key is required.
+  #
+  # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
+  # damage levels, true corners known): every receipt found, none spurious, every one
+  # the right way up, corners within 1% of the receipt's diagonal for 164 (the other
+  # 3.3%). On 165 single-receipt photographs it was not set on: one sheet found in 164.
+  # Lengths in pixels are on the working copy unless they say otherwise.
+  photo_split:
+    finder:
+      # The sheets are separated on a copy shrunk to this long edge; corners are always
+      # refined on the full-size photograph.
+      work_long_edge: 1600
+
+      # Desk: modelled from the frame's outer ring (share of the short edge). A pixel
+      # is not desk when its colour is further from the desk than both of these: a
+      # fixed distance in grey levels, and a multiple of the desk's own noise.
+      desk_ring_frac: 0.03
+      mask_min_distance: 14.0
+      mask_noise_multiple: 5.0
+
+      # Shadow: the desk darkened without a change of hue, down to this share of its
+      # lit brightness. A shadow counts as desk only this close to lit desk, in text
+      # heights (or, when a photograph shows no print, as a share of the long edge).
+      # Further in, that colour is shaded paper: this is what keeps a grey receipt on
+      # a grey desk in one piece.
+      shadow_min_factor: 0.5
+      shadow_reach_heights: 4.5
+      shadow_reach_frac: 0.03
+
+      # Sharp steps: a change of at least step_min grey levels over step_span_px, after
+      # a light blur. A paper edge is one; a shadow's edge (a slow ramp) is not. Specks
+      # smaller than step_min_area_px are noise. Gaps in an edge up to about twice
+      # edge_gap_close_px are bridged, and edges are thickened by edge_seal_px, so the
+      # desk cannot be reached through a faint stretch of a paper edge.
+      blur_sigma_px: 1.0
+      step_span_px: 3
+      step_min: 9.0
+      step_min_area_px: 12
+      edge_gap_close_px: 4
+      edge_seal_px: 1
+
+      # A sheet must cover at least this share of the frame.
+      min_region_frac: 0.01
+
+      # Coarse edges: four lines fitted to the sheet's outline. A point supports a line
+      # within outline_tolerance_px; a line needs points along this share of the
+      # sheet's shorter side; and two lines must run within text_agree_deg of the rows
+      # of print, the other two within twice that of square to them.
+      outline_tolerance_px: 2.0
+      min_outline_edge_frac: 0.25
+      text_agree_deg: 10.0
+
+      # Refined edges, on the full-size photograph: each edge is walked from outside
+      # the sheet inwards to the first sharp step, twice. Reaches are shares of the
+      # sheet's diagonal. An edge is moved only if this share of it shows a step.
+      refine_outside_first_frac: 0.02
+      refine_inside_first_frac: 0.06
+      refine_outside_final_frac: 0.01
+      refine_inside_final_frac: 0.02
+      edge_tolerance_px: 2.0
+      min_edge_support: 0.35
+
+      # Print: a pixel darker than its mark_block_px neighbourhood (odd) by
+      # mark_darker_by grey levels. A mark longer than mark_max_heights text heights
+      # is not print.
+      mark_block_px: 31
+      mark_darker_by: 14.0
+      mark_max_heights: 5.0
+
+      # Direction of the rows of print, by a least-squares line through each row
+      # (cv2.fitLine). The letters of a row are joined sideways over text_join_heights
+      # into one strip; a strip counts as a row when it is at least
+      # text_min_row_heights long and no more than text_max_row_thickness_heights
+      # thick (all in text heights); the direction is the length-weighted median of the
+      # rows' directions, given when at least text_min_rows rows are found. Joining
+      # sideways assumes the sheet is roughly upright in the photograph.
+      #
+      # MEASURED 17 November 2026 on 165 synthetic receipts (right = within 2 degrees)
+      # and three real photographs:
+      #   this method        153 right, worst 3.4 degrees, 0 a quarter turn out; right on
+      #                      all three photographs. The same at a join of 1.0 and of 1.5;
+      #                      146 at 2.5.
+      #   hand-written vote  159 right, worst 5.1 degrees, 0 a quarter turn out; right on
+      #                      all three. Not used: custom code where this is a standard
+      #                      routine.
+      #   cv2.HoughLinesP    156 right, 2 a quarter turn out; a quarter turn out on two
+      #                      of the three photographs. It follows rows or columns
+      #                      according to one gap setting, and faint thermal print leaves
+      #                      no setting that works.
+      text_join_heights: 1.5
+      text_min_row_heights: 4.0
+      text_max_row_thickness_heights: 2.5
+      text_min_rows: 5
+
+      # Seed for the line fits, so a photograph always gives the same corners.
+      ransac_seed: 0
+
   # Trust distribution linking — NRO Private Wealth compliance checking.
   # Paths below SHADOW io.input/io.output when KFP_TASK=trust_* (entrypoint.sh
   # _resolve_trust_vars repoints the shared stages here; see the io: header).

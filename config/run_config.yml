@@ -778,8 +778,9 @@ pipeline:
   # Photographs of receipts. People often lay a few receipts on a table and take one
   # photograph; every later stage expects one document per image. The split stage
   # (KFP_TASK=split, stages/split.py) runs before classify: it asks the model where each
-  # receipt is, copies a photograph of one receipt through unchanged, and cuts a
-  # photograph of several into one image per receipt. Its output directory's images/ is
+  # receipt is, cuts a photograph of several into one image per receipt, leaves a
+  # photograph of one receipt whole, and turns each image so its rows of print run
+  # level. Its output directory's images/ is
   # what the later stages then read (image_dir=<split output>/images). The rules are in
   # common/photo_split.py. Every key is required.
   #
@@ -789,8 +790,24 @@ pipeline:
   #     on all 4, each box close round its receipt.
   # Asked only to count, the same model was wrong on 2 of the 57 and on the real
   # photograph of two, which is why the stage asks for boxes and counts them.
-  # Not yet measured: whether a cut image is read as well as a whole page, and real
-  # photographs beyond those four.
+  #
+  # MEASURED end to end, same model and day, on the 55 synthetic receipts at three
+  # damage levels, photographed alone (165 photographs) and in groups (57 photographs):
+  #   the stage cut 56 of the 57 group photographs (55 on an earlier run); the rest were
+  #     left whole because two boxes overlapped, so 4 receipts (8 earlier) did not get
+  #     an image of their own;
+  #   all 165 photographs of one receipt were left whole, as they should be;
+  #   on the 157 receipts every run delivered, mean F1 over all fields and receipts
+  #     accepted (F1 0.95 or more):
+  #       alone, as it lies                 0.950   103
+  #       alone, turned level               0.965   127
+  #       cut from a group, as it lies      0.906    47
+  #       cut from a group, turned level    0.956   121
+  # So a receipt cut from a group and turned level reads as well as one photographed
+  # alone and left as it lies (+0.006, 95% interval -0.004 to +0.015), and a little
+  # behind one photographed alone and turned (-0.010, -0.019 to -0.002).
+  # Not yet measured: reading from real photographs (only the boxes were checked on the
+  # four), and receipts that touch or overlap.
   photo_split:
     # false = every photograph is copied through unchanged and the model is not loaded.
     # Shipped false: the stage changes nothing until this is turned on.
@@ -835,7 +852,10 @@ pipeline:
     #   cut from a group photograph, turned up to 25 degrees           64 of 157
     # Every miss but one was NOT_FOUND, not a wrong amount. On those 157 cut images the
     # turn was then found to within 2 degrees for 151 and never worse than 3.4.
-    # Not yet measured: the reading after turning.
+    # After turning, on the same receipts: the amount was read on 164 of the 165
+    # photographed alone and on 156 of the 161 cut from groups. Turning raised mean F1
+    # by 0.050 on cut receipts (93 better, 62 the same, 2 worse of 157) and by 0.016 on
+    # receipts photographed alone (35 better, 115 the same, 7 worse).
     straighten: true
     straighten_min_deg: 1.0
     straighten_max_deg: 40.0

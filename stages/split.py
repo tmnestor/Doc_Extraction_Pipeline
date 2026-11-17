@@ -9,8 +9,10 @@ trusted. See `common.photo_split` for the rules.
 
 Writes into the output directory:
 
-    images/         one image per document: unchanged photographs under their own names, and cut images named
-                    <photograph>__r<n>.png. The later stages read their images from here.
+    images/         one image per document: unchanged photographs under their own names, turned or rectified
+                    ones as <photograph>.png, and cut images as <photograph>__r<n>.png. Anything the stage
+                    alters is written as PNG, so a JPEG is never compressed twice. The later stages read
+                    their images from here.
     splits.jsonl    one record per photograph: what was done, why, the boxes, the images written, how far
                     each was turned to level its print, whether it was rectified, and the model's reply.
 
@@ -43,6 +45,16 @@ RECORDS_FILE = "splits.jsonl"
 def cut_name(photograph: Path, number: int) -> str:
     """The file name of the n-th image cut from a photograph (n counts from 1)."""
     return f"{photograph.stem}__r{number}.png"
+
+
+def altered_name(photograph: Path) -> str:
+    """The file name a photograph is written under once it has been turned or rectified.
+
+    Always PNG. A photograph usually arrives as a JPEG, and writing the altered image back as a JPEG would
+    compress it a second time, at whatever quality the library defaults to, softening the small print the
+    stage exists to make readable. An unaltered photograph is copied under its own name instead.
+    """
+    return f"{photograph.stem}.png"
 
 
 def _record(
@@ -108,7 +120,7 @@ def apply_reply(
                 rgb = image.convert("RGB")
                 page = rectify(rgb, finder, config) if config.rectify_pages else None
                 if page is not None:
-                    page.save(images_dir / photograph.name)
+                    page.save(images_dir / altered_name(photograph))
                     rectified = True
                 else:
                     region = rgb
@@ -119,18 +131,13 @@ def apply_reply(
                         region = rgb.crop(rectangle)
                     degrees = turn_for(region)
                     if degrees:
-                        turn(rgb, degrees, config).save(images_dir / photograph.name)
-        if not degrees and not rectified:
-            shutil.copy2(photograph, images_dir / photograph.name)
+                        turn(rgb, degrees, config).save(images_dir / altered_name(photograph))
+        altered = bool(degrees) or rectified
+        written = altered_name(photograph) if altered else photograph.name
+        if not altered:
+            shutil.copy2(photograph, images_dir / written)
         return _record(
-            photograph,
-            "pass_through",
-            decision.reason,
-            boxes,
-            [photograph.name],
-            [degrees],
-            rectified,
-            reply,
+            photograph, "pass_through", decision.reason, boxes, [written], [degrees], rectified, reply
         )
     outputs, turns = [], []
     with Image.open(photograph) as image:

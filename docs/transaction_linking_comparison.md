@@ -4,7 +4,7 @@ Reference document comparing two linking implementations across `feature/vllm-pa
 
 ## Upstream Repository
 
-**Repo:** `git@github.com:tmnestor/LMM_POC.git`
+**Repo:** `git@github.com:tmnestor/Doc_Extraction_Pipeline.git`
 
 **Branch status:**
 

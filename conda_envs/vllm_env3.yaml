@@ -35,7 +35,7 @@
 #   rather than version-sensitive ones: torchcodec 0.15.0, torch_c_dlpack_ext
 #   0.1.5.
 #   Python      3.12      (hard requirement -- prod runs 3.12; vLLM 0.25.1
-#                          supports >=3.10,<3.15, but the rest of LMM_POC
+#                          supports >=3.10,<3.15, but the rest of Doc_Extraction_Pipeline
 #                          assumes 3.12 and models/registry.py uses PEP 695
 #                          `type` statements which need 3.12+)
 #

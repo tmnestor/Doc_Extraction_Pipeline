@@ -9,7 +9,7 @@
 #   flashinfer-python  0.6.6   (pinned ==, transitive from vLLM)
 #   flashinfer-cubin   0.6.6   (pinned ==, pre-compiled CUDA kernels)
 #   Python      3.12      (hard requirement -- prod runs 3.12; vLLM
-#                          supports 3.10-3.13, but the rest of the LMM_POC
+#                          supports 3.10-3.13, but the rest of the Doc_Extraction_Pipeline
 #                          codebase targets 3.12 and uses PEP 695 `type`
 #                          statements that require 3.12+)
 #

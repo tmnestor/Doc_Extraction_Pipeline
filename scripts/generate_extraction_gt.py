@@ -12,16 +12,16 @@ carry ``$``, multi-value fields use `` | `` separators, missing fields are
 Image filenames are reconstructed as ``{CASE}_{layout}.png`` from each YAML
 entry's ``layout`` field, matching the synthetic_transaction_linking dataset.
 
-Columns and field-type formatting are read directly from LMM_POC's
+Columns and field-type formatting are read directly from Doc_Extraction_Pipeline's
 ``config/field_definitions.yaml`` (the single source of truth, via ``--schema``)
 -- not hardcoded -- so the CSV tracks schema changes. The script imports nothing
-from the LMM_POC package, so it can live in the Synthetic_Doc_Generation repo and
+from the Doc_Extraction_Pipeline package, so it can live in the Synthetic_Doc_Generation repo and
 run standalone; ``--schema`` just points back at the authoritative file.
 
 Usage:
     python3 generate_extraction_gt.py \
         --yaml-dir /Users/tod/Desktop/Synthetic_Doc_Generation/ground_truth \
-        --schema   /Users/tod/Desktop/LMM_POC/config/field_definitions.yaml \
+        --schema   /Users/tod/Desktop/Doc_Extraction_Pipeline/config/field_definitions.yaml \
         --output   /Users/tod/Desktop/evaluation_data/synthetic_transaction_linking/ground_truth_extraction.csv \
         --data-dir /Users/tod/Desktop/evaluation_data/synthetic_transaction_linking
 """
@@ -35,7 +35,7 @@ from typing import Any
 import yaml
 
 # Fields that exist for validation but are excluded from the evaluation CSV.
-# Mirrors ``common.field_schema._VALIDATION_ONLY`` in LMM_POC -- the only piece
+# Mirrors ``common.field_schema._VALIDATION_ONLY`` in Doc_Extraction_Pipeline -- the only piece
 # of schema policy not expressible in field_definitions.yaml. Keep in sync.
 _VALIDATION_ONLY: frozenset[str] = frozenset({"TRANSACTION_AMOUNTS_RECEIVED", "ACCOUNT_BALANCE"})
 
@@ -73,10 +73,10 @@ def _doc_type_fields(doc_fields: dict[str, Any], doc_type: str, schema_path: Pat
 
 
 def _load_schema(schema_path: Path) -> dict[str, Any]:
-    """Read LMM_POC's field_definitions.yaml -- the column / field-type contract.
+    """Read Doc_Extraction_Pipeline's field_definitions.yaml -- the column / field-type contract.
 
     Minimal, read-only mirror of ``common.field_schema.get_field_schema()`` so this
-    generator runs standalone (outside LMM_POC) while still tracking that YAML as the
+    generator runs standalone (outside Doc_Extraction_Pipeline) while still tracking that YAML as the
     single source of truth. Returns invoice/bank field lists + monetary/boolean sets.
     """
     if not schema_path.is_file():
@@ -84,8 +84,8 @@ def _load_schema(schema_path: Path) -> dict[str, Any]:
             _diagnostic(
                 what="the field-definitions schema YAML does not exist.",
                 where=str(schema_path),
-                example="LMM_POC/config/field_definitions.yaml (the column / field-type contract).",
-                fix="pass --schema pointing at LMM_POC's config/field_definitions.yaml.",
+                example="Doc_Extraction_Pipeline/config/field_definitions.yaml (the column / field-type contract).",
+                fix="pass --schema pointing at Doc_Extraction_Pipeline's config/field_definitions.yaml.",
             )
         )
     raw = yaml.safe_load(schema_path.read_text()) or {}
@@ -241,8 +241,8 @@ def main() -> int:
     parser.add_argument(
         "--schema",
         type=Path,
-        default=Path("/Users/tod/Desktop/LMM_POC/config/field_definitions.yaml"),
-        help="LMM_POC config/field_definitions.yaml (column / field-type contract).",
+        default=Path("/Users/tod/Desktop/Doc_Extraction_Pipeline/config/field_definitions.yaml"),
+        help="Doc_Extraction_Pipeline config/field_definitions.yaml (column / field-type contract).",
     )
     parser.add_argument(
         "--output",

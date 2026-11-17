@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# LMM POC - KFP Pipeline Entrypoint
+# Document extraction pipeline - KFP Pipeline Entrypoint
 # =============================================================================
 #
 # This is the first script that runs when a KFP pipeline job starts.

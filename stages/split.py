@@ -3,14 +3,15 @@
 
 Runs before classify. Each photograph is shown to the model, which says where each receipt is. A photograph
 holding one receipt, or one the model's answer is unclear about, is copied through unchanged; a photograph the
-model clearly says holds several is cut into one image per receipt. See `common.photo_split` for the rules.
+model clearly says holds several is cut into one image per receipt. Each image is then turned so its rows of
+print run level. See `common.photo_split` for the rules.
 
 Writes into the output directory:
 
     images/         one image per document: unchanged photographs under their own names, and cut images named
                     <photograph>__r<n>.png. The later stages read their images from here.
-    splits.jsonl    one record per photograph: what was done, why, the boxes, the images written and the
-                    model's reply.
+    splits.jsonl    one record per photograph: what was done, why, the boxes, the images written, how far
+                    each was turned to level its print, and the model's reply.
 
 With `pipeline.photo_split.enabled: false` every photograph is copied through and the model is not loaded.
 
@@ -44,8 +45,14 @@ def cut_name(photograph: Path, number: int) -> str:
 
 
 def _record(
-    photograph: Path, action: str, reason: str, boxes: list[list[float]], outputs: list[str], reply: str
-):
+    photograph: Path,
+    action: str,
+    reason: str,
+    boxes: list[list[float]],
+    outputs: list[str],
+    turned_deg: list[float],
+    reply: str,
+) -> dict[str, Any]:
     return {
         "image_path": str(photograph),
         "image_name": photograph.name,
@@ -53,40 +60,65 @@ def _record(
         "reason": reason,
         "boxes": boxes,
         "outputs": outputs,
+        "turned_deg": [round(degrees, 2) for degrees in turned_deg],
         "raw_response": reply,
     }
 
 
-def apply_reply(photograph: Path, reply: str, images_dir: Path, config: Any) -> dict[str, Any]:
-    """Act on the model's reply about one photograph: copy it through, or cut it up.
+def apply_reply(
+    photograph: Path, reply: str, images_dir: Path, config: Any, finder: Any | None = None
+) -> dict[str, Any]:
+    """Act on the model's reply about one photograph: copy it through, turn it, or cut it up.
 
     Args:
         photograph: The photograph's path.
         reply: The model's reply to the photo split prompt.
         images_dir: Where the resulting image or images are written.
         config: The photo split settings (`common.photo_split.PhotoSplitConfig`).
+        finder: The settings for finding print and its direction (`common.receipt_finder.FinderParams`).
+            Needed when `config.straighten` is true; None leaves every image as it lies.
 
     Returns:
         The record for splits.jsonl.
     """
     from PIL import Image
 
-    from common.photo_split import cut, decide
+    from common.photo_split import crop_rectangles, cut, decide, level_turn, row_direction, turn
+
+    straighten = bool(config.straighten and finder is not None)
+
+    def turn_for(part: Any) -> float:
+        """How far to turn an image to level its print: 0 when straightening is off."""
+        return level_turn(row_direction(part, finder), config) if finder is not None and straighten else 0.0
 
     decision = decide(reply, config)
     boxes = [[box.left, box.top, box.right, box.bottom] for box in decision.boxes]
     if decision.action != "split":
-        shutil.copy2(photograph, images_dir / photograph.name)
-        return _record(photograph, "pass_through", decision.reason, boxes, [photograph.name], reply)
-    outputs = []
+        degrees = 0.0
+        # One receipt: the photograph is turned whole, by the print inside the receipt's box.
+        if straighten and len(decision.boxes) == 1:
+            with Image.open(photograph) as image:
+                rgb = image.convert("RGB")
+                (rectangle,) = crop_rectangles(decision.boxes, rgb.width, rgb.height, config.margin_frac)
+                degrees = turn_for(rgb.crop(rectangle))
+                if degrees:
+                    turn(rgb, degrees, config).save(images_dir / photograph.name)
+        if not degrees:
+            shutil.copy2(photograph, images_dir / photograph.name)
+        return _record(
+            photograph, "pass_through", decision.reason, boxes, [photograph.name], [degrees], reply
+        )
+    outputs, turns = [], []
     with Image.open(photograph) as image:
         for number, piece in enumerate(
             cut(image.convert("RGB"), decision.boxes, config.margin_frac), start=1
         ):
+            degrees = turn_for(piece)
             name = cut_name(photograph, number)
-            piece.save(images_dir / name)
+            turn(piece, degrees, config).save(images_dir / name)
             outputs.append(name)
-    return _record(photograph, "split", decision.reason, boxes, outputs, reply)
+            turns.append(degrees)
+    return _record(photograph, "split", decision.reason, boxes, outputs, turns, reply)
 
 
 def _ask(processor: Any, photographs: list[Path], config: Any) -> list[str]:
@@ -160,7 +192,7 @@ def run(
         for photograph in todo:
             shutil.copy2(photograph, images_dir / photograph.name)
             reason = "photo_split is not enabled"
-            records.append(_record(photograph, "pass_through", reason, [], [photograph.name], ""))
+            records.append(_record(photograph, "pass_through", reason, [], [photograph.name], [0.0], ""))
         append_jsonl(records_path, records)
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
         return images_dir
@@ -195,9 +227,16 @@ def run(
     finally:
         model_cm.__exit__(None, None, None)
 
+    finder = None
+    if split_config.straighten:
+        from common.receipt_finder_config import finder_params_from
+
+        finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
+        finder = finder_params_from(finder_section, config_path=resolved_config)
+
     records = []
     for number, (photograph, reply) in enumerate(zip(todo, replies, strict=True), start=1):
-        record = apply_reply(photograph, reply, images_dir, split_config)
+        record = apply_reply(photograph, reply, images_dir, split_config, finder)
         records.append(record)
         logger.info(
             "[%d/%d] %s -> %s (%s)", number, len(todo), photograph.name, record["action"], record["reason"]

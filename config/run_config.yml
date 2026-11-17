@@ -821,12 +821,32 @@ pipeline:
     # than max_receipts boxes.
     max_overlap_frac: 0.10
     max_receipts: 12
+    # Each image the stage writes is turned so its rows of print run level. The turn is
+    # found from the print (a least-squares line through each row; see finder below). A
+    # photograph of one receipt is turned whole, by the print inside its box. A turn
+    # under straighten_min_deg is left alone, as is one over straighten_max_deg, which is
+    # not believed: receipts lie roughly upright. straighten_fill_rgb colours the corners
+    # a turned image gains.
+    # WHY: a model follows a row across a wide gap (label on the left, amount on the
+    # right) far less well on a turned page. MEASURED 17 November 2026, Gemma 4 31B, the
+    # amount on the GST line of a receipt or invoice, before any turning:
+    #   level (clean, or photographed with a turn of up to 3 degrees)   165 of 165 read
+    #   photographed alone, turned up to 8 and to 14 degrees           43 and 34 of 55
+    #   cut from a group photograph, turned up to 25 degrees           64 of 157
+    # Every miss but one was NOT_FOUND, not a wrong amount. On those 157 cut images the
+    # turn was then found to within 2 degrees for 151 and never worse than 3.4.
+    # Not yet measured: the reading after turning.
+    straighten: true
+    straighten_min_deg: 1.0
+    straighten_max_deg: 40.0
+    straighten_fill_rgb: [255, 255, 255]
 
-    # The sheet finder (common/receipt_finder.py): finds each sheet's four corners by
-    # image processing alone, so it can be warped upright. The split stage does NOT use
-    # it, and nothing else in the pipeline calls it: these are its settings, read by
-    # common/receipt_finder_config.py. It works on synthetic photographs with a plain
-    # desk and does not hold up on real ones (see the module).
+    # The sheet finder (common/receipt_finder.py). The split stage uses two parts of it
+    # to straighten an image: finding print (the mark_* keys and work_long_edge) and the
+    # direction of its rows (the text_* keys). The rest finds each sheet's four corners by
+    # image processing alone; nothing in the pipeline calls that, and it works on
+    # synthetic photographs with a plain desk but not on real ones (see the module).
+    # All of these settings are read by common/receipt_finder_config.py.
     #
     # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
     # damage levels, true corners known): every receipt found, none spurious, every one

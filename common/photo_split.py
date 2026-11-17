@@ -18,6 +18,12 @@ and a single receipt always takes the path it took before this stage existed.
 The boxes are upright rectangles, which suits receipts lying roughly upright in the photograph. A receipt turned
 well away from upright next to another would bring part of its neighbour into its box.
 
+Each image is then turned so its rows of print run level. A model follows a row across a wide gap (a label on
+the left, its amount on the right) far less well on a turned page than on a level one: measured on receipts
+turned up to 25 degrees, the amount on the GST line was read on 41% of them, against 100% of level ones. The
+turn is found from the print itself (`common.receipt_finder.text_direction`). A photograph of one receipt is
+turned whole, by the direction of the print inside its box; nothing is cut from it.
+
 The reply's form is the one the model gives for detection prompts: a JSON list of objects, each with
 `"box_2d": [ymin, xmin, ymax, xmax]` on a scale of 0 to 1000 across the photograph's height and width.
 
@@ -30,7 +36,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import cv2
+import numpy as np
 from PIL import Image
+
+from common.receipt_finder import FinderParams, print_marks, text_direction
 
 SECTION = "pipeline.photo_split"
 
@@ -48,7 +58,11 @@ pipeline:
     margin_frac: 0.03
     min_box_frac: 0.01
     max_overlap_frac: 0.10
-    max_receipts: 12"""
+    max_receipts: 12
+    straighten: true
+    straighten_min_deg: 1.0
+    straighten_max_deg: 40.0
+    straighten_fill_rgb: [255, 255, 255]"""
 
 _KEYS: dict[str, type] = {
     "enabled": bool,
@@ -59,6 +73,9 @@ _KEYS: dict[str, type] = {
     "min_box_frac": float,
     "max_overlap_frac": float,
     "max_receipts": int,
+    "straighten": bool,
+    "straighten_min_deg": float,
+    "straighten_max_deg": float,
 }
 
 
@@ -81,6 +98,10 @@ class PhotoSplitConfig:
         min_box_frac: A box covering less than this share of the photograph is ignored.
         max_overlap_frac: Two boxes sharing more than this share of the smaller one mean the reply is not trusted.
         max_receipts: More boxes than this mean the reply is not trusted.
+        straighten: Whether each image is turned so its rows of print run level.
+        straighten_min_deg: A turn smaller than this is left alone.
+        straighten_max_deg: A turn larger than this is not believed, and the image is left alone.
+        straighten_fill_rgb: Colour of the corners a turned image gains.
     """
 
     enabled: bool
@@ -91,6 +112,10 @@ class PhotoSplitConfig:
     min_box_frac: float
     max_overlap_frac: float
     max_receipts: int
+    straighten: bool
+    straighten_min_deg: float
+    straighten_max_deg: float
+    straighten_fill_rgb: tuple[int, int, int]
 
 
 @dataclass(frozen=True)
@@ -217,7 +242,28 @@ def photo_split_config_from(raw_config: dict[str, Any], *, config_path: Path) ->
                 config_path=config_path,
                 fix=f"set `{name}` under {SECTION} in {config_path.name} to a share between {least} and {most}",
             )
-    return PhotoSplitConfig(**values)
+    if not 0.0 <= values["straighten_min_deg"] < values["straighten_max_deg"] <= 90.0:
+        raise _fail(
+            f"straighten_min_deg is {values['straighten_min_deg']} and straighten_max_deg is "
+            f"{values['straighten_max_deg']}: they must run from 0 up to at most 90, smallest first",
+            key="straighten_min_deg",
+            config_path=config_path,
+            fix=f"set the two under {SECTION} in {config_path.name}, for example 1.0 and 40.0",
+        )
+    fill = section.get("straighten_fill_rgb")
+    is_colour = (
+        isinstance(fill, list)
+        and len(fill) == 3
+        and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in fill)
+    )
+    if not is_colour or not isinstance(fill, list):
+        raise _fail(
+            f"straighten_fill_rgb is {fill!r}, which is not three whole numbers from 0 to 255",
+            key="straighten_fill_rgb",
+            config_path=config_path,
+            fix=f"set `straighten_fill_rgb` under {SECTION} in {config_path.name} to a red, green, blue triple",
+        )
+    return PhotoSplitConfig(**values, straighten_fill_rgb=(fill[0], fill[1], fill[2]))
 
 
 def parse_boxes(reply: str) -> list[Box] | None:
@@ -346,3 +392,48 @@ def cut(image: Image.Image, boxes: tuple[Box, ...], margin_frac: float) -> list[
         image.crop(rectangle)
         for rectangle in crop_rectangles(boxes, image.width, image.height, margin_frac)
     ]
+
+
+def row_direction(image: Image.Image, finder: FinderParams) -> float | None:
+    """The direction of the rows of print in an image, in degrees from level.
+
+    Args:
+        image: The image: a cut receipt, or the part of a photograph inside a receipt's box.
+        finder: The settings for finding print and its direction (`pipeline.photo_split.finder`).
+
+    Returns:
+        The direction, positive when the rows fall away to the right, or None when the print gives none.
+    """
+    rgb = np.asarray(image.convert("RGB"))
+    scale = min(1.0, finder.work_long_edge / max(rgb.shape[:2]))
+    if scale < 1:
+        rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    marks, text_height = print_marks(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), finder)
+    return text_direction(marks, text_height, finder)
+
+
+def level_turn(direction: float | None, config: PhotoSplitConfig) -> float:
+    """The turn to apply for a row direction: the direction itself, or 0 when it is too small or not believed."""
+    if direction is None or not config.straighten_min_deg <= abs(direction) <= config.straighten_max_deg:
+        return 0.0
+    return direction
+
+
+def turn(image: Image.Image, degrees: float, config: PhotoSplitConfig) -> Image.Image:
+    """Turn an image so that rows running at `degrees` from level become level.
+
+    The image grows to hold its turned corners, which are filled with `straighten_fill_rgb`.
+
+    Args:
+        image: The image.
+        degrees: The direction of its rows of print, as `row_direction` gives it. 0 returns the image unchanged.
+        config: The photo split settings.
+
+    Returns:
+        The turned image.
+    """
+    if degrees == 0.0:
+        return image
+    return image.convert("RGB").rotate(
+        degrees, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=config.straighten_fill_rgb
+    )

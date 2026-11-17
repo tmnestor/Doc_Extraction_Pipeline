@@ -328,6 +328,7 @@ _print_task_help() {
   log "    run_graph_robust      — 3-stage probe-based pipeline (extract --graph-robust/clean/evaluate)  [local dev]"
   log "    run_trust_link        — 4-stage trust distribution compliance pipeline  [local dev]"
   log "    run_transaction_link  — 5-stage receipt->bank transaction linking (matcher-first, VLM fallback)  [local dev]"
+  log "    split                   Stage 0: one image per receipt from photographs of several (GPU)"
   log "    classify              — Stage 1: document type detection (GPU)"
   log "    extract               — Stage 2: field extraction (GPU)"
   log "    clean                 — Stage 3: parse/clean responses (CPU)"
@@ -706,6 +707,7 @@ fi
 # re-runs of a single stage can read the upstream artefacts written by
 # a previous run (this is also what the KFP pod volume mount sees).
 OUT_ROOT="${output:-./outputs}"
+SPLIT_OUT="${OUT_ROOT}/split"
 CLASSIFICATIONS="${OUT_ROOT}/classifications.jsonl"
 RAW_EXTRACTIONS="${OUT_ROOT}/raw_extractions.jsonl"
 CLEAN_EXTRACTIONS="${OUT_ROOT}/cleaned_extractions.jsonl"
@@ -816,6 +818,20 @@ case "${KFP_TASK:-}" in
   # KFP_TASK=<stage> via its container env and entrypoint.sh routes here.
   # ========================================================================
   # -- Staged pipeline (GPU stages) ------------------------------------------
+  split)
+    # Stage 0: one image per receipt (GPU). Run before classify when the images are
+    # photographs that may hold several receipts. Writes $SPLIT_OUT/images and
+    # $SPLIT_OUT/splits.jsonl; the later stages are then run with
+    # image_dir=$SPLIT_OUT/images. With pipeline.photo_split.enabled false every
+    # photograph is copied through and the model is not loaded.
+    _banner "Stage 0: split, one image per receipt (GPU)"
+    mkdir -p "$SPLIT_OUT"
+    python3 -m stages.split \
+      --data-dir   "${image_dir:?image_dir env var required}" \
+      --output-dir "$SPLIT_OUT" \
+      "${OPT_MODEL[@]}" || exit $?
+    log "Split complete. Later stages read their images from: $SPLIT_OUT/images"
+    ;;
   classify)
     # Stage 1: Document type detection (GPU).
     # Writes classifications.jsonl — one record per image.

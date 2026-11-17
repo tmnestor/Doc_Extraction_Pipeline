@@ -775,18 +775,64 @@ pipeline:
     trust_classify: 300
     trust_field_extract: 500
 
-  # Photographs of receipts. A phone photograph holds one sheet or several, each at its
-  # own angle on a desk, seen off-axis. The sheet finder (common/receipt_finder.py)
-  # finds each sheet's four corners so it can be warped upright and read as a page of
-  # its own. Nothing in the pipeline calls the finder yet: these are its settings, read
-  # by common/receipt_finder_config.py. Every key is required.
+  # Photographs of receipts. People often lay a few receipts on a table and take one
+  # photograph; every later stage expects one document per image. The split stage
+  # (KFP_TASK=split, stages/split.py) runs before classify: it asks the model where each
+  # receipt is, copies a photograph of one receipt through unchanged, and cuts a
+  # photograph of several into one image per receipt. Its output directory's images/ is
+  # what the later stages then read (image_dir=<split output>/images). The rules are in
+  # common/photo_split.py. Every key is required.
   #
-  # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
-  # damage levels, true corners known): every receipt found, none spurious, every one
-  # the right way up, corners within 1% of the receipt's diagonal for 164 (the other
-  # 3.3%). On 165 single-receipt photographs it was not set on: one sheet found in 164.
-  # Lengths in pixels are on the working copy unless they say otherwise.
+  # MEASURED with the Gemma 4 31B, 17 November 2026, on the prompt below:
+  #   57 synthetic photographs of 2 to 4 receipts: the right number of boxes on all 57.
+  #   4 real photographs (three of one receipt, one of two): the right number of boxes
+  #     on all 4, each box close round its receipt.
+  # Asked only to count, the same model was wrong on 2 of the 57 and on the real
+  # photograph of two, which is why the stage asks for boxes and counts them.
+  # Not yet measured: whether a cut image is read as well as a whole page, and real
+  # photographs beyond those four.
   photo_split:
+    # false = every photograph is copied through unchanged and the model is not loaded.
+    # Shipped false: the stage changes nothing until this is turned on.
+    enabled: false
+    # The question put to the model about each photograph. The reply's form (a JSON list
+    # of {"box_2d": [ymin, xmin, ymax, xmax]} on a 0 to 1000 scale) is the one this
+    # model gives for detection prompts; common/photo_split.py reads exactly that.
+    prompt: |
+      Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each receipt, in the form {"box_2d": [ymin, xmin, ymax, xmax], "label": "receipt"}, where the four numbers are normalised to 0-1000.
+    # Longest reply allowed. A box takes about 30 tokens.
+    max_tokens: 400
+    # Photographs sent to the engine in one call.
+    batch_size: 16
+    # Each cut image is this much larger than its box on every side, as a share of the
+    # box's own width and height, but never past the halfway line to a neighbour, so
+    # a generous margin costs only a strip of table.
+    # MEASURED on the 57 synthetic photographs, whose receipts are tilted up to 25
+    # degrees and whose boxes the model drew tighter than on real photographs (of 161
+    # receipts: whole sheet inside its cut / a cut holding over 2% of a neighbour):
+    #   0.03: 34 / 1     0.08: 62 / 2     0.15: 101 / 4     0.25: 123 / 5
+    # On the real photograph of two upright receipts, 0.03 already gave two whole,
+    # separate receipts. 0.10 is a middle value, not a measured optimum.
+    margin_frac: 0.10
+    # A box covering less than this share of the photograph is ignored.
+    min_box_frac: 0.01
+    # The reply is not trusted, and the photograph is copied through unchanged, when two
+    # boxes share more than max_overlap_frac of the smaller one or when there are more
+    # than max_receipts boxes.
+    max_overlap_frac: 0.10
+    max_receipts: 12
+
+    # The sheet finder (common/receipt_finder.py): finds each sheet's four corners by
+    # image processing alone, so it can be warped upright. The split stage does NOT use
+    # it, and nothing else in the pipeline calls it: these are its settings, read by
+    # common/receipt_finder_config.py. It works on synthetic photographs with a plain
+    # desk and does not hold up on real ones (see the module).
+    #
+    # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
+    # damage levels, true corners known): every receipt found, none spurious, every one
+    # the right way up, corners within 1% of the receipt's diagonal for 164 (the other
+    # 3.3%). On 165 single-receipt photographs it was not set on: one sheet found in 164.
+    # Lengths in pixels are on the working copy unless they say otherwise.
     finder:
       # The sheets are separated on a copy shrunk to this long edge; corners are always
       # refined on the full-size photograph.

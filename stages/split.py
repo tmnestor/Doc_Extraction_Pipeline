@@ -90,7 +90,7 @@ def apply_reply(
         reply: The model's reply to the photo split prompt.
         images_dir: Where the resulting image or images are written.
         config: The photo split settings (`common.photo_split.PhotoSplitConfig`).
-        finder: The settings for finding print and its direction (`common.receipt_finder.FinderParams`).
+        finder: The settings for finding print and its direction (`common.sheet_finder.FinderParams`).
             Needed when `config.straighten` is true; None leaves every image as it lies.
 
     Returns:
@@ -262,7 +262,7 @@ def run(
 
     finder = None
     if split_config.straighten:
-        from common.receipt_finder_config import finder_params_from
+        from common.sheet_finder_config import finder_params_from
 
         finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
         finder = finder_params_from(finder_section, config_path=resolved_config)

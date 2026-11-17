@@ -1,8 +1,8 @@
 """Find every sheet of paper in a photograph, and straighten each one.
 
-A phone photograph of receipts is not one upright page: it holds one sheet or several, each at its own angle,
-on a desk, seen off-axis. This module finds each sheet's four corners so it can be warped upright and read as a
-page of its own.
+A phone photograph of documents (receipts, or now and then a bank statement) is not one upright page: it holds
+one sheet or several, each at its own angle, on a desk, seen off-axis. This module finds each sheet's four
+corners so it can be warped upright and read as a page of its own.
 
 The method, in the order it runs:
 

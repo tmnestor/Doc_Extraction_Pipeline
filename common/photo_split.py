@@ -21,13 +21,13 @@ well away from upright next to another would bring part of its neighbour into it
 Each image is then turned so its rows of print run level. A model follows a row across a wide gap (a label on
 the left, its amount on the right) far less well on a turned page than on a level one: measured on receipts
 turned up to 25 degrees, the amount on the GST line was read on 41% of them, against 100% of level ones. The
-turn is found from the print itself (`common.receipt_finder.text_direction`). A photograph of one receipt is
+turn is found from the print itself (`common.sheet_finder.text_direction`). A photograph of one receipt is
 turned whole, by the direction of the print inside its box; nothing is cut from it. A photograph in which no
 receipt is found, such as a photographed bank statement, is turned whole by all of its print.
 
 Turning removes a page's tilt but not its foreshortening: a page seen at an angle has rows that converge, and
 on a wide row that is the same failure again. So a photograph that holds one document is first tried for
-rectification: its four corners are found (`common.receipt_finder.find_sheets`) and the homography reversed,
+rectification: its four corners are found (`common.sheet_finder.find_sheets`) and the homography reversed,
 which removes tilt and foreshortening together. That is done only when the corners can be trusted: exactly one
 sheet found, covering enough of the frame, with enough of its edges confirmed by a sharp step, and holding
 nearly all of the photograph's print (a ruled table on a clean page fails that last test). Otherwise the
@@ -50,7 +50,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from common.receipt_finder import FinderParams, find_sheets, print_marks, text_direction, warp_upright
+from common.sheet_finder import FinderParams, find_sheets, print_marks, text_direction, warp_upright
 
 SECTION = "pipeline.photo_split"
 

@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from common.receipt_finder import FinderParams
+from common.sheet_finder import FinderParams
 
 SECTION = "pipeline.photo_split.finder"
 

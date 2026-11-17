@@ -892,12 +892,12 @@ pipeline:
     rectify_min_edges: 4
     rectify_min_print_frac: 0.98
 
-    # The sheet finder (common/receipt_finder.py). The split stage uses two parts of it
+    # The sheet finder (common/sheet_finder.py). The split stage uses two parts of it
     # to straighten an image: finding print (the mark_* keys and work_long_edge) and the
     # direction of its rows (the text_* keys). The rest finds each sheet's four corners by
     # image processing alone; nothing in the pipeline calls that, and it works on
     # synthetic photographs with a plain desk but not on real ones (see the module).
-    # All of these settings are read by common/receipt_finder_config.py.
+    # All of these settings are read by common/sheet_finder_config.py.
     #
     # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
     # damage levels, true corners known): every receipt found, none spurious, every one

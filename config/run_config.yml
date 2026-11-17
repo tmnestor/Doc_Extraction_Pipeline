@@ -860,6 +860,37 @@ pipeline:
     straighten_min_deg: 1.0
     straighten_max_deg: 40.0
     straighten_fill_rgb: [255, 255, 255]
+    # Turning removes tilt but not foreshortening: a page photographed at an angle has rows
+    # that converge, which on a wide row (a bank statement's date, description and amount)
+    # is the same failure again. So a photograph holding one document is first tried for
+    # rectification: its four corners are found (the finder below) and the homography
+    # reversed. It is done only when the corners can be trusted: exactly one sheet found,
+    # covering at least rectify_min_area_frac of the photograph, with at least
+    # rectify_min_edges of its four edges confirmed by a sharp step, and holding at least
+    # rectify_min_print_frac of the photograph's print. Otherwise the photograph is
+    # turned, as above. Needs straighten: true.
+    # The print test exists because the stage sees every page, clean ones too. Without
+    # it, on 7 of 55 clean bank statements the ruled border of the transaction table was
+    # taken for the page's edge and the page would have been cropped to its table. A
+    # sheet holds all the print; a table leaves the page's heading outside it.
+    # MEASURED 17 November 2026 on 165 synthetic photographs of bank statements (corner
+    # error as a share of the page's diagonal):
+    #   edges needed   print test   rectified   corners within 1%   over 2%   left to turning
+    #        4            on           156           156 (worst 0.10%)   0            9
+    #        4            off          160           160                 0            5
+    #        3            off          164           160                 4 (to 19%)   1
+    # What 4 edges declines is pages running off the frame, including the 4 that 3 edges
+    # gets wrong. The print test costs 4 more, and is what keeps clean pages safe: of 330
+    # clean pages (165 plain, 165 with distractors) none is rectified or turned. A
+    # rectified page comes out at its own size (2024 by 4090 photographed, 1801 by 3508
+    # rectified, against 1800 by 3508 as rendered). The photographs have a plain desk; the
+    # finder does not hold up on a textured or pale surface, where this falls back to
+    # turning.
+    # Not yet measured: the reading after rectification.
+    rectify_pages: true
+    rectify_min_area_frac: 0.30
+    rectify_min_edges: 4
+    rectify_min_print_frac: 0.98
 
     # The sheet finder (common/receipt_finder.py). The split stage uses two parts of it
     # to straighten an image: finding print (the mark_* keys and work_long_edge) and the

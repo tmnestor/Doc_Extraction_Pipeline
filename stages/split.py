@@ -4,14 +4,15 @@
 Runs before classify. Each photograph is shown to the model, which says where each receipt is. A photograph
 holding one receipt, or one the model's answer is unclear about, is copied through unchanged; a photograph the
 model clearly says holds several is cut into one image per receipt. Each image is then turned so its rows of
-print run level. See `common.photo_split` for the rules.
+print run level; a photograph of one document is rectified from its four corners instead, when they can be
+trusted. See `common.photo_split` for the rules.
 
 Writes into the output directory:
 
     images/         one image per document: unchanged photographs under their own names, and cut images named
                     <photograph>__r<n>.png. The later stages read their images from here.
     splits.jsonl    one record per photograph: what was done, why, the boxes, the images written, how far
-                    each was turned to level its print, and the model's reply.
+                    each was turned to level its print, whether it was rectified, and the model's reply.
 
 With `pipeline.photo_split.enabled: false` every photograph is copied through and the model is not loaded.
 
@@ -51,6 +52,7 @@ def _record(
     boxes: list[list[float]],
     outputs: list[str],
     turned_deg: list[float],
+    rectified: bool,
     reply: str,
 ) -> dict[str, Any]:
     return {
@@ -61,6 +63,7 @@ def _record(
         "boxes": boxes,
         "outputs": outputs,
         "turned_deg": [round(degrees, 2) for degrees in turned_deg],
+        "rectified": rectified,
         "raw_response": reply,
     }
 
@@ -83,7 +86,7 @@ def apply_reply(
     """
     from PIL import Image
 
-    from common.photo_split import crop_rectangles, cut, decide, level_turn, row_direction, turn
+    from common.photo_split import crop_rectangles, cut, decide, level_turn, rectify, row_direction, turn
 
     straighten = bool(config.straighten and finder is not None)
 
@@ -94,19 +97,40 @@ def apply_reply(
     decision = decide(reply, config)
     boxes = [[box.left, box.top, box.right, box.bottom] for box in decision.boxes]
     if decision.action != "split":
-        degrees = 0.0
-        # One receipt: the photograph is turned whole, by the print inside the receipt's box.
-        if straighten and len(decision.boxes) == 1:
+        degrees, rectified = 0.0, False
+        # One document, or none the model called a receipt (a page of another kind, such as a bank
+        # statement). First its corners are tried: when they can be trusted the homography is reversed,
+        # which removes tilt and foreshortening together. Otherwise the photograph is turned whole: by the
+        # print inside the receipt's box, or by all its print when there is no box. Several boxes that were
+        # not trusted are left as they lie, since they may be sheets at different angles.
+        if straighten and finder is not None and len(decision.boxes) <= 1:
             with Image.open(photograph) as image:
                 rgb = image.convert("RGB")
-                (rectangle,) = crop_rectangles(decision.boxes, rgb.width, rgb.height, config.margin_frac)
-                degrees = turn_for(rgb.crop(rectangle))
-                if degrees:
-                    turn(rgb, degrees, config).save(images_dir / photograph.name)
-        if not degrees:
+                page = rectify(rgb, finder, config) if config.rectify_pages else None
+                if page is not None:
+                    page.save(images_dir / photograph.name)
+                    rectified = True
+                else:
+                    region = rgb
+                    if decision.boxes:
+                        (rectangle,) = crop_rectangles(
+                            decision.boxes, rgb.width, rgb.height, config.margin_frac
+                        )
+                        region = rgb.crop(rectangle)
+                    degrees = turn_for(region)
+                    if degrees:
+                        turn(rgb, degrees, config).save(images_dir / photograph.name)
+        if not degrees and not rectified:
             shutil.copy2(photograph, images_dir / photograph.name)
         return _record(
-            photograph, "pass_through", decision.reason, boxes, [photograph.name], [degrees], reply
+            photograph,
+            "pass_through",
+            decision.reason,
+            boxes,
+            [photograph.name],
+            [degrees],
+            rectified,
+            reply,
         )
     outputs, turns = [], []
     with Image.open(photograph) as image:
@@ -118,7 +142,7 @@ def apply_reply(
             turn(piece, degrees, config).save(images_dir / name)
             outputs.append(name)
             turns.append(degrees)
-    return _record(photograph, "split", decision.reason, boxes, outputs, turns, reply)
+    return _record(photograph, "split", decision.reason, boxes, outputs, turns, False, reply)
 
 
 def _ask(processor: Any, photographs: list[Path], config: Any) -> list[str]:
@@ -192,7 +216,9 @@ def run(
         for photograph in todo:
             shutil.copy2(photograph, images_dir / photograph.name)
             reason = "photo_split is not enabled"
-            records.append(_record(photograph, "pass_through", reason, [], [photograph.name], [0.0], ""))
+            records.append(
+                _record(photograph, "pass_through", reason, [], [photograph.name], [0.0], False, "")
+            )
         append_jsonl(records_path, records)
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
         return images_dir

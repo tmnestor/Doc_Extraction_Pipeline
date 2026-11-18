@@ -103,6 +103,8 @@ class FinderParams:
         text_max_row_thickness_heights: Thickest strip that still counts as one row, in text heights.
         text_min_rows: Least number of rows for print to give a direction.
         ransac_seed: Seed for the line fits, so a photograph always gives the same corners.
+        drift_row_percentile: Which of the rows' angles, ranked by size and weighted by length, measures the
+            drift of the print (see `row_drift`).
         paper_work_long_edge: Long edge, in pixels, of the copy the paper method separates the sheet on.
         paper_rounds: Rounds of `cv2.grabCut` in each of its two passes.
         paper_join_heights: Letters and rows closer than this many text heights join into one block of print.
@@ -155,6 +157,7 @@ class FinderParams:
     text_max_row_thickness_heights: float
     text_min_rows: int
     ransac_seed: int
+    drift_row_percentile: float
     paper_work_long_edge: int
     paper_rounds: int
     paper_join_heights: float
@@ -367,32 +370,73 @@ def text_direction(marks: np.ndarray, text_height: float, params: FinderParams) 
     Returns:
         The direction in degrees from the x axis, in [-90, 90), or None when too few rows are found.
     """
-    if text_height <= 0:
-        return None
-    join = max(int(round(params.text_join_heights * text_height)), 2)
-    strips = cv2.morphologyEx(marks, cv2.MORPH_CLOSE, np.ones((1, join), np.uint8))
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(strips, connectivity=8)
-    angles: list[float] = []
-    lengths: list[float] = []
-    for label in range(1, count):
-        x, y, w, h, _ = stats[label]
-        if w < params.text_min_row_heights * text_height:
-            continue
-        ys, xs = np.nonzero(labels[y : y + h, x : x + w] == label)
-        points = np.column_stack([xs, ys]).astype(np.float32)
-        vx, vy, _, _ = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01).ravel()
-        centred = points - points.mean(axis=0)
-        # A strip is one row only if it is thin: rows that have run together are left out.
-        thickness = 2.0 * float(np.percentile(np.abs(centred @ np.array([-vy, vx])), 95))
-        if thickness > params.text_max_row_thickness_heights * text_height:
-            continue
-        angles.append(float((np.degrees(np.arctan2(vy, vx)) + 90.0) % 180.0 - 90.0))
-        lengths.append(float(np.ptp(centred @ np.array([vx, vy]))))
+    angles, lengths = _row_fits(marks, text_height, params)
     if len(angles) < params.text_min_rows:
         return None
     order = np.argsort(angles)
-    cumulative = np.cumsum(np.array(lengths)[order])
-    return float(np.array(angles)[order][np.searchsorted(cumulative, cumulative[-1] / 2)])
+    cumulative = np.cumsum(lengths[order])
+    return float(angles[order][np.searchsorted(cumulative, cumulative[-1] / 2)])
+
+
+def _row_fits(marks: np.ndarray, text_height: float, params: FinderParams) -> tuple[np.ndarray, np.ndarray]:
+    """A least-squares line through each row of print: the rows' directions in degrees, and their lengths."""
+    angles: list[float] = []
+    lengths: list[float] = []
+    if text_height > 0:
+        join = max(int(round(params.text_join_heights * text_height)), 2)
+        strips = cv2.morphologyEx(marks, cv2.MORPH_CLOSE, np.ones((1, join), np.uint8))
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(strips, connectivity=8)
+        for label in range(1, count):
+            x, y, w, h, _ = stats[label]
+            if w < params.text_min_row_heights * text_height:
+                continue
+            ys, xs = np.nonzero(labels[y : y + h, x : x + w] == label)
+            points = np.column_stack([xs, ys]).astype(np.float32)
+            vx, vy, _, _ = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01).ravel()
+            centred = points - points.mean(axis=0)
+            # A strip is one row only if it is thin: rows that have run together are left out.
+            thickness = 2.0 * float(np.percentile(np.abs(centred @ np.array([-vy, vx])), 95))
+            if thickness > params.text_max_row_thickness_heights * text_height:
+                continue
+            angles.append(float((np.degrees(np.arctan2(vy, vx)) + 90.0) % 180.0 - 90.0))
+            lengths.append(float(np.ptp(centred @ np.array([vx, vy]))))
+    return np.array(angles, dtype=np.float64), np.array(lengths, dtype=np.float64)
+
+
+def row_drift(marks: np.ndarray, text_height: float, params: FinderParams) -> float | None:
+    """How far the rows of print drift off their own line across the width of the print, in text heights.
+
+    A row at an angle rises or falls as it crosses the page, by the width of the print times the tangent of the
+    angle. In text heights, that says whether a reader following a row from its left end lands on another row
+    at its right end: under one text height it does not, whatever the angle. A wide page at a small angle
+    drifts more than a narrow receipt at a large one, which is why this, and not the angle, decides whether
+    straightening is worth doing.
+
+    The angle used is not the rows' median but a high percentile of their sizes, weighted by length
+    (`drift_row_percentile`), so that a page seen at a slant, whose rows fan out either side of level, counts
+    by its steepest rows and not by the level one in the middle.
+
+    Args:
+        marks: A mask of print marks, non-zero where print.
+        text_height: The typical height of a letter, in pixels.
+        params: The finder's parameters.
+
+    Returns:
+        The drift in text heights, or None when too few rows are found to say.
+    """
+    angles, lengths = _row_fits(marks, text_height, params)
+    if len(angles) < params.text_min_rows:
+        return None
+    steepness = np.abs(angles)
+    order = np.argsort(steepness)
+    cumulative = np.cumsum(lengths[order])
+    at = min(
+        int(np.searchsorted(cumulative, cumulative[-1] * params.drift_row_percentile / 100.0)),
+        len(order) - 1,
+    )
+    columns = np.nonzero(marks.any(axis=0))[0]
+    width = float(np.percentile(columns, 99) - np.percentile(columns, 1))
+    return width / text_height * float(np.tan(np.radians(steepness[order][at])))
 
 
 def _sharp_steps(blurred: np.ndarray, params: FinderParams) -> np.ndarray:

@@ -858,7 +858,21 @@ pipeline:
     # receipts photographed alone (35 better, 115 the same, 7 worse).
     straighten: true
     straighten_min_deg: 1.0
-    straighten_max_deg: 40.0
+    # MEASURED 19 November 2026 on the 472 real photographs of single receipts in the
+    # WildReceipt test split, by this stage's own row direction (checked by eye against
+    # the print on the 12 it turned furthest from where the set's upright word boxes put
+    # the rows: the stage was right on all 12, and the boxes are no yardstick for tilt).
+    # Of 454 not cut or rectified, 283 were under 1 degree or gave no direction, 25 were
+    # over 3, 10 over 5, 2 over 10, and the largest was 13.8. Nobody lays a receipt at 40
+    # degrees on purpose: 15 holds every tilt seen and declines the rest.
+    straighten_max_deg: 15.0
+    # An image is turned or rectified only when its rows of print DRIFT far enough to
+    # mislead a reader: at least this many text heights off their own line across the
+    # width of the print (width of the print x tangent of the rows' angle, in text
+    # heights). Under about one a reader following a row stays on it. A wide page at a
+    # small angle drifts more than a narrow receipt at a large one, so this, not the
+    # angle, is the test. 0 acts on every image.
+    straighten_min_drift_heights: 2.0
     straighten_fill_rgb: [255, 255, 255]
     # Turning removes tilt but not foreshortening: a page photographed at an angle has rows
     # that converge, which on a wide row (a bank statement's date, description and amount)
@@ -888,6 +902,10 @@ pipeline:
     # turning.
     # Not yet measured: the reading after rectification.
     rectify_pages: true
+    # Each image cut from a photograph of several receipts is rectified in the same way
+    # and under the same tests, with its own box telling its print from a neighbour's.
+    # false leaves cut images to be turned only. Needs straighten.
+    rectify_pieces: true
     rectify_min_area_frac: 0.30
     rectify_min_edges: 4
     rectify_min_print_frac: 0.98
@@ -1028,6 +1046,11 @@ pipeline:
 
       # Seed for the line fits, so a photograph always gives the same corners.
       ransac_seed: 0
+
+      # The drift of the print is measured with this percentile of the rows' angles,
+      # ranked by size and weighted by length, not their median: on a page seen at a
+      # slant the rows fan out either side of level, and it is the steep ones that drift.
+      drift_row_percentile: 60.0
 
       # THE PAPER METHOD (find_sheet_by_paper). Everything above models the desk, and
       # needs it smooth and of one colour. This models the paper instead, for one

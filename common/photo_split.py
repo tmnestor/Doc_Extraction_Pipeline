@@ -55,6 +55,7 @@ from common.sheet_finder import (
     find_sheet_by_paper,
     find_sheets,
     print_marks,
+    row_drift,
     text_direction,
     warp_upright,
 )
@@ -78,9 +79,11 @@ pipeline:
     max_receipts: 12
     straighten: true
     straighten_min_deg: 1.0
-    straighten_max_deg: 40.0
+    straighten_max_deg: 15.0
+    straighten_min_drift_heights: 2.0
     straighten_fill_rgb: [255, 255, 255]
     rectify_pages: true
+    rectify_pieces: true
     rectify_min_area_frac: 0.30
     rectify_min_edges: 4
     rectify_min_print_frac: 0.98
@@ -99,7 +102,9 @@ _KEYS: dict[str, type] = {
     "straighten": bool,
     "straighten_min_deg": float,
     "straighten_max_deg": float,
+    "straighten_min_drift_heights": float,
     "rectify_pages": bool,
+    "rectify_pieces": bool,
     "rectify_min_area_frac": float,
     "rectify_min_edges": int,
     "rectify_min_print_frac": float,
@@ -130,9 +135,14 @@ class PhotoSplitConfig:
         straighten: Whether each image is turned so its rows of print run level.
         straighten_min_deg: A turn smaller than this is left alone.
         straighten_max_deg: A turn larger than this is not believed, and the image is left alone.
+        straighten_min_drift_heights: An image is turned or rectified only when its rows of print drift at
+            least this many text heights off their own line across the width of the print. Below about one,
+            a reader following a row stays on it, and straightening changes nothing. 0 acts on every image.
         straighten_fill_rgb: Colour of the corners a turned image gains.
         rectify_pages: Whether a photograph of one document is rectified from its corners when they can be
             trusted. Needs `straighten`, whose turning is the fallback.
+        rectify_pieces: Whether each image cut from a photograph of several receipts is rectified in the same
+            way, under the same tests of trust. Needs `straighten`, whose turning is the fallback.
         rectify_min_area_frac: The sheet found must cover at least this share of the photograph.
         rectify_min_edges: At least this many of the sheet's four edges must be confirmed by a sharp step.
         rectify_min_print_frac: At least this share of the photograph's print must lie inside the sheet.
@@ -153,8 +163,10 @@ class PhotoSplitConfig:
     straighten: bool
     straighten_min_deg: float
     straighten_max_deg: float
+    straighten_min_drift_heights: float
     straighten_fill_rgb: tuple[int, int, int]
     rectify_pages: bool
+    rectify_pieces: bool
     rectify_min_area_frac: float
     rectify_min_edges: int
     rectify_min_print_frac: float
@@ -294,6 +306,13 @@ def photo_split_config_from(raw_config: dict[str, Any], *, config_path: Path) ->
             config_path=config_path,
             fix=f"set the two under {SECTION} in {config_path.name}, for example 1.0 and 40.0",
         )
+    if values["straighten_min_drift_heights"] < 0.0:
+        raise _fail(
+            f"straighten_min_drift_heights is {values['straighten_min_drift_heights']}, which is below 0",
+            key="straighten_min_drift_heights",
+            config_path=config_path,
+            fix=f"set `straighten_min_drift_heights` under {SECTION} in {config_path.name} to 0 or more, e.g. 1.0",
+        )
     if not 0.0 < values["rectify_min_print_frac"] <= 1.0:
         raise _fail(
             f"rectify_min_print_frac is {values['rectify_min_print_frac']}, which is not above 0 and at most 1",
@@ -322,13 +341,14 @@ def photo_split_config_from(raw_config: dict[str, Any], *, config_path: Path) ->
             config_path=config_path,
             fix=f"set `rectify_min_edges` under {SECTION} in {config_path.name} to a whole number from 1 to 4",
         )
-    if values["rectify_pages"] and not values["straighten"]:
-        raise _fail(
-            "rectify_pages is true but straighten is false: rectification falls back on turning",
-            key="rectify_pages",
-            config_path=config_path,
-            fix=f"set `straighten: true` under {SECTION} in {config_path.name}, or `rectify_pages: false`",
-        )
+    for key in ("rectify_pages", "rectify_pieces"):
+        if values[key] and not values["straighten"]:
+            raise _fail(
+                f"{key} is true but straighten is false: rectification falls back on turning",
+                key=key,
+                config_path=config_path,
+                fix=f"set `straighten: true` under {SECTION} in {config_path.name}, or `{key}: false`",
+            )
     fill = section.get("straighten_fill_rgb")
     is_colour = (
         isinstance(fill, list)
@@ -473,6 +493,40 @@ def cut(image: Image.Image, boxes: tuple[Box, ...], margin_frac: float) -> list[
     ]
 
 
+def box_within(box: Box, rectangle: tuple[int, int, int, int], width: int, height: int) -> Box:
+    """A box of the photograph, restated on the 0 to 1000 scale of an image cut out of it.
+
+    Args:
+        box: The box, on the photograph's 0 to 1000 scale.
+        rectangle: The (left, top, right, bottom) in pixels that was cut, as `crop_rectangles` gives it.
+        width: The photograph's width in pixels.
+        height: The photograph's height in pixels.
+
+    Returns:
+        The same box on the cut image's own 0 to 1000 scale, kept inside the image.
+    """
+    left, top, right, bottom = rectangle
+
+    def along(value: float, size: int, start: int, end: int) -> float:
+        return min(max((value / BOX_SCALE * size - start) / (end - start), 0.0), 1.0) * BOX_SCALE
+
+    return Box(
+        left=along(box.left, width, left, right),
+        top=along(box.top, height, top, bottom),
+        right=along(box.right, width, left, right),
+        bottom=along(box.bottom, height, top, bottom),
+    )
+
+
+def _print_of(image: Image.Image, finder: FinderParams) -> tuple[np.ndarray, float]:
+    """An image's print marks and text height, at the finder's working size."""
+    rgb = np.asarray(image.convert("RGB"))
+    scale = min(1.0, finder.work_long_edge / max(rgb.shape[:2]))
+    if scale < 1:
+        rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    return print_marks(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), finder)
+
+
 def row_direction(image: Image.Image, finder: FinderParams) -> float | None:
     """The direction of the rows of print in an image, in degrees from level.
 
@@ -483,12 +537,31 @@ def row_direction(image: Image.Image, finder: FinderParams) -> float | None:
     Returns:
         The direction, positive when the rows fall away to the right, or None when the print gives none.
     """
-    rgb = np.asarray(image.convert("RGB"))
-    scale = min(1.0, finder.work_long_edge / max(rgb.shape[:2]))
-    if scale < 1:
-        rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    marks, text_height = print_marks(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), finder)
+    marks, text_height = _print_of(image, finder)
     return text_direction(marks, text_height, finder)
+
+
+def row_measures(image: Image.Image, finder: FinderParams) -> tuple[float | None, float | None]:
+    """The direction of an image's rows of print, and how far they drift across the print's width.
+
+    Args:
+        image: The image: a cut receipt, or the part of a photograph inside a receipt's box.
+        finder: The settings for finding print and its direction (`pipeline.photo_split.finder`).
+
+    Returns:
+        The direction in degrees from level, and the drift in text heights (see
+        `common.sheet_finder.row_drift`). Each is None when the print gives none.
+    """
+    marks, text_height = _print_of(image, finder)
+    return text_direction(marks, text_height, finder), row_drift(marks, text_height, finder)
+
+
+def worth_straightening(drift: float | None, config: PhotoSplitConfig) -> bool:
+    """Whether an image's rows drift far enough for turning or rectifying it to change how it reads.
+
+    An image whose drift could not be measured is treated as worth it: nothing is known against it.
+    """
+    return drift is None or drift >= config.straighten_min_drift_heights
 
 
 def level_turn(direction: float | None, config: PhotoSplitConfig) -> float:

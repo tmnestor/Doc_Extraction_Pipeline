@@ -118,7 +118,8 @@ def apply_reply(
         if straighten and finder is not None and len(decision.boxes) <= 1:
             with Image.open(photograph) as image:
                 rgb = image.convert("RGB")
-                page = rectify(rgb, finder, config) if config.rectify_pages else None
+                only_box = decision.boxes[0] if decision.boxes else None
+                page = rectify(rgb, finder, config, only_box) if config.rectify_pages else None
                 if page is not None:
                     page.save(images_dir / altered_name(photograph))
                     rectified = True

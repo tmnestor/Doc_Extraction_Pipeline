@@ -23,10 +23,23 @@ The method, in the order it runs:
 
 A sheet lies on the desk, not on another sheet, so a shape found inside a larger one is dropped.
 
-Measured on synthetic photographs only, whose desk is one plain colour. It does not hold up on real photographs:
-the desk is modelled as smooth and of one colour, so on a textured surface (wood grain, felt), on a frame that
-also shows other surfaces and objects, or on a pale surface little darker than the paper, no sheet is isolated.
-Tried on three real photographs of a receipt, it isolated the receipt in none.
+That method models the DESK, and needs it smooth and of one colour. A second method, `find_sheet_by_paper`,
+models the PAPER instead, for one document on any surface:
+
+1. **Seed from the print.** Print sits on paper, so the area inside a block of print is paper for certain.
+   The vision model's box for the document, when there is one, says which print is the document's.
+2. **Paper, by `cv2.grabCut`.** Seeded with that area, it learns the colours of the paper and of the
+   surroundings from the photograph itself, so texture and clutter do not matter.
+3. **Along its own edges.** Print and box both stop where the print stops, so blank paper beyond it is at
+   first taken for surroundings. A second pass offers the two strips between the sheet's opposite edge lines
+   as probable paper, and the longer sheet is kept only if it is still a clean four-sided shape.
+4. **Edges**, refined on the full-size photograph exactly as in the first method.
+
+The desk method is measured on synthetic photographs only, whose desk is one plain colour. It does not hold up
+on real photographs: on a textured surface (wood grain, felt), on a frame that also shows other surfaces and
+objects, or on a pale surface little darker than the paper, no sheet is isolated. Tried on four real
+photographs of receipts, it isolated a receipt in none; the paper method found all five receipts in them
+(judged by eye: there are no true corners for real photographs).
 
 Further limits: every edge of a sheet is expected inside the frame; sheets that touch or overlap are not separated; a
 shadow whose edge is as sharp as the paper's (hard, direct light) is taken for the paper's edge; and
@@ -48,6 +61,9 @@ _EDGE_SAMPLES = 300
 _MIN_EDGE_HITS = 30
 _MIN_OUTLINE_POINTS = 20
 _HULL_TOLERANCE_PX = 2.0
+# Tolerances, as shares of the hull's perimeter, tried in turn to reduce a paper region's hull to four corners.
+_HULL_QUAD_SHARES = (0.02, 0.03, 0.05, 0.08)
+_PAPER_OPEN_PX = 5
 
 
 @dataclass(frozen=True)
@@ -87,6 +103,25 @@ class FinderParams:
         text_max_row_thickness_heights: Thickest strip that still counts as one row, in text heights.
         text_min_rows: Least number of rows for print to give a direction.
         ransac_seed: Seed for the line fits, so a photograph always gives the same corners.
+        paper_work_long_edge: Long edge, in pixels, of the copy the paper method separates the sheet on.
+        paper_rounds: Rounds of `cv2.grabCut` in each of its two passes.
+        paper_join_heights: Letters and rows closer than this many text heights join into one block of print.
+        paper_border_frac: Width of the frame's outer ring, as a share of its short edge, that is surroundings
+            for certain.
+        paper_min_border_difference: Least colour difference (CIE Lab) between that ring and the paper under
+            the print for there to be surroundings at all. A page that fills the frame has none.
+        paper_region_grow_frac: With a box from the model, the method looks only at the box and the print it
+            claims, grown on every side by this share of their extent. Wide enough to hold blank paper beyond the
+            print; what lies further off is neither segmented nor counted as print outside the sheet.
+        paper_block_in_box_min: A block of print belongs to the box's document when at least this share of
+            it lies inside the box.
+        paper_block_min_share: ... and it is at least this share of the largest such block.
+        paper_refine_outside_frac: How far outside the paper method's coarse edge its refinement looks, as a
+            share of the diagonal.
+        paper_refine_inside_frac: How far inside it starts. Short, so the walk starts in the page's margin and
+            not in its print.
+        paper_extension_min_fit: The second pass's longer sheet is kept when it and its quadrilateral agree
+            at least this well (shared area over the area either covers).
     """
 
     work_long_edge: int
@@ -120,6 +155,17 @@ class FinderParams:
     text_max_row_thickness_heights: float
     text_min_rows: int
     ransac_seed: int
+    paper_work_long_edge: int
+    paper_rounds: int
+    paper_join_heights: float
+    paper_border_frac: float
+    paper_min_border_difference: float
+    paper_region_grow_frac: float
+    paper_block_in_box_min: float
+    paper_block_min_share: float
+    paper_extension_min_fit: float
+    paper_refine_outside_frac: float
+    paper_refine_inside_frac: float
 
 
 @dataclass(frozen=True)
@@ -138,6 +184,30 @@ class FoundSheet:
     text_deg: float | None
     outline: str
     edges_confirmed: int
+
+
+@dataclass(frozen=True)
+class PaperSheet:
+    """The one sheet found by the paper method.
+
+    Attributes:
+        quad: Its corners in photograph pixels (float32, 4x2): top-left, top-right, bottom-right, bottom-left.
+        text_deg: Direction of its rows of print, in degrees from the x axis, or None when print gave none.
+        edges_confirmed: How many of the four edges were confirmed by a sharp step and refined.
+        fit: How well the paper region and its quadrilateral agree before refinement: the area they share
+            over the area either covers. A sheet with desk let in, or a part missing, scores low.
+        print_inside: The share of everything in the photograph that looks like print that lies inside the
+            quadrilateral. Print outside it means the quadrilateral is not the whole sheet: a shaded table on
+            a clean page leaves the page's heading outside. A strongly textured surface also counts against
+            it, since its texture can look like print; such a sheet is then not trusted, which is the safe way
+            to be wrong.
+    """
+
+    quad: np.ndarray
+    text_deg: float | None
+    edges_confirmed: int
+    fit: float
+    print_inside: float
 
 
 def _apart(first_deg: float, second_deg: float) -> float:
@@ -478,8 +548,14 @@ def _refine_edge(
     reach: tuple[float, float],
     params: FinderParams,
     rng: np.random.Generator,
+    *,
+    outward: bool = False,
 ) -> tuple[np.ndarray | None, float]:
-    """Re-fit one edge at full size from the first sharp step met walking in from outside the sheet.
+    """Re-fit one edge at full size from the first sharp step met walking across it.
+
+    The walk runs in from outside the sheet, where the desk is smooth and a shadow's edge is a slow ramp. With
+    `outward` it runs out from inside the sheet instead, for a surface whose own texture is full of sharp steps:
+    the paper's margin is smooth, so the first sharp step met from inside is the paper's edge.
 
     Returns:
         The line, or None when too little of the edge is seen, and the share of the sampled positions inside the
@@ -512,6 +588,8 @@ def _refine_edge(
             if not in_frame[offsets >= 0].all() or not in_frame[offsets <= -2 * span].any():
                 continue
             xs, ys, walk = xs[in_frame], ys[in_frame], offsets[in_frame]
+        if outward:
+            xs, ys, walk = xs[::-1], ys[::-1], walk[::-1]
         sampled += 1
         profile = image[ys, xs]
         step = np.abs(profile[span:] - profile[:-span]).max(axis=1)
@@ -529,18 +607,35 @@ def _refine_edge(
 
 
 def _refine(
-    image: np.ndarray, quad: np.ndarray, params: FinderParams, rng: np.random.Generator
+    image: np.ndarray,
+    quad: np.ndarray,
+    params: FinderParams,
+    rng: np.random.Generator,
+    *,
+    from_inside: bool = False,
 ) -> tuple[np.ndarray, int]:
     """Pull each edge of a quad onto the paper's edge. An edge that is not confirmed stays where it was.
+
+    Args:
+        image: The photograph, blurred, as float32.
+        quad: The coarse corners, in photograph pixels.
+        params: The finder's parameters.
+        rng: Source of randomness for the line fits.
+        from_inside: Walk out from inside the sheet over the paper method's shorter reaches, where the default
+            walks in from outside over the desk method's.
 
     Returns:
         The refined quad, and how many of its edges the final pass confirmed.
     """
     diagonal = float(np.linalg.norm(quad[2] - quad[0]))
-    passes = (
-        (params.refine_outside_first_frac * diagonal, params.refine_inside_first_frac * diagonal),
-        (params.refine_outside_final_frac * diagonal, params.refine_inside_final_frac * diagonal),
-    )
+    if from_inside:
+        reach = (params.paper_refine_outside_frac * diagonal, params.paper_refine_inside_frac * diagonal)
+        passes = (reach, reach)
+    else:
+        passes = (
+            (params.refine_outside_first_frac * diagonal, params.refine_inside_first_frac * diagonal),
+            (params.refine_outside_final_frac * diagonal, params.refine_inside_final_frac * diagonal),
+        )
     confirmed = 0
     for reach in passes:
         centre = quad.mean(axis=0)
@@ -548,7 +643,7 @@ def _refine(
         confirmed = 0
         for i in range(4):
             start, end = quad[i].astype(float), quad[(i + 1) % 4].astype(float)
-            line, share = _refine_edge(image, start, end, centre, reach, params, rng)
+            line, share = _refine_edge(image, start, end, centre, reach, params, rng, outward=from_inside)
             if line is None or share < params.min_edge_support:
                 line = _fit_line(np.array([start, end]))
             else:
@@ -605,6 +700,192 @@ def find_sheets(rgb: np.ndarray, params: FinderParams) -> list[FoundSheet]:
         if not any(cv2.pointPolygonTest(k.quad, (float(cx), float(cy)), False) >= 0 for k in kept):
             kept.append(sheet)
     return kept
+
+
+def _region_fit(region: np.ndarray, quad: np.ndarray) -> float:
+    """How well a region and a quadrilateral agree: the area they share over the area either covers."""
+    inside = np.zeros(region.shape, np.uint8)
+    cv2.fillConvexPoly(inside, np.round(quad).astype(np.int32), 1)
+    either = int(np.count_nonzero((inside > 0) | (region > 0)))
+    return float(np.count_nonzero((inside > 0) & (region > 0))) / max(either, 1)
+
+
+def _hull_quad(region: np.ndarray) -> np.ndarray | None:
+    """The four corners of a region's convex hull, or of its bounding rectangle when the hull has no four."""
+    contours, _ = cv2.findContours(region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    hull = cv2.convexHull(max(contours, key=cv2.contourArea))
+    perimeter = cv2.arcLength(hull, True)
+    for share in _HULL_QUAD_SHARES:
+        approx = cv2.approxPolyDP(hull, share * perimeter, True)
+        if len(approx) == 4:
+            return approx.reshape(4, 2).astype(np.float64)
+    return cv2.boxPoints(cv2.minAreaRect(hull)).astype(np.float64)
+
+
+def _cut_paper(bgr: np.ndarray, mask: np.ndarray, seed: np.ndarray, params: FinderParams) -> np.ndarray:
+    """Run `cv2.grabCut` from a labelled mask and return the connected paper region that holds the seed.
+
+    The region is empty when the mask leaves nothing that could be paper, or nothing that could be surroundings
+    (print covering the whole frame, say): grabCut cannot start without a sample of each.
+    """
+    could_be_paper = np.isin(mask, (cv2.GC_FGD, cv2.GC_PR_FGD))
+    if could_be_paper.all() or not could_be_paper.any():
+        return np.zeros(mask.shape, np.uint8)
+    # grabCut starts its colour models with k-means, which draws at random: seeded, a photograph always gives
+    # the same sheet. The rectangle argument is unused when the mask carries the labels.
+    cv2.setRNGSeed(params.ransac_seed)
+    models = np.zeros((1, 65)), np.zeros((1, 65))
+    cv2.grabCut(bgr, mask, None, *models, params.paper_rounds, cv2.GC_INIT_WITH_MASK)  # type: ignore[call-overload]
+    labelled = np.isin(mask, (cv2.GC_FGD, cv2.GC_PR_FGD)).astype(np.uint8)
+    kernel = np.ones((_PAPER_OPEN_PX, _PAPER_OPEN_PX), np.uint8)
+    count, labels = cv2.connectedComponents(
+        cv2.morphologyEx(labelled, cv2.MORPH_OPEN, kernel), connectivity=8
+    )
+    holding = np.bincount(labels[seed > 0], minlength=count)
+    holding[0] = 0
+    if holding.max() == 0:
+        return np.zeros(mask.shape, np.uint8)
+    return (labels == int(np.argmax(holding))).astype(np.uint8)
+
+
+def find_sheet_by_paper(
+    rgb: np.ndarray, params: FinderParams, box: tuple[float, float, float, float] | None = None
+) -> PaperSheet | None:
+    """Find the one sheet a photograph shows, from a model of the paper and not of the desk.
+
+    Args:
+        rgb: The photograph, uint8 (H, W, 3), RGB.
+        params: The finder's parameters.
+        box: The vision model's box for the document, as shares of the photograph's width and height (left,
+            top, right, bottom, each from 0 to 1), or None. It says which print is the document's; it is not
+            trusted for where the sheet ends.
+
+    Returns:
+        The sheet, or None when the photograph shows no print, when its border is the colour of the paper under
+        the print (a page that fills the frame: there is nothing to cut away), or when no shape is found.
+    """
+    full_h, full_w = rgb.shape[:2]
+    scale = min(1.0, params.paper_work_long_edge / max(full_h, full_w))
+    small = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else rgb
+    h, w = small.shape[:2]
+    marks, text_height = print_marks(cv2.cvtColor(small, cv2.COLOR_RGB2GRAY), params)
+    if text_height <= 0:
+        return None
+    join = max(3, int(round(params.paper_join_heights * text_height)) | 1)
+    blocks = cv2.morphologyEx(marks, cv2.MORPH_CLOSE, np.ones((join, join), np.uint8))
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(blocks, connectivity=8)
+    if count < 2:
+        return None
+    areas = stats[:, cv2.CC_STAT_AREA].astype(float)
+    areas[0] = 0.0
+
+    # Which print is the document's: the largest block, or the blocks the model's box mostly covers.
+    in_box = None
+    if box is None:
+        chosen = [int(np.argmax(areas))]
+    else:
+        in_box = np.zeros((h, w), np.uint8)
+        left, top, right, bottom = int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h)
+        in_box[max(0, top) : bottom + 1, max(0, left) : right + 1] = 1
+        covered = np.bincount(labels[in_box > 0], minlength=count).astype(float)
+        covered[0] = 0.0
+        mostly = np.flatnonzero(
+            (covered >= params.paper_block_in_box_min * np.maximum(areas, 1.0)) & (areas > 0)
+        )
+        if len(mostly) == 0:
+            mostly = np.array([int(np.argmax(covered))])
+        chosen = [int(i) for i in mostly if areas[i] >= params.paper_block_min_share * areas[mostly].max()]
+    outlines = [
+        contour
+        for i in chosen
+        for contour in cv2.findContours(
+            (labels == i).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )[0]
+    ]
+    seed = np.zeros((h, w), np.uint8)
+    cv2.fillConvexPoly(seed, cv2.convexHull(np.vstack(outlines)), 1)
+
+    # With a box, only the neighbourhood of the document is looked at: the box and the print it claims, and a
+    # margin wide enough for blank paper beyond the print. What lies further off (the rest of the table, another
+    # receipt) is neither segmented nor counted as print outside the sheet.
+    origin = np.zeros(2)
+    if in_box is not None:
+        ys, xs = np.nonzero((in_box > 0) | (seed > 0))
+        grow_x = params.paper_region_grow_frac * (xs.max() - xs.min() + 1)
+        grow_y = params.paper_region_grow_frac * (ys.max() - ys.min() + 1)
+        x0, x1 = max(0, int(xs.min() - grow_x)), min(w, int(xs.max() + grow_x) + 1)
+        y0, y1 = max(0, int(ys.min() - grow_y)), min(h, int(ys.max() + grow_y) + 1)
+        small = np.ascontiguousarray(small[y0:y1, x0:x1])
+        marks, seed, in_box = marks[y0:y1, x0:x1], seed[y0:y1, x0:x1], in_box[y0:y1, x0:x1]
+        h, w = small.shape[:2]
+        origin = np.array([x0, y0], dtype=np.float64)
+
+    # The paper's colour: what lies between the marks, inside the seed.
+    lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB).astype(np.float32)
+    between = (seed > 0) & (cv2.dilate(marks, np.ones((3, 3), np.uint8)) == 0)
+    if not between.any():
+        return None
+    paper_colour = np.median(lab[between], axis=0)
+    # A page that fills the frame has no surroundings: its border is the colour of its own paper.
+    border = max(2, int(params.paper_border_frac * min(h, w)))
+    ring = np.ones((h, w), bool)
+    ring[border:-border, border:-border] = False
+    ring_colour = np.median(lab[ring], axis=0)
+    if float(np.linalg.norm(ring_colour - paper_colour)) < params.paper_min_border_difference:
+        return None
+
+    # First pass: paper near the print (and inside the box), surroundings elsewhere, each only "probably".
+    mask = np.full((h, w), cv2.GC_PR_BGD, np.uint8)
+    if in_box is None:
+        grow = max(3, int(round(2 * text_height)) | 1)
+        mask[cv2.dilate(seed, np.ones((grow, grow), np.uint8)) > 0] = cv2.GC_PR_FGD
+    else:
+        mask[(in_box > 0) | (seed > 0)] = cv2.GC_PR_FGD
+    mask[ring] = cv2.GC_BGD
+    mask[seed > 0] = cv2.GC_FGD
+    bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
+    region = _cut_paper(bgr, mask, seed, params)
+    quad = _hull_quad(region)
+    if quad is None:
+        return None
+
+    # Second pass: a sheet can only continue along its own edges, so the two strips between its opposite edge
+    # lines, run out to the frame, are offered as probable paper. The four corner regions outside both strips
+    # stay surroundings, and the model of the surroundings is learnt from them.
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    centre = quad.mean(axis=0)
+    inside = []
+    for i in range(4):
+        a, b = quad[i], quad[(i + 1) % 4]
+        side = (b[0] - a[0]) * (ys - a[1]) - (b[1] - a[1]) * (xs - a[0])
+        at_centre = (b[0] - a[0]) * (centre[1] - a[1]) - (b[1] - a[1]) * (centre[0] - a[0])
+        inside.append(side * np.sign(at_centre) >= 0)
+    strips = (inside[0] & inside[2]) | (inside[1] & inside[3])
+    mask = np.where(strips, cv2.GC_PR_FGD, cv2.GC_PR_BGD).astype(np.uint8)
+    mask[ring] = cv2.GC_BGD
+    mask[seed > 0] = cv2.GC_FGD
+    longer = _cut_paper(bgr, mask, seed, params)
+    longer_quad = _hull_quad(longer)
+    fit = _region_fit(region, quad)
+    if longer_quad is not None:
+        longer_fit = _region_fit(longer, longer_quad)
+        # On a surface the first pass already got right, the strips let desk in and the shape goes ragged.
+        if longer_fit >= params.paper_extension_min_fit:
+            region, quad, fit = longer, longer_quad, longer_fit
+
+    within = np.zeros((h, w), np.uint8)
+    cv2.fillConvexPoly(within, np.round(quad).astype(np.int32), 1)
+    printed = int(np.count_nonzero(marks))
+    print_inside = float(np.count_nonzero(marks[within > 0])) / printed if printed else 0.0
+
+    text_deg = text_direction(np.where(region > 0, marks, 0).astype(np.uint8), text_height, params)
+    full = cv2.GaussianBlur(rgb, (0, 0), params.blur_sigma_px).astype(np.float32)
+    rng = np.random.default_rng(params.ransac_seed)
+    coarse = (_ordered(quad, text_deg) + origin) / scale
+    refined, confirmed = _refine(full, coarse, params, rng, from_inside=True)
+    return PaperSheet(refined.astype(np.float32), text_deg, confirmed, fit, print_inside)
 
 
 def warp_upright(rgb: np.ndarray, quad: np.ndarray, fill_rgb: tuple[int, int, int]) -> np.ndarray:

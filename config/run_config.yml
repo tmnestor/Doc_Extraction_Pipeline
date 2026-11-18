@@ -891,6 +891,42 @@ pipeline:
     rectify_min_area_frac: 0.30
     rectify_min_edges: 4
     rectify_min_print_frac: 0.98
+    # The corners are looked for by two methods. The desk method (the one measured
+    # above) comes first: fast and exact, but it needs a desk that is smooth and of one
+    # colour. With rectify_paper_model true, a photograph it gives no trusted sheet for
+    # is tried with the paper method, which finds a sheet on a textured, cluttered or
+    # pale surface (its settings are the paper_* keys of finder below). Its sheet must
+    # pass the same three tests, and agree with its own quadrilateral by at least
+    # rectify_paper_min_fit.
+    # MEASURED 18 November 2026, on this machine:
+    #   110 synthetic statement photographs, each with the box the model gave for it. The
+    #     desk method rectifies 104, all exact. Of the 6 it declines, the paper method
+    #     rectifies 2, each with its corners within 0.1% of the page diagonal, and
+    #     declines 4, which are turned: 106 of 110 in all. Run on all 110 by itself, the
+    #     paper method finds 109 sheets and trusts 65, every one within 0.2%.
+    #   330 clean pages (165 plain, 165 with distractors): the paper method stops at once
+    #     on every one (their border is their own paper), in about 0.01 s a page.
+    #   4 real photographs of receipts with the model boxes (felt, wood grain, a pale
+    #     desk, two receipts): it finds all 5 sheets, where the desk method finds none
+    #     (judged by eye), in 1 to 2 s each. None is rectified: a receipt is under
+    #     rectify_min_area_frac, and print inside is 0.59 on felt, 0.93 on wood grain,
+    #     0.98 on the pale desk, and 0.80 and 0.98 for the two receipts, against 0.98.
+    #   Real images with NO box (the model was not run), so the whole frame is used:
+    #     347 scanned receipts (SROIE test): 3 rectified, each correctly and with all of
+    #       its annotated text inside; 26 turned, none by more than 5 degrees. Slow: a
+    #       median of 3.4 s a scan and up to 49 s, because a real scan has no clean border
+    #       for the method to stop at.
+    #     472 photographed receipts (WildReceipt test): 16 rectified, with 99.6% or more
+    #       of the annotated text inside each. The paper method finds a sheet on 443 but
+    #       it holds all the text on only 83, and the tests of trust reject the rest.
+    #       Turning, measured over the whole frame, levels 93 and unlevels 48 (16 by more
+    #       than 3 degrees): these photographs are mostly level already, and a table
+    #       texture can outvote the print. In the stage the turn is measured inside the
+    #       model box, which this did not test.
+    #   Not yet measured: either real set with the model boxes, and the reading of any
+    #   image the paper method changes.
+    rectify_paper_model: true
+    rectify_paper_min_fit: 0.97
 
     # The sheet finder (common/sheet_finder.py). The split stage uses two parts of it
     # to straighten an image: finding print (the mark_* keys and work_long_edge) and the
@@ -992,6 +1028,45 @@ pipeline:
 
       # Seed for the line fits, so a photograph always gives the same corners.
       ransac_seed: 0
+
+      # THE PAPER METHOD (find_sheet_by_paper). Everything above models the desk, and
+      # needs it smooth and of one colour. This models the paper instead, for one
+      # document on any surface, and is what rectification tries when the desk method
+      # gives no sheet it can trust (see rectify_paper_model above).
+      # The area inside a block of print is paper for certain; cv2.grabCut, seeded with
+      # it, learns the paper's colours and the surroundings' from the photograph.
+      paper_work_long_edge: 800
+      paper_rounds: 5
+      # Letters and rows this many text heights apart, or closer, are one block of print.
+      paper_join_heights: 3.0
+      # The frame's outer ring, as a share of its short edge, is surroundings for certain.
+      paper_border_frac: 0.01
+      # A page that fills the frame has no surroundings: when that ring is within this
+      # colour difference (CIE Lab) of the paper under the print, the method stops at
+      # once. Measured: 0.0 on clean rendered pages, 5.7 or more on photographs.
+      paper_min_border_difference: 3.0
+      # With a box from the model: which blocks of print the box claims (those it covers
+      # at least paper_block_in_box_min of, and that are at least paper_block_min_share
+      # of the largest of them).
+      # ... and then only the box and that print are looked at, grown on every side by
+      # this share of their extent: wide enough to hold blank paper beyond the print
+      # (the model boxes the print, not the sheet). What lies further off, the rest of
+      # the table or another receipt, is neither segmented nor counted as print outside.
+      paper_region_grow_frac: 0.35
+      paper_block_in_box_min: 0.5
+      paper_block_min_share: 0.02
+      # The second pass lets the sheet continue along its own edges, to take in blank
+      # paper beyond the print. The longer sheet is kept when it and its quadrilateral
+      # agree at least this well. Measured: 0.987 or more where the longer sheet was
+      # right (synthetic statements), 0.915 or less where it let desk in (real photographs).
+      paper_extension_min_fit: 0.97
+      # Each edge is then placed on the full-size photograph at the first sharp step met
+      # walking OUT from inside the sheet (the desk method walks in from outside, which a
+      # textured surface, full of sharp steps of its own, does not allow). The walk starts
+      # this far inside the coarse edge, short enough to start in the page's margin and
+      # not in its print, and runs this far outside it; both are shares of the diagonal.
+      paper_refine_outside_frac: 0.02
+      paper_refine_inside_frac: 0.01
 
   # Trust distribution linking — NRO Private Wealth compliance checking.
   # Paths below SHADOW io.input/io.output when KFP_TASK=trust_* (entrypoint.sh

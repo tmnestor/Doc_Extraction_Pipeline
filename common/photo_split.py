@@ -50,7 +50,14 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from common.sheet_finder import FinderParams, find_sheets, print_marks, text_direction, warp_upright
+from common.sheet_finder import (
+    FinderParams,
+    find_sheet_by_paper,
+    find_sheets,
+    print_marks,
+    text_direction,
+    warp_upright,
+)
 
 SECTION = "pipeline.photo_split"
 
@@ -76,7 +83,9 @@ pipeline:
     rectify_pages: true
     rectify_min_area_frac: 0.30
     rectify_min_edges: 4
-    rectify_min_print_frac: 0.98"""
+    rectify_min_print_frac: 0.98
+    rectify_paper_model: true
+    rectify_paper_min_fit: 0.97"""
 
 _KEYS: dict[str, type] = {
     "enabled": bool,
@@ -94,6 +103,8 @@ _KEYS: dict[str, type] = {
     "rectify_min_area_frac": float,
     "rectify_min_edges": int,
     "rectify_min_print_frac": float,
+    "rectify_paper_model": bool,
+    "rectify_paper_min_fit": float,
 }
 
 
@@ -125,6 +136,10 @@ class PhotoSplitConfig:
         rectify_min_area_frac: The sheet found must cover at least this share of the photograph.
         rectify_min_edges: At least this many of the sheet's four edges must be confirmed by a sharp step.
         rectify_min_print_frac: At least this share of the photograph's print must lie inside the sheet.
+        rectify_paper_model: Whether, when the desk method gives no sheet that can be trusted, the paper
+            method is tried (`common.sheet_finder.find_sheet_by_paper`). It finds a sheet on a textured,
+            cluttered or pale surface, where the desk method cannot.
+        rectify_paper_min_fit: The paper method's sheet must agree with its quadrilateral at least this well.
     """
 
     enabled: bool
@@ -143,6 +158,8 @@ class PhotoSplitConfig:
     rectify_min_area_frac: float
     rectify_min_edges: int
     rectify_min_print_frac: float
+    rectify_paper_model: bool
+    rectify_paper_min_fit: float
 
 
 @dataclass(frozen=True)
@@ -283,6 +300,13 @@ def photo_split_config_from(raw_config: dict[str, Any], *, config_path: Path) ->
             key="rectify_min_print_frac",
             config_path=config_path,
             fix=f"set `rectify_min_print_frac` under {SECTION} in {config_path.name} to a share such as 0.98",
+        )
+    if not 0.0 < values["rectify_paper_min_fit"] <= 1.0:
+        raise _fail(
+            f"rectify_paper_min_fit is {values['rectify_paper_min_fit']}, which is not above 0 and at most 1",
+            key="rectify_paper_min_fit",
+            config_path=config_path,
+            fix=f"set `rectify_paper_min_fit` under {SECTION} in {config_path.name} to a share such as 0.97",
         )
     if not 0.0 < values["rectify_min_area_frac"] <= 1.0:
         raise _fail(
@@ -494,25 +518,8 @@ def turn(image: Image.Image, degrees: float, config: PhotoSplitConfig) -> Image.
     )
 
 
-def rectify(image: Image.Image, finder: FinderParams, config: PhotoSplitConfig) -> Image.Image | None:
-    """Rectify a photograph of one document from its four corners, when they can be trusted.
-
-    The corners are found and the homography reversed, so the page comes out upright with its rows parallel:
-    its tilt and its foreshortening are both removed.
-
-    Args:
-        image: The photograph.
-        finder: The sheet finder's settings (`pipeline.photo_split.finder`).
-        config: The photo split settings.
-
-    Returns:
-        The rectified page, or None when the corners cannot be trusted: no sheet or more than one found, the
-        sheet covering less than `rectify_min_area_frac` of the photograph, fewer than `rectify_min_edges`
-        of its edges confirmed, or less than `rectify_min_print_frac` of the photograph's print lying
-        inside it. The last is what tells a sheet from a ruled table on a page that is not a photograph:
-        a sheet holds all the print, a table leaves the page's heading outside it.
-    """
-    rgb = np.asarray(image.convert("RGB"))
+def _desk_quad(rgb: np.ndarray, finder: FinderParams, config: PhotoSplitConfig) -> np.ndarray | None:
+    """The corners of the one sheet the desk method finds, when they pass every test of trust."""
     sheets = find_sheets(rgb, finder)
     if len(sheets) != 1:
         return None
@@ -528,4 +535,60 @@ def rectify(image: Image.Image, finder: FinderParams, config: PhotoSplitConfig) 
     printed = int(np.count_nonzero(marks))
     if printed == 0 or np.count_nonzero(marks[inside > 0]) < config.rectify_min_print_frac * printed:
         return None
-    return Image.fromarray(warp_upright(rgb, sheet.quad, config.straighten_fill_rgb))
+    return sheet.quad
+
+
+def _paper_quad(
+    rgb: np.ndarray, finder: FinderParams, config: PhotoSplitConfig, box: Box | None
+) -> np.ndarray | None:
+    """The corners of the sheet the paper method finds, when they pass every test of trust."""
+    shares = (
+        None if box is None else tuple(v / BOX_SCALE for v in (box.left, box.top, box.right, box.bottom))
+    )
+    sheet = find_sheet_by_paper(rgb, finder, shares)  # type: ignore[arg-type]
+    if sheet is None:
+        return None
+    covered = float(cv2.contourArea(sheet.quad)) / float(rgb.shape[0] * rgb.shape[1])
+    trusted = (
+        covered >= config.rectify_min_area_frac
+        and sheet.edges_confirmed >= config.rectify_min_edges
+        and sheet.fit >= config.rectify_paper_min_fit
+        and sheet.print_inside >= config.rectify_min_print_frac
+    )
+    return sheet.quad if trusted else None
+
+
+def rectify(
+    image: Image.Image, finder: FinderParams, config: PhotoSplitConfig, box: Box | None = None
+) -> Image.Image | None:
+    """Rectify a photograph of one document from its four corners, when they can be trusted.
+
+    The corners are found and the homography reversed, so the page comes out upright with its rows parallel:
+    its tilt and its foreshortening are both removed.
+
+    The corners are looked for twice. The desk method comes first: it is fast and exact, but needs a desk that
+    is smooth and of one colour. When it gives no sheet that can be trusted and `rectify_paper_model` is true,
+    the paper method is tried, which finds a sheet on any surface.
+
+    Args:
+        image: The photograph.
+        finder: The sheet finder's settings (`pipeline.photo_split.finder`).
+        config: The photo split settings.
+        box: The model's box for the document, when it gave exactly one. The paper method uses it to tell the
+            document's print from anything else in the photograph.
+
+    Returns:
+        The rectified page, or None when neither method's corners can be trusted. Either way the sheet must
+        cover at least `rectify_min_area_frac` of the photograph, have at least `rectify_min_edges` of its
+        edges confirmed, and hold at least `rectify_min_print_frac` of the photograph's print: that last is
+        what tells a sheet from a ruled table on a page that is not a photograph (a sheet holds all the print,
+        a table leaves the page's heading outside it). The desk method must also find exactly one sheet, and the
+        paper method's sheet must agree with its quadrilateral by at least `rectify_paper_min_fit`.
+    """
+    rgb = np.asarray(image.convert("RGB"))
+    quad = _desk_quad(rgb, finder, config)
+    if quad is None and config.rectify_paper_model:
+        quad = _paper_quad(rgb, finder, config, box)
+    if quad is None:
+        return None
+    return Image.fromarray(warp_upright(rgb, quad, config.straighten_fill_rgb))

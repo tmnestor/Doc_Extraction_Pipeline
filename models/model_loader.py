@@ -200,7 +200,7 @@ def build_vllm_loader(spec: VllmSpec):
                             check=False,
                         )
                         tp_size = len(result.stdout.strip().splitlines()) if result.returncode == 0 else 1
-                tp_size = max(1, tp_size)
+                tp_size, pp_size = engine_split_sizes(max(1, tp_size), cfg.engine_split)
 
                 # All engine tuning comes from app_config (YAML single source of
                 # truth). No spec-level fallback — a vLLM model MUST be loaded
@@ -252,7 +252,7 @@ def build_vllm_loader(spec: VllmSpec):
                 # startup lines are INFO, and entrypoint.sh suppresses those.
                 console.print(
                     f"\n[bold]Loading {spec.model_type} via vLLM "
-                    f"(tp={tp_size}, max_model_len={effective_max_model_len}, "
+                    f"(tp={tp_size}, pp={pp_size}, max_model_len={effective_max_model_len}, "
                     f"max_num_seqs={effective_max_num_seqs})[/bold]"
                 )
                 console.print(f"[dim]Model path: {cfg.model_path}[/dim]")
@@ -299,6 +299,12 @@ def build_vllm_loader(spec: VllmSpec):
                             f"digit regex bug remains.[/yellow]"
                         )
 
+                # Given only when the layers are shared out across cards. With the tensor split the engine
+                # is built exactly as it always was, so adding this setting cannot disturb a run that
+                # does not ask for it.
+                if pp_size > 1:
+                    llm_kwargs["pipeline_parallel_size"] = pp_size
+
                 if spec.attention_backend is not None:
                     llm_kwargs["attention_backend"] = spec.attention_backend
 
@@ -336,6 +342,33 @@ def build_vllm_loader(spec: VllmSpec):
         return _loader(config)
 
     return _loader_fn
+
+
+def engine_split_sizes(cards: int, split: str) -> tuple[int, int]:
+    """The tensor-parallel and pipeline-parallel sizes for one engine spread over some cards.
+
+    Args:
+        cards: How many cards the engine spans.
+        split: bootstrap.gpus.engine_split: "tensor" splits every layer across the cards; "pipeline"
+            shares the layers out in sequence.
+
+    Returns:
+        (tensor_parallel_size, pipeline_parallel_size). On one card both are 1 whatever the split.
+
+    Raises:
+        ValueError: The split is not one this knows.
+    """
+    if split == "tensor":
+        return cards, 1
+    if split == "pipeline":
+        return 1, cards
+    raise ValueError(
+        f"What: the engine split is {split!r}, which is not a way of spreading an engine over several "
+        "cards.\n"
+        "Where: config/run_config.yml -> bootstrap.gpus.engine_split\n"
+        "Expected: tensor or pipeline, e.g.:\n  engine_split: tensor\n"
+        "How to fix: set bootstrap.gpus.engine_split to tensor or pipeline."
+    )
 
 
 def build_vllm_processor_creator(spec: VllmSpec):

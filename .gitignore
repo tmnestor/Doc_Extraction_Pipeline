@@ -118,3 +118,7 @@ docs/github-to-gitlab-content-sync.md
 # meant a dirty tree after every execution and diffs git cannot show. Regenerate
 # them by running the notebook.
 notebooks/figures/*.png
+
+# Run outputs are results, not code
+out_*/
+outputs_*/

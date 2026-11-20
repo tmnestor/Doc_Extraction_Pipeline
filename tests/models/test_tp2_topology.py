@@ -1,9 +1,8 @@
-"""Both comparison models must refuse the data-parallel path on 2 GPUs.
+"""The 31B must refuse the data-parallel path on 2 GPUs, and the quantised 12B must take it.
 
-Gemma 4 31B W4A16 is 21.67 GiB and Qwen 3.8 FP8 is 25.87 GiB; an L4 has 24 GiB,
-~22.5 usable. Neither can hold one whole engine per card, so each must run as a
-single engine sharded tp=2. If ``resolve_dp_gpus`` ever returns a count for
-these, ``run_dp`` starts two whole engines and out-of-memories at load.
+Gemma 4 31B W4A16 is 21.67 GiB; an L4 has 24 GiB, about 22.5 usable. It cannot hold one whole engine on
+a card, so it must run as a single engine split across both (tp=2). If ``resolve_dp_gpus`` ever returns
+a count for it, ``run_dp`` starts two whole engines and runs out of memory at load.
 """
 
 import pytest
@@ -13,7 +12,6 @@ from common.vllm_dp import resolve_dp_gpus
 from models.registry import get_model
 
 GEMMA = "gemma4-31b-w4a16-vllm"
-QWEN = "qwen38-27b-fp8-vllm"
 
 
 @pytest.fixture
@@ -27,9 +25,8 @@ def two_gpu_config(tmp_path) -> PipelineConfig:
     )
 
 
-@pytest.mark.parametrize("model_type", [GEMMA, QWEN])
-def test_two_gpus_still_take_the_single_engine_path(two_gpu_config, model_type):
-    assert resolve_dp_gpus(two_gpu_config, model_type) is None
+def test_two_gpus_still_take_the_single_engine_path(two_gpu_config):
+    assert resolve_dp_gpus(two_gpu_config, GEMMA) is None
 
 
 def test_the_12b_still_does_take_the_data_parallel_path(two_gpu_config):

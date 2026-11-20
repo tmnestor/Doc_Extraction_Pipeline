@@ -16,8 +16,8 @@
 #   variables into the container. This script reads those env vars and
 #   translates them into stages.* command-line flags.
 #
-#   Example: if a user sets model=llama and num_gpus=4 in the KFP UI:
-#     python3 -m stages.extract --model llama --num-gpus 4 ...
+#   Example: if a user sets model=gemma4-31b-w4a16-vllm in the KFP UI:
+#     python3 -m stages.extract --model gemma4-31b-w4a16-vllm ...
 #
 # Available KFP_TASK values: the dispatcher's `case` near the bottom is the
 # source of truth, and `_print_task_help` renders the human-readable list at
@@ -83,31 +83,14 @@ CONFIG_FILE="./config/run_config.yml"
 # The conda env itself cannot be read from run_config.yml: parsing that YAML
 # needs a PyYAML-capable python, which only exists INSIDE this env (chicken-and-
 # egg). So CONDA_ENV is bootstrapped from LMM_CONDA_ENV or the default below.
-# One model per branch: InternVL3.5-8B runs from `main` (vllm_env2, vllm 0.19.0),
-# Gemma 4 from `feature/gemma4` (vllm_env3, vllm 0.25.1), and the Gemma 31B vs
-# Qwen 3.8 comparison from `feature/qwen38-vs-gemma4-31b` (vllm_env4, vllm 0.29.0).
-# Each branch defaults to the env its model needs, so none needs an
-# LMM_CONDA_ENV export.
-# vllm_env4 exists because Qwen3.8's Qwen3_5ForConditionalGeneration needs
-# vLLM >= 0.28.0, which vllm_env3 predates — and because serving BOTH models of
-# the comparison from ONE engine is what keeps an engine confound out of the
-# result. See conda_envs/vllm_env4.yaml.
-# NEVER run InternVL from this branch: it would LOAD in vllm_env4 rather than
-# fail, but transformers 5.x leaves ensure_corrected_tokenizer()'s
-# fix_mistral_regex=True path unverified — a silently degraded tokenizer on the
-# whitespace/digit-dense bank amounts the 91.8% baseline rests on.
-# DO NOT merge this vllm_env4 default to `main` or to `feature/gemma4`.
-# CONDA_ENV="${LMM_CONDA_ENV:-/efs/shared/.conda/envs/vllm_env}"
-# CONDA_ENV="${LMM_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env2}"   # InternVL3.5 (vllm 0.19.0)
-# CONDA_ENV="${LMM_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env3}"   # Gemma 4 12B (vllm 0.25.1)
-CONDA_ENV="${LMM_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"     # Gemma 31B + Qwen 3.8 (vllm 0.29.0)
+# Both models run in vllm_env4 (vLLM 0.29.0). See conda_envs/vllm_env4.yaml.
+CONDA_ENV="${LMM_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
 CONDA_PY="${CONDA_ENV}/bin/python"
 if [[ ! -x "$CONDA_PY" ]]; then
   echo "FATAL: bootstrap interpreter not found: $CONDA_PY"
   echo "  What:  the python used to parse $CONFIG_FILE (it needs PyYAML) is missing."
   echo "  Where: CONDA_ENV='$CONDA_ENV' — from LMM_CONDA_ENV env var, or the default in entrypoint.sh."
   echo "  Fix:   point LMM_CONDA_ENV at a real conda env dir so \$LMM_CONDA_ENV/bin/python exists, e.g."
-  #         export LMM_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env3   # Gemma 4 12B branch
   echo "           export LMM_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
   exit 1
 fi
@@ -223,19 +206,6 @@ log "Log dir: $LOG_DIR (source: ${LMM_LOG_DIR:+env}${LMM_LOG_DIR:-${YAML_LOG_DIR
 log "---------------------------------------"
 log ""
 
-# ---- Route the fix_mistral_regex tokenizer cache to a writable dir ---- #
-# vLLM bakes a fix_mistral_regex-corrected tokenizer copy to disk (see
-# models/model_loader.ensure_corrected_tokenizer). Its default is ~/.cache,
-# which is NOT writable in the KFP prod pod — only the run_config.yml output
-# directory (output.dir -> YAML_OUTPUT_DIR) is. Point the cache there so the
-# pre-warm below AND the vLLM workers (which inherit this exported env, incl.
-# vLLM's spawned EngineCore children) can write it. An operator-set
-# LMM_TOKENIZER_CACHE always wins.
-if [[ -z "${LMM_TOKENIZER_CACHE:-}" && -n "${YAML_OUTPUT_DIR:-}" ]]; then
-  export LMM_TOKENIZER_CACHE="${YAML_OUTPUT_DIR%/}/tokenizer_cache"
-  log "Tokenizer cache dir: ${LMM_TOKENIZER_CACHE} (under run_config.yml output.dir)"
-fi
-
 # ---- GPU Health Check ---- #
 # Verify GPUs are accessible and healthy before loading ~16GB models onto them.
 # Catches ECC errors, fallen-off-bus GPUs, and driver mismatches early —
@@ -267,26 +237,6 @@ if command -v nvidia-smi &>/dev/null; then
 else
   log "WARNING: nvidia-smi not found — cannot verify GPU health"
   log ""
-fi
-
-# ---- Pre-warm fix_mistral_regex-corrected tokenizer (once, before workers) ---- #
-# InternVL3.5's Mistral tokenizer ships a buggy whitespace/digit regex that
-# corrupts amount tokenization on dense bank statements. vLLM loads its tokenizer
-# in the front-end AND every spawned EngineCore child, so a load-time patch can't
-# reach the child; instead we bake a fix_mistral_regex-corrected copy to disk
-# (models/model_loader.ensure_corrected_tokenizer) and hand vLLM that path.
-# Doing it HERE — once, before the DP workers spawn — avoids the parallel workers
-# racing to build the shared cache. Idempotent (instant after first build) and
-# best-effort: a failure only means the engine falls back to the model's own
-# tokenizer, i.e. the prior functional behaviour.
-if [[ "${YAML_MODEL_TYPE:-}" == internvl*-vllm && -n "${YAML_MODEL_PATH:-}" ]]; then
-  log "Pre-warming fix_mistral_regex-corrected tokenizer (${YAML_MODEL_TYPE})..."
-  if _tok_path=$(python3 -c "from models.model_loader import ensure_corrected_tokenizer as e; print(e('${YAML_MODEL_PATH}'))" 2>&1); then
-    log "  corrected tokenizer: ${_tok_path}"
-  else
-    log "  WARNING: tokenizer pre-warm failed — engine load falls back to the model's own tokenizer:"
-    log "  ${_tok_path}"
-  fi
 fi
 
 # #############################################################################
@@ -436,7 +386,7 @@ esac
 
 CLI_ARGS=()
 
-# model → --model (e.g. "internvl3", "llama")
+# model → --model (a registered model name)
 if _is_set "${model:-}"; then
   CLI_ARGS+=(--model "$model")
 fi
@@ -462,7 +412,7 @@ if _is_set "${ground_truth:-}"; then
 fi
 
 # Append any direct command-line arguments passed to this script.
-# This allows local dev usage: bash entrypoint.sh --model llama --verbose
+# This allows local dev usage: bash entrypoint.sh --verbose
 # These are added AFTER KFP params, so they take precedence (last wins).
 CLI_ARGS+=("$@")
 

@@ -60,7 +60,7 @@ def get_model(model_type: str) -> ModelRegistration:
             "selects the model); a typo or a retired model name here is the usual cause.\n"
             f"  Expected: one of the registered types: {available}\n"
             "  How to fix: set bootstrap.model.type in config/run_config.yml to a registered "
-            "value (e.g. bootstrap:\\n  model:\\n    type: internvl3-vllm)."
+            "value (e.g. bootstrap:\\n  model:\\n    type: gemma4-31b-w4a16-vllm)."
         )
     return _REGISTRY[model_type]
 
@@ -101,120 +101,52 @@ def _get_requires_sharding(model_type: str) -> bool:
 
 from models.model_loader import VllmSpec, register_vllm_model  # noqa: E402
 
-# -- vLLM models -----------------------------------------------------------------
-
-register_vllm_model(
-    VllmSpec(
-        model_type="internvl3-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-8B via vLLM (PagedAttention, no flash-attn required)",
-    )
-)
-
-register_vllm_model(
-    VllmSpec(
-        model_type="internvl3-14b-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-14B via vLLM (~30 GB BF16)",
-    )
-)
-
-register_vllm_model(
-    VllmSpec(
-        model_type="internvl3-38b-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-38B via vLLM (~77 GB BF16)",
-    )
-)
-
-# -- Gemma 4 ---------------------------------------------------------------------
-# Google's own QAT W4A16 checkpoint (compressed-tensors), which vLLM loads
-# natively — 23,265,352,448 B = 21.67 GiB on disk (NOT the ~18 GB a naive 4-bit
-# estimate suggests; the vision embedder is excluded from quantisation).
+# -- Gemma 4 31B -----------------------------------------------------------------
+# Google's own QAT W4A16 checkpoint (compressed-tensors), which vLLM loads natively:
+# 23,265,352,448 B = 21.67 GiB on disk. The vision embedder is excluded from
+# quantisation, which is why it is not the 18 GB a plain 4-bit estimate gives.
 #
-# HARDWARE CORRECTED 2026-09-22: this block previously described a single L40S at
-# tp=1. The evaluation hardware is 2xL4 (24 GiB each, ~22.5 usable), and 21.67 GiB
-# does NOT fit one of them — so this runs as ONE engine sharded tp=2 across the
-# pair, over PCIe with no NVLink. Throughput measured that way is pessimistic and
-# is not what the model would do on one adequate card.
-# Activations are what OOM'd the BF16 31B at max_soft_tokens=1120, so raising the
-# visual budget still needs care — and 1120 separately REGRESSED accuracy
-# decisively on two corpora, so it is never re-tried regardless of memory.
-# Engine tuning (soft-token budget, max_model_len, gpu_memory_utilization) lives
-# in run_config.yml under inference.vllm.models — only capabilities are here.
-# Registered as an ALTERNATIVE for A/B against InternVL3.5; not the default.
+# 21.67 GiB does not fit one 24 GiB L4 (about 22.5 usable), so this runs as ONE
+# engine split across both cards (tp=2), over PCIe with no NVLink. Throughput
+# measured that way is less than the model would give on one adequate card.
+#
+# Engine tuning (soft-token budget, max_model_len, gpu_memory_utilization) lives in
+# run_config.yml under inference.vllm.models. Only capabilities are stated here.
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-31b-w4a16-vllm",
         prompt_file="internvl3_prompts.yaml",
         description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
-        # Gemma's chat template reasons by default; unlike InternVL3.5 it honours
-        # enable_thinking, so suppress it here rather than via a template file.
+        # Gemma's chat template reasons by default and honours enable_thinking,
+        # so it is suppressed here rather than through a template file.
         chat_template_kwargs={"enable_thinking": False},
-        # Sizes images via its own soft-token budget + pan-and-scan, NOT InternVL
-        # 448-px dynamic tiling.
+        # Sizes images by its own soft-token budget and pan-and-scan.
         supports_pre_tiling=False,
-        # 21.67 GiB of weights exceeds a single 24 GiB L4 outright, so one engine
-        # per GPU is impossible and the DP fast path must not fire.
+        # The weights exceed a single card, so one engine on each card is
+        # impossible and the data-parallel path must not be taken.
         supports_data_parallel=False,
-        # Model card recommends image content before the text.
+        # The model card recommends image content before the text.
         default_image_first=True,
     )
 )
 
-# Gemma 4 12B "Unified" — a DIFFERENT architecture from the 31B above, not just a
-# smaller size. model_type is `gemma4_unified` /
-# Gemma4UnifiedForConditionalGeneration: encoder-free, projecting raw image
-# patches (and audio waveforms) straight into the LLM embedding space instead of
-# running a vision tower.
+# -- Gemma 4 12B, quantised by its maker ---------------------------------------------
+# Gemma 4 12B "Unified", Google's QAT W4A16 (compressed-tensors). A different
+# architecture from the 31B, not only a smaller size: Gemma4UnifiedForConditionalGeneration
+# is encoder-free and projects raw image patches straight into the embedding space.
+# Verified 2026-08-11 against the checkpoint's own config.json. Needs vLLM >= 0.23.0.
 #
-# REQUIRES vLLM >= 0.23.0. Support (vllm-project/vllm#44429) shipped in STABLE
-# v0.23.0 on 2026-06-15 — no nightly needed; use a pinned stable release.
-# conda_envs/vllm_env2.yaml pins vllm==0.19.0, so this model CANNOT load on the
-# standard env: it needs a separate env on >= 0.23.0. Verified present at v0.25.1.
-# Anything older fails at engine load with an unknown-architecture error that is
-# unrelated to this repo. Setup runbook: docs/gemma4-12b-sandbox-setup.md.
-# NOTE: the 31B W4A16 above needs none of this — compressed-tensors is already a
-# vllm 0.19.0 dependency, so it runs on the standard env today.
+# 10,264,229,896 bytes (9.56 GiB), not the 6 GB a plain 4-bit estimate gives: the
+# quantisation ignore list excludes the vision embedder, the patch dense layers and
+# lm_head.
 #
-# ~12 B params -> ~24 GB BF16, so it fits the single L40S unquantised (a QAT
-# w4a16-ct variant also exists if the headroom is ever wanted).
+# At 9.56 GiB of about 22.5 GiB a card, one WHOLE engine fits on each GPU, so
+# supports_data_parallel is True and run_dp starts one engine on each L4 (tp=1 each).
+# That path uses no NCCL and no /dev/shm (see common/vllm_dp.py).
 #
-# Thinking works differently from the 31B: it is OPT-IN, enabled by a `<|think|>`
-# token at the start of the system prompt (or vLLM's --reasoning-parser gemma4).
-# This pipeline sends a bare user message with NO system prompt and no reasoning
-# parser, so thinking should already be off; enable_thinking=False below is
-# belt-and-braces, and the response parser still strips the empty <think> block
-# the model may emit regardless.
-register_vllm_model(
-    VllmSpec(
-        model_type="gemma4-12b-unified-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="Gemma 4 12B-it Unified (encoder-free) via vLLM — needs vLLM >= 0.23.0",
-        chat_template_kwargs={"enable_thinking": False},
-        supports_pre_tiling=False,
-        supports_data_parallel=False,
-        default_image_first=True,
-    )
-)
-
-# Gemma 4 12B Unified, Google's QAT W4A16 (compressed-tensors) — the SAME
-# architecture as the BF16 12B above (Gemma4UnifiedForConditionalGeneration /
-# gemma4_unified), verified 2026-08-11 against this checkpoint's own config.json,
-# so the spec and the hf_overrides field name are identical. Only weights differ.
-#
-# 10,264,229,896 bytes (9.56 GiB) — NOT the ~6 GB a naive 4-bit estimate gives:
-# the quantisation ignore list excludes the vision embedder, the patch dense
-# layers and lm_head, the same effect that made the 31B 23.3 GB, not ~18 GB.
-#
-# THIS is the registration that unlocks 2xL4. At 9.56 GiB of ~22.5 GiB per card
-# one WHOLE engine fits per GPU, so supports_data_parallel is True and run_dp
-# spawns one engine per L4 (tp=1 each) rather than sharding a single engine tp=2
-# across PCIe (L4 has no NVLink). The DP path also uses no NCCL and no /dev/shm
-# (see common/vllm_dp.py), so it sidesteps the tensor-parallel SHM deadlock
-# recorded at the top of entrypoint.sh entirely.
-#
-# Same vLLM >= 0.23.0 floor as the BF16 12B — run it in vllm_env3.
+# Thinking is opt-in on this model, enabled by a `<|think|>` token at the start of a
+# system prompt. This pipeline sends a bare user message with no system prompt, so
+# thinking is already off; enable_thinking=False is belt and braces.
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-12b-unified-w4a16-vllm",
@@ -222,52 +154,7 @@ register_vllm_model(
         description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
         chat_template_kwargs={"enable_thinking": False},
         supports_pre_tiling=False,
-        # The one capability that differs from the BF16 12B above.
         supports_data_parallel=True,
-        default_image_first=True,
-    )
-)
-
-# -- Qwen 3.8 ---------------------------------------------------------------------
-# Qwen/Qwen3.8-27B-FP8. NOT Qwen3-VL: the architecture is
-# Qwen3_5ForConditionalGeneration / model_type qwen3_5 — a hybrid stack of 64
-# layers running three Gated DeltaNet linear-attention layers to one full-attention
-# layer, so only 16 layers carry a KV cache and the other 48 carry fp32 recurrent
-# state that is constant per sequence rather than growing per token.
-#
-# Needs vLLM >= 0.28.0 (Qwen3.5-family support landed in 0.27.0; 0.28.0 is the
-# first stable release postdating the Qwen3.8 checkpoints). vllm_env3's 0.25.1
-# CANNOT load it — see conda_envs/vllm_env4.yaml, which serves this model and the
-# Gemma 31B from one engine so the comparison carries no engine confound.
-#
-# Thinking is ON by default in this checkpoint and it fails QUIETLY: the chat
-# template treats an undefined enable_thinking as true, defaults reasoning_effort
-# to 'xhigh', and injects a system message telling the model to reason at length
-# before opening a <think> block. This pipeline sends a bare user message
-# precisely to avoid that. Unsuppressed, extraction spends its completion budget
-# reasoning and still returns a parseable-looking response.
-#
-# The checkpoint's generation_config.json also asks for sampling (do_sample true,
-# temperature 1.0), but that never reaches the sampler: VllmBackend builds
-# SamplingParams(temperature=0) at the call site and vLLM honours per-request
-# params over the checkpoint file. No override is needed and none should be added.
-#
-# Sizes images by PIXEL AREA, not tiles: visual tokens = pixels / 1024. A
-# 1800x3508 bank statement is ~6,166 visual tokens and is NOT downscaled at the
-# default cap. The knob is mm_processor_kwargs {min_pixels, max_pixels} in
-# run_config.yml — no hf_overrides, unlike Gemma's soft-token budget.
-register_vllm_model(
-    VllmSpec(
-        model_type="qwen38-27b-fp8-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="Qwen 3.8 27B block-scaled FP8 via vLLM (25.87 GiB, 2xL4 tp=2)",
-        chat_template_kwargs={"enable_thinking": False},
-        # Pixel-area sizing, not InternVL 448-px dynamic tiling.
-        supports_pre_tiling=False,
-        # 25.87 GiB of weights exceeds a single 24 GiB L4, so one engine per card
-        # is impossible and the DP fast path must not fire.
-        supports_data_parallel=False,
-        # Qwen's chat template places image content before text.
         default_image_first=True,
     )
 )

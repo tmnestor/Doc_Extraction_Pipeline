@@ -8,54 +8,14 @@
 # be a real key here (chicken-and-egg: this YAML is read by the conda python, so
 # the env must already be chosen before this file is parsed).
 bootstrap:
-  # Model — InternVL3.5 via vLLM (we run the 8B). Registered types:
-  # internvl3-vllm (8B, default), internvl3-14b-vllm, internvl3-38b-vllm,
-  # gemma4-31b-w4a16-vllm and gemma4-12b-unified-vllm (A/B alternatives, 1xL40S).
-  # Switch type + path together.
-  #
-  # ENV MATTERS: both gemma4-* types need vLLM >= 0.23.0, so they run in
-  # `vllm_env3` (conda_envs/vllm_env3.yaml, vllm==0.25.1) — NOT `vllm_env2`,
-  # which pins vllm==0.19.0 and lacks Gemma4UnifiedForConditionalGeneration.
-  # Keep InternVL in vllm_env2: vllm_env3 pulls transformers 5.x, and
-  # ensure_corrected_tokenizer()'s fix_mistral_regex path is unverified there.
-  # Setup runbook: docs/gemma4-12b-sandbox-setup.md.
-  #
-  # Switching to EITHER gemma4-* type ALSO requires setting
-  # inference.tiling.pre_tiling.enabled: false — Gemma sizes images via its own
-  # soft-token budget, not InternVL 448-px tiling, and the load fails fast with
-  # that explained if you forget.
   model:
-    # type: internvl3-vllm
-    # type: gemma4-12b-unified-vllm
-    # type: gemma4-12b-unified-w4a16-vllm
-    # The two models of the Gemma 31B vs Qwen 3.8 comparison. Switch between
-    # these two lines and nothing else — same prompts, same ground truth, same
-    # scorer, same engine (vllm_env4), same 2xL4 at tp=2. Swap the output dir to
-    # match, or the second model resumes from the first model's completed images.
-    # RUN ORDER, corrected 2026-09-22. The first "Qwen" run was VOID: a stale
-    # `path:` below outranked this key and loaded the 12B checkpoint under the
-    # Qwen name (see the path: comment). Gemma 31B ran second, correctly, with
-    # path: null. Qwen 3.8 is therefore the run still outstanding — this is the
-    # first time it will actually be measured.
-    # type: gemma4-31b-w4a16-vllm   # DONE 2026-09-22 -> output_gemma31b_20260921
-    type: qwen38-27b-fp8-vllm
-    # null = resolve from default_paths below, keyed by `type` above.
-    #
-    # SET TO NULL 2026-09-22 after this line silently outranked `type`. An
-    # explicit path WINS over default_paths (common/pipeline_config.py:518 only
-    # consults default_paths when model_path is empty), and the entrypoint never
-    # passes --model, so the CLI-override escape at line 512 never fires either.
-    # It was left pointing at the 12B checkpoint while `type` said 31B — which
-    # would have loaded 12B weights and reported them as the 31B. A wrong-model
-    # run that completes and scores is the worst failure this pipeline can have,
-    # because nothing in the output contradicts it.
-    # Leaving this null makes default_paths the single source, keyed by type, so
-    # the two cannot diverge again.
-    # path: /home/jovyan/nfs_share/models/InternVL3_5-8B
-    # path: /home/jovyan/nfs_share/models/gemma-4-12B-it
-    # path: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
+    # The model a stage loads when none is named to it. One of the names registered in
+    # models/registry.py: gemma4-31b-w4a16-vllm or gemma4-12b-unified-w4a16-vllm.
+    type: gemma4-31b-w4a16-vllm
+    # null = the folder under default_paths below for the model in use. An explicit path here
+    # outranks default_paths whatever `type` says, which once loaded one model's weights under
+    # another's name, so it is left null.
     path: null
-    # path: /efs/shared/PTM/InternVL3_5-8B   # alternate (EFS) deployment path
     max_tiles: 18          # Image tiles (L4 / A10G: 18)
     min_tiles: null        # null = disabled; set (e.g. 6) for adaptive quality-based tiling (min_tiles..max_tiles)
     flash_attn: true       # Use Flash Attention 2 (L4 / A10G are Ampere+ — always on)
@@ -80,12 +40,8 @@ bootstrap:
     # Model loading options (merged from the old top-level model_loading:).
     device_map: auto
     default_paths:
-      internvl3: /home/jovyan/nfs_share/models/InternVL3_5-8B
-      internvl3-vllm: /home/jovyan/nfs_share/models/InternVL3_5-8B
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
-      gemma4-12b-unified-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it
       gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
-      qwen38-27b-fp8-vllm: /home/jovyan/nfs_share/models/Qwen3.8-27B-FP8
       # internvl3: /efs/shared/PTM/InternVL3_5-8B
       # internvl3-vllm: /efs/shared/PTM/InternVL3_5-8B
   # GPU count (moved from the old top-level processing: section).
@@ -186,9 +142,6 @@ inference:
       top_p: 0.95
       use_cache: true
     models:
-      internvl3:
-        max_new_tokens_base: 2000
-        max_new_tokens_per_field: 50
       # Keys are NORMALISED model types (app_config._normalize_model_type), NOT
       # the full registered names. The normalisation is not uniform, so these are
       # spelled out per model and locked by a test:
@@ -207,21 +160,6 @@ inference:
       gemma4-12b-unified:
         max_new_tokens_base: 512
         max_new_tokens_per_field: 64
-      #   qwen38-27b-fp8-vllm           -> qwen38-27b-fp8  (NOT `qwen38-27b`:
-      #     `-vllm` strips, then `-fp8` fails the size-suffix test AND is not a
-      #     recognised quantisation suffix the way `-w4a16` is, so BOTH the size
-      #     and the quantisation survive. Traced empirically, not inferred from
-      #     the Gemma case, which normalises differently.)
-      # Same budget as gemma4-31b above, deliberately: an asymmetric completion
-      # budget would confound the comparison, since a model cut off mid-answer
-      # on a dense table loses rows the other model keeps.
-      # Sampling is NOT set here. This checkpoint's own generation_config.json
-      # asks for do_sample true / temperature 1.0, but the vLLM extraction path
-      # builds SamplingParams(temperature=0) at the call site, and `defaults`
-      # above is already greedy — so an override here would be decoration.
-      qwen38-27b-fp8:
-        max_new_tokens_base: 512
-        max_new_tokens_per_field: 64
     token_limits:
       2b: null                    # use calculation
       8b: 800
@@ -235,15 +173,6 @@ inference:
       limit_mm_per_prompt: 1
       enable_prefix_caching: true
     models:
-      # pre_tiling (app-side, above) is used because vLLM's native
-      # mm_processor_kwargs / hf_overrides can't tile above the checkpoint
-      # default of 12 on this build — so we crop tiles ourselves.
-      # pre_tiling.enabled is ON (above), so the internvl3-vllm
-      # limit_mm_per_prompt below MUST stay >= max image_budget + 1 (= 19); at the
-      # defaults value of 1, vLLM silently drops the extra crops -> under-tiling.
-      internvl3-vllm:
-        max_model_len: 16384         # 18 tiles + thumbnail ~= 4.9k vision + prompt + 4096 output
-        limit_mm_per_prompt: 19      # 18 detail tiles + 1 thumbnail (required when pre_tiling on)
       # Gemma 4 31B-it QAT W4A16 (compressed-tensors) on 2xL4, tp=2.
       # CORRECTED 2026-09-22 — this block previously read "1xL40S, tp=1" with
       # "weights ~18 GB of ~44-48 GiB". All three were wrong. The checkpoint is
@@ -317,30 +246,6 @@ inference:
               vision_soft_tokens_per_image: 560
               vision_config:
                 default_output_length: 560
-      # Gemma 4 12B-it "Unified" (encoder-free, model_type gemma4_unified) on
-      # 1xL40S, tp=1. ~24 GB BF16 — fits unquantised on a 40 GB+ card.
-      # Needs vLLM >= 0.23.0 (support landed in vllm-project/vllm#44429, released
-      # in STABLE v0.23.0 on 2026-06-15) — run it in vllm_env3 (vllm==0.25.1).
-      # Budget note: this variant's own default is 280 soft tokens; 560 is set
-      # here to match the 31B block so the A/B compares like with like.
-      gemma4-12b-unified-vllm:
-        max_model_len: 16384         # vLLM recipe recommends 16384-32768 for this model
-        gpu_memory_utilization: 0.90 # recipe value; the 31B's 0.85 was a BF16 OOM workaround
-        limit_mm_per_prompt: 1       # one whole image; Gemma pan-and-scans internally
-        max_num_seqs: 1
-        enable_prefix_caching: true
-        mm_processor_kwargs:
-          max_soft_tokens: 560       # legal: 70 | 140 | 280 (model default) | 560 | 1120
-        # The override field names DIFFER from the 31B block above — verified
-        # 2026-07-27 against this checkpoint's own config.json. The unified model
-        # has NO top-level `vision_soft_tokens_per_image` and NO
-        # `vision_config.default_output_length`; its budget knob is
-        # `vision_config.num_soft_tokens` (ships as 280). Using the 31B's names
-        # here sets attributes nothing reads — a silent no-op that leaves the
-        # engine at 280 while the YAML claims 560.
-        hf_overrides:
-          vision_config:
-            num_soft_tokens: 560
       # Gemma 4 12B-it Unified, QAT W4A16 (compressed-tensors) — the 2xL4 target.
       # SAME architecture as the BF16 12B above, so the hf_overrides field name is
       # identical (vision_config.num_soft_tokens); only the weights differ.
@@ -441,65 +346,6 @@ inference:
             # num_soft_tokens: 1120
             # num_soft_tokens: 280
             num_soft_tokens: 560
-      # Qwen 3.8 27B, block-scaled FP8 (block 128), on 2xL4 at tp=2.
-      # 25.87 GiB of weights EXCEEDS one 24 GiB L4, so this is a single engine
-      # sharded across both cards over PCIe (no NVLink) — NOT one engine per
-      # card. models/registry.py sets supports_data_parallel=False; without that
-      # the DP fast path starts two whole engines and OOMs at load.
-      # Needs vLLM >= 0.28.0 (arch Qwen3_5ForConditionalGeneration) — see
-      # conda_envs/vllm_env4.yaml, which serves this and the Gemma 31B from one
-      # engine so the comparison carries no engine confound.
-      # QUANTISATION REALITY, verified at load 2026-09-21: these cards are Ada
-      # sm_89 with NO native FP8 compute, so vLLM selects
-      # MarlinFP8ScaledMMLinearKernel and runs WEIGHT-ONLY FP8 (W8A16), warning
-      # that it "may degrade performance for compute-heavy workloads".
-      # This is NOT the lopsided comparison it first looks like: the Gemma 31B
-      # goes through MarlinLinearKernel (CompressedTensorsWNA16) as well. Both
-      # models run weight-only Marlin kernels and differ in bit-width, W8A16 vs
-      # W4A16 — a like-for-like kernel family, which is worth stating explicitly
-      # because "FP8 fell back to Marlin" reads like a handicap and is not one.
-      qwen38-27b-fp8-vllm:
-        # 16384 holds a ~6,166-visual-token bank statement at native resolution
-        # plus prompt and output. Only 16 of the 64 layers carry KV (~32 KiB per
-        # token per card at tp=2); the other 48 carry fp32 recurrent state that
-        # is constant PER SEQUENCE rather than growing per token, and that is
-        # the term which actually bounds max_num_seqs on this architecture.
-        max_model_len: 16384
-        # MEASURED on 2xL4 at tp=2, 2026-09-21 (not estimated):
-        #   consumed (weights + non-torch)  14.86 GiB/card
-        #   peak activation                  1.56 GiB
-        #   CUDA graph pool                  0.03 GiB
-        #   KV cache left                    3.41 GiB
-        # The 14.86 GiB is well above the 12.94 GiB the 25.87 GiB checkpoint
-        # halves to — Marlin repacks the FP8 weights at load (see below), and the
-        # difference is why KV ended up at 3.41 GiB rather than the ~7 GiB a
-        # file-size estimate predicted. vLLM offers --kv-cache-memory=5.12 GiB to
-        # use the slack; left alone so both models keep the same utilisation.
-        gpu_memory_utilization: 0.90
-        limit_mm_per_prompt: 1       # one whole image; Qwen sizes it by pixel area
-        # vLLM reported "GPU KV cache size: 86,167 tokens, Maximum concurrency for
-        # 16,384 tokens per request: 5.26x" at load. That figure is a WORST-CASE
-        # RESERVATION (KV tokens / max_model_len), not a hard cap — real requests
-        # are far shorter than the maximum, so actual concurrency runs higher.
-        # 8 matches the Gemma 31B below so neither model gets a scheduling
-        # advantage. Note pipeline.batch pins both to batch size 1 anyway, so this
-        # bounds in-flight requests rather than driving them.
-        # max_num_seqs: 5            # briefly set to the reported ceiling; that
-        #                            # misread a reservation as a limit
-        max_num_seqs: 8
-        enable_prefix_caching: true
-        mm_processor_kwargs:
-          # Qwen sizes images by PIXEL AREA, not tiles and not a soft-token
-          # budget: visual tokens = pixels / 1024 (patch_size 16, merge_size 2).
-          # These are the checkpoint's own defaults, written out explicitly
-          # rather than omitted so that reading this file answers what the run
-          # is configured to do. At max_pixels 16777216 a 1800x3508 statement is
-          # NOT downscaled, so Qwen sees roughly 11x the image representation
-          # Gemma's 560 soft tokens give it — the most interesting variable in
-          # the comparison, and the sweep lever for the bank-statement tail.
-          min_pixels: 65536
-          max_pixels: 16777216
-
   # Raw VLM prompt/response trace (debug observability; default off).
   # When enabled, every extraction VLM call (detection, bank turns, graph nodes)
   # appends one JSONL line via the shared VllmBackend seam.

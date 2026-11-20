@@ -85,53 +85,6 @@ def _resolve_vllm_overrides(app_config: Any | None, model_type: str) -> dict[str
     return app_config.get_vllm_config(model_type)
 
 
-def ensure_corrected_tokenizer(model_path: str) -> str:
-    """Return a path to a ``fix_mistral_regex``-corrected copy of the tokenizer.
-
-    InternVL3.5 ships a Mistral-based tokenizer whose default pre-tokenizer regex
-    mis-splits runs of whitespace and digits (transformers warns at load and
-    advises ``fix_mistral_regex=True``). On dense bank statements — whitespace-
-    aligned, digit-heavy amount columns — that corrupts amount tokenization.
-
-    vLLM loads its tokenizer internally in BOTH the front-end and every spawned
-    EngineCore child, and exposes no kwarg to set the flag, so a load-time
-    monkeypatch cannot reach the child. Instead we bake the corrected regex into a
-    tokenizer saved to disk once and hand vLLM that directory via
-    ``LLM(tokenizer=...)``; every process then loads the already-fixed files.
-
-    Idempotent and concurrency-safe: the corrected copy is written to a private
-    temp dir and atomically renamed into place, so the parallel DP workers that
-    each call this can't corrupt a shared cache. Cached under
-    ``$LMM_TOKENIZER_CACHE`` (default ``~/.cache/lmm_poc_tokenizers/<model-name>``)
-    and reused across loads — the source model dir is typically read-only NFS, so
-    we never write next to it. ``entrypoint.sh`` pre-warms this once before the
-    workers spawn; this function is also safe to call directly.
-    """
-    import os
-    import shutil
-    from pathlib import Path
-
-    cache_root = os.environ.get("LMM_TOKENIZER_CACHE") or str(Path.home() / ".cache" / "lmm_poc_tokenizers")
-    out_dir = Path(cache_root) / Path(model_path).name
-    if (out_dir / "tokenizer_config.json").exists():
-        return str(out_dir)
-
-    from transformers import AutoTokenizer
-
-    tok = AutoTokenizer.from_pretrained(
-        model_path, use_fast=True, fix_mistral_regex=True, trust_remote_code=True
-    )
-    tmp_dir = out_dir.parent / f".{out_dir.name}.tmp.{os.getpid()}"
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tok.save_pretrained(str(tmp_dir))
-    try:
-        os.replace(tmp_dir, out_dir)  # atomic; loses harmlessly if a racer won
-    except OSError:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-    return str(out_dir)
-
-
 def build_vllm_loader(spec: VllmSpec):
     """Build a context-manager vLLM loader from a VllmSpec.
 
@@ -280,24 +233,6 @@ def build_vllm_loader(spec: VllmSpec):
                     "enforce_eager": cfg.enforce_eager,
                     "enable_prefix_caching": effective_enable_prefix_caching,
                 }
-
-                # InternVL3.5's Mistral tokenizer ships a buggy whitespace/digit
-                # regex; hand vLLM a fix_mistral_regex-corrected copy on disk so
-                # BOTH the front-end and every EngineCore child load the fixed
-                # tokenizer (a load-time patch can't reach the spawned child).
-                # entrypoint.sh pre-warms this cache before the workers spawn;
-                # the call here is the idempotent fallback for un-warmed runs.
-                # Best-effort: a degraded (buggy-regex) tokenizer still runs, so a
-                # build hiccup must not brick a prod engine load — log and proceed.
-                if "internvl" in spec.model_type:
-                    try:
-                        llm_kwargs["tokenizer"] = ensure_corrected_tokenizer(str(cfg.model_path))
-                    except Exception as exc:  # noqa: BLE001 - degraded tokenizer beats a dead engine
-                        console.print(
-                            f"[yellow]WARNING: could not build fix_mistral_regex tokenizer "
-                            f"({exc}); loading the model's own tokenizer — the whitespace/"
-                            f"digit regex bug remains.[/yellow]"
-                        )
 
                 # Given only when the layers are shared out across cards. With the tensor split the engine
                 # is built exactly as it always was, so adding this setting cannot disturb a run that

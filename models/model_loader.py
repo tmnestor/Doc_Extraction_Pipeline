@@ -134,7 +134,7 @@ def build_vllm_loader(spec: VllmSpec):
                 # gpu_memory_utilization precedence: env var > YAML.
                 gpu_mem_util = float(
                     os.environ.get(
-                        "LMM_GPU_MEMORY_UTILIZATION",
+                        "DOC_EXTRACT_GPU_MEMORY_UTILIZATION",
                         vllm_overrides["gpu_memory_utilization"],
                     )
                 )
@@ -157,10 +157,10 @@ def build_vllm_loader(spec: VllmSpec):
                     f"[dim]enforce_eager: {cfg.enforce_eager} "
                     f"({'skip CUDA graphs' if cfg.enforce_eager else 'CUDA graphs enabled'})[/dim]"
                 )
-                if os.environ.get("LMM_GPU_MEMORY_UTILIZATION"):
+                if os.environ.get("DOC_EXTRACT_GPU_MEMORY_UTILIZATION"):
                     console.print(
                         f"[dim]gpu_memory_utilization: {gpu_mem_util} "
-                        f"(from LMM_GPU_MEMORY_UTILIZATION env var)[/dim]"
+                        f"(from DOC_EXTRACT_GPU_MEMORY_UTILIZATION env var)[/dim]"
                     )
                 elif vllm_overrides.get("gpu_memory_utilization") is not None:
                     console.print(f"[dim]gpu_memory_utilization: {gpu_mem_util} (from app_config)[/dim]")

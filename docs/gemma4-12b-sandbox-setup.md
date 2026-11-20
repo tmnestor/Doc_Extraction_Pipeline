@@ -592,7 +592,7 @@ Confirm from the logs:
 **Switch branch.** InternVL3.5-8B is run from `main`, Gemma 4 from `feature/gemma4` — one model per
 branch. Returning to the InternVL baseline means `git checkout main`, not editing config here. Each
 branch's `entrypoint.sh` already defaults `CONDA_ENV` to the env its model needs (`vllm_env2` on
-`main`, `vllm_env3` here), so no `LMM_CONDA_ENV` export is needed on either.
+`main`, `vllm_env3` here), so no `DOC_EXTRACT_CONDA_ENV` export is needed on either.
 
 **Never run InternVL from the Gemma branch.** It would not crash — that is precisely the problem.
 vLLM 0.25.1 pulls transformers 5.x, where `ensure_corrected_tokenizer()`'s `fix_mistral_regex=True`

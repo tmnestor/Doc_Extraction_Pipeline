@@ -40,6 +40,20 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# ---- Variables under their old names are refused, not ignored ---- #
+# Until 21 November 2026 this script's own variables began with another prefix. A job that still sets one
+# would otherwise run with the setting silently dropped: its log, for one, written where nobody asked.
+OLD_PREFIX="L""MM_"
+OLD_NAMES="$(env | grep -oE "^${OLD_PREFIX}[A-Z_]+" | tr '\n' ' ' || true)"
+if [[ -n "$OLD_NAMES" ]]; then
+  echo "FATAL: variable(s) set under a prefix this pipeline no longer reads: $OLD_NAMES"
+  echo "  What:     the prefix ${OLD_PREFIX} was replaced by DOC_EXTRACT_; the old names are not read."
+  echo "  Where:    the environment of this job (the pipeline manifest, or the command that started it)."
+  echo "  Expected: DOC_EXTRACT_LOG_DIR, DOC_EXTRACT_CONDA_ENV, DOC_EXTRACT_GPU_MEMORY_UTILIZATION."
+  echo "  Fix:      rename each variable listed above, keeping its value, and start the job again."
+  exit 1
+fi
+
 # ---- CUDA Environment ---- #
 # Deterministic GPU indexing: ensures cuda:0 always maps to the same physical
 # GPU regardless of driver enumeration order. Critical for multi-GPU so that
@@ -67,7 +81,7 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # while still being printed to the console (so KFP UI shows it too).
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
 #
-# Priority: LMM_LOG_DIR env var > run_config.yml bootstrap.logging.log_dir > fail
+# Priority: DOC_EXTRACT_LOG_DIR env var > run_config.yml bootstrap.logging.log_dir > fail
 # No silent fallback — in KFP, pod-local writes are ephemeral/forbidden.
 CONFIG_FILE="./config/run_config.yml"
 
@@ -82,16 +96,16 @@ CONFIG_FILE="./config/run_config.yml"
 #
 # The conda env itself cannot be read from run_config.yml: parsing that YAML
 # needs a PyYAML-capable python, which only exists INSIDE this env (chicken-and-
-# egg). So CONDA_ENV is bootstrapped from LMM_CONDA_ENV or the default below.
+# egg). So CONDA_ENV is bootstrapped from DOC_EXTRACT_CONDA_ENV or the default below.
 # Both models run in vllm_env4 (vLLM 0.29.0). See conda_envs/vllm_env4.yaml.
-CONDA_ENV="${LMM_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
+CONDA_ENV="${DOC_EXTRACT_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
 CONDA_PY="${CONDA_ENV}/bin/python"
 if [[ ! -x "$CONDA_PY" ]]; then
   echo "FATAL: bootstrap interpreter not found: $CONDA_PY"
   echo "  What:  the python used to parse $CONFIG_FILE (it needs PyYAML) is missing."
-  echo "  Where: CONDA_ENV='$CONDA_ENV' — from LMM_CONDA_ENV env var, or the default in entrypoint.sh."
-  echo "  Fix:   point LMM_CONDA_ENV at a real conda env dir so \$LMM_CONDA_ENV/bin/python exists, e.g."
-  echo "           export LMM_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
+  echo "  Where: CONDA_ENV='$CONDA_ENV' — from DOC_EXTRACT_CONDA_ENV env var, or the default in entrypoint.sh."
+  echo "  Fix:   point DOC_EXTRACT_CONDA_ENV at a real conda env dir so \$DOC_EXTRACT_CONDA_ENV/bin/python exists, e.g."
+  echo "           export DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
   exit 1
 fi
 # Emits YAML_* assignments (every key, unconditionally; missing keys -> ''),
@@ -99,15 +113,13 @@ fi
 eval "$("$CONDA_PY" scripts/resolve_yaml_defaults.py "$CONFIG_FILE")"
 
 # The log dir: env var > YAML > fail.
-LOG_DIR="${LMM_LOG_DIR:-${YAML_LOG_DIR:-}}"
+LOG_DIR="${DOC_EXTRACT_LOG_DIR:-${YAML_LOG_DIR:-}}"
 if [[ -z "$LOG_DIR" ]]; then
-  echo "FATAL: No log directory configured. Set LMM_LOG_DIR env var or bootstrap.logging.log_dir in $CONFIG_FILE"
+  echo "FATAL: No log directory configured. Set DOC_EXTRACT_LOG_DIR env var or bootstrap.logging.log_dir in $CONFIG_FILE"
   exit 1
 fi
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/entrypoint_$(date +'%Y%m%d_%H%M%S').log"
-# Export so Python (cli.py) can display it in the startup Configuration panel.
-export LMM_LOG_FILE="$LOG_FILE"
 
 # `exec` redirects ALL subsequent output through `tee`, which writes to
 # both the console (for KFP) and the log file (for persistent debugging).
@@ -147,7 +159,7 @@ trap 'rc=$?; echo ""; log "Exited with code $rc after ${SECONDS}s"; log "Log fil
 
 # ---- Banner ---- #
 log "================================================================="
-log "    Running LMM for Information Extraction"
+log "    Document extraction pipeline"
 log "================================================================="
 log ""
 
@@ -202,7 +214,7 @@ log "---------------------------------------"
 log "Python:  $(which python3)"
 log "Version: $(python3 --version 2>&1)"
 log "Conda:   $(conda info --envs | grep '*' || echo 'unknown')"
-log "Log dir: $LOG_DIR (source: ${LMM_LOG_DIR:+env}${LMM_LOG_DIR:-${YAML_LOG_DIR:+yaml}})"
+log "Log dir: $LOG_DIR (source: ${DOC_EXTRACT_LOG_DIR:+env}${DOC_EXTRACT_LOG_DIR:-${YAML_LOG_DIR:+yaml}})"
 log "---------------------------------------"
 log ""
 

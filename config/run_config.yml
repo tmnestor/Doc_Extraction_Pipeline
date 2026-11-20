@@ -4,7 +4,7 @@
 
 # Bootstrap configuration — the minimal set the entrypoint and model loader need
 # before any pipeline work begins (model identity, GPU count, log dir).
-# conda_env: bootstrapped from LMM_CONDA_ENV + the entrypoint default; it CANNOT
+# conda_env: bootstrapped from DOC_EXTRACT_CONDA_ENV + the entrypoint default; it CANNOT
 # be a real key here (chicken-and-egg: this YAML is read by the conda python, so
 # the env must already be chosen before this file is parsed).
 bootstrap:
@@ -52,7 +52,7 @@ bootstrap:
     # Follows output.dir when that is re-dated — keep the two in step.
     # Keep this in step with pipeline.information_extraction.output.dir. It is a
     # SEPARATE key, not derived from it. A run normally sets both from the
-    # environment (LMM_LOG_DIR and output); these are what applies when it does not.
+    # environment (DOC_EXTRACT_LOG_DIR and output); these are what applies when it does not.
     log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921/logs
 
 

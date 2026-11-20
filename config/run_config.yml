@@ -592,14 +592,7 @@ pipeline:
   # Workflow YAML nodes reference these by name via `token_budget: <name>`.
   token_budgets:
     classify: 150
-    detection: 200
-    detect_headers: 500
-    detect_headers_short: 200
-    extract_standard: 2048
-    extract_travel: 1024
     extract_bank: 4096
-    bank_header_detection: 500
-    orchestrator_generate: 1024
     bank_statement_floor: 1500
     fallback_base: 512
     fallback_per_field: 64
@@ -922,15 +915,11 @@ pipeline:
 
   batch:
     # Keys are NORMALISED model types (see the generation.models note above).
-    # Both Gemma variants are pinned to 1: a single-card engine has no room to
-    # widen, and stating it explicitly beats falling through to batch.min_size.
-    # qwen38-27b-fp8 is pinned to 1 alongside the Gemma 31B, and matching is the
-    # point: batching headroom is per document type, and the bank statements
-    # that dominate this corpus have none. Raising either model alone would
-    # confound the throughput half of the comparison.
-    default_sizes: {internvl3: 4, gemma4-31b: 1, gemma4-12b-unified: 1, qwen38-27b-fp8: 1}
-    max_sizes: {internvl3: 8, gemma4-31b: 1, gemma4-12b-unified: 1, qwen38-27b-fp8: 1}
-    conservative_sizes: {internvl3: 1, gemma4-31b: 1, gemma4-12b-unified: 1, qwen38-27b-fp8: 1}
+    # Both models are pinned to 1. These sizes belong to an older way of batching that the
+    # stages no longer use: pages are grouped into engine calls by pipeline.batching.
+    default_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
+    max_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
+    conservative_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
     min_size: 1
     strategy: balanced            # conservative | balanced | aggressive
     auto_detect: true

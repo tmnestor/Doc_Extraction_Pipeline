@@ -82,7 +82,9 @@ def statements(tmp_path: Path) -> list[Path]:
 
 
 def extractor(many=None, one=None) -> UnifiedBankExtractor:
-    return UnifiedBankExtractor(generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False)
+    return UnifiedBankExtractor(
+        generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False, extract_tokens=4096
+    )
 
 
 def classifications(paths: list[Path]) -> list[dict]:

@@ -291,6 +291,7 @@ def classified_extract_worker(
                     processor.generate_many if getattr(processor, "supports_generate_many", False) else None
                 ),
                 verbose=effective_verbose,
+                extract_tokens=app_cfg.get_token_budget("extract_bank"),
             )
             logger.info("Bank adapter enabled (GPU %d)", gpu_id)
 

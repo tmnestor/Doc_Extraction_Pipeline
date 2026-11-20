@@ -6,7 +6,7 @@ wrote it. Several statements can share one engine call, so the engine runs them 
 Usage:
     from common.unified_bank_extractor import UnifiedBankExtractor
 
-    extractor = UnifiedBankExtractor(generate_fn=processor.generate)
+    extractor = UnifiedBankExtractor(generate_fn=processor.generate, extract_tokens=4096)
     schema, metadata = extractor.extract_bank_statement(image_path)
 """
 
@@ -86,12 +86,13 @@ class UnifiedBankExtractor:
         generate_fn: Callable(image, prompt, max_tokens, extra) -> str.
             Typically ``processor.generate`` from a DocumentProcessor.
         verbose: Enable verbose output.
-        token_budgets: Completion-token budgets by name; ``extract_bank`` is the one used.
+        extract_tokens: Completion-token budget of one statement, from
+            ``pipeline.token_budgets.extract_bank``.
         generate_many_fn: Optional Callable(images, prompts, max_tokens, extra) -> list[str]:
             several independent calls submitted to the engine together.
 
     Example:
-        extractor = UnifiedBankExtractor(generate_fn=processor.generate)
+        extractor = UnifiedBankExtractor(generate_fn=processor.generate, extract_tokens=4096)
         schema, metadata = extractor.extract_bank_statement(image_path)
     """
 
@@ -99,14 +100,14 @@ class UnifiedBankExtractor:
         self,
         generate_fn: Any,
         verbose: bool = True,
-        token_budgets: dict[str, int] | None = None,
         *,
+        extract_tokens: int,
         generate_many_fn: Any = None,
     ):
         self.generate_fn = generate_fn
         self.generate_many_fn = generate_many_fn
         self.verbose = verbose
-        self._extract_tokens = (token_budgets or {}).get("extract_bank", 4096)
+        self._extract_tokens = extract_tokens
         self._prompts = {
             "schema_fallback": _default_catalog().get_prompt("bank", "schema_fallback_extraction"),
         }

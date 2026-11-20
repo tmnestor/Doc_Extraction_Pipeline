@@ -48,15 +48,9 @@ class BatchSettings:
     )
 
     # Schema documentation only. Runtime values come from run_config.yml.
-    _DEFAULT_SIZES: ClassVar[dict[str, int]] = {
-        "internvl3": 4,
-    }
-    _MAX_SIZES: ClassVar[dict[str, int]] = {
-        "internvl3": 8,
-    }
-    _CONSERVATIVE_SIZES: ClassVar[dict[str, int]] = {
-        "internvl3": 1,
-    }
+    _DEFAULT_SIZES: ClassVar[dict[str, int]] = {}
+    _MAX_SIZES: ClassVar[dict[str, int]] = {}
+    _CONSERVATIVE_SIZES: ClassVar[dict[str, int]] = {}
 
     @classmethod
     def from_raw(cls, raw_config: dict) -> BatchSettings:

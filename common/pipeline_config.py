@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from common.config_schema import check_known_keys
+
 
 # ============================================================================
 # Constants
@@ -294,6 +296,8 @@ def load_yaml_config(
 
     with config_path.open() as f:
         raw_config = yaml.safe_load(f)
+
+    check_known_keys(raw_config, config_path=config_path.resolve())
 
     # Fail fast on a retired top-level `io:` block. The classic information-
     # extraction pipeline's paths moved under `pipeline.information_extraction:`

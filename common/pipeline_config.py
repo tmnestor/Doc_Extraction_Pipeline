@@ -121,7 +121,6 @@ class PipelineConfig:
     max_images: int | None = None
     document_types: list[str] | None = None
     batch_size: int | None = None  # None = auto-detect from VRAM
-    bank_v2: bool = True
 
     # Model options
     model_type: str = "internvl3-vllm"
@@ -374,12 +373,11 @@ def load_yaml_config(
     if processing_cfg:
         _require_section_keys(
             processing_cfg,
-            ["batch_size", "bank_v2", "verbose", "debug"],
+            ["batch_size", "verbose", "debug"],
             "pipeline.processing",
             config_path,
         )
         flat_config["batch_size"] = processing_cfg.get("batch_size")
-        flat_config["bank_v2"] = processing_cfg.get("bank_v2")
         flat_config["verbose"] = processing_cfg.get("verbose")
         flat_config["debug"] = processing_cfg.get("debug")
 

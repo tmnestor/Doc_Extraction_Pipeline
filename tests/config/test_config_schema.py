@@ -79,6 +79,7 @@ def test_an_unknown_key_stops_the_run_with_a_full_diagnostic(tmp_path: Path) -> 
         ("bootstrap", "gpus", "engine_split", "tensor"),
         ("pipeline", "processing", "bank_strategy", "two_turn"),
         ("bootstrap", "model", "max_tiles", 18),
+        ("pipeline", "processing", "bank_v2", True),
     ],
 )
 def test_a_setting_from_before_the_refactor_is_refused(tmp_path: Path, removed: tuple) -> None:

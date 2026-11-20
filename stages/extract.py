@@ -77,7 +77,6 @@ def _build_cli_args(
     *,
     model_type: str | None = None,
     batch_size: int | None = None,
-    bank_v2: bool | None = None,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -95,8 +94,6 @@ def _build_cli_args(
         cli_args["model_type"] = model_type
     if batch_size is not None:
         cli_args["batch_size"] = batch_size
-    if bank_v2 is not None:
-        cli_args["bank_v2"] = bank_v2
     if max_num_seqs is not None:
         cli_args["max_num_seqs"] = max_num_seqs
     if verbose is not None:
@@ -113,7 +110,6 @@ def run(
     *,
     model_type: str | None = None,
     batch_size: int | None = None,
-    bank_v2: bool | None = None,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -133,8 +129,6 @@ def run(
         output_path: Path to write raw_extractions.jsonl.
         model_type: Model type (e.g. "internvl3-vllm").
         batch_size: Images per batch (None = auto-detect, 1 = sequential).
-        bank_v2: Use UnifiedBankExtractor for bank statements. None = YAML
-            processing.bank_v2.
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
         config_path: Optional path to run_config.yml.
@@ -183,7 +177,6 @@ def run(
         output_path,
         model_type=model_type,
         batch_size=batch_size,
-        bank_v2=bank_v2,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,
@@ -298,7 +291,7 @@ def run(
         bank_adapter = None
         has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in classifications)
 
-        if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
+        if has_bank:
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
                 generate_many_fn=(
@@ -653,11 +646,6 @@ def main(
     output: Path = typer.Option(..., "--output-dir", "-o", help="Path to write raw_extractions.jsonl"),
     model: str | None = typer.Option(None, "--model", help="Model type"),
     batch_size: int | None = typer.Option(None, "--batch-size", help="Images per extraction batch"),
-    bank_v2: bool | None = typer.Option(
-        None,
-        "--bank-v2/--no-bank-v2",
-        help="Use UnifiedBankExtractor for bank statements. Default: YAML processing.bank_v2.",
-    ),
     max_num_seqs: int | None = typer.Option(
         None,
         "--max-num-seqs",
@@ -689,7 +677,6 @@ def main(
         output,
         model_type=model,
         batch_size=batch_size,
-        bank_v2=bank_v2,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,

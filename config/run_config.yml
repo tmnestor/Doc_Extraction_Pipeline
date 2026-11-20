@@ -539,7 +539,6 @@ pipeline:
 
   processing:
     batch_size: null             # Images per batch (null = auto-detect from VRAM, 1 = sequential)
-    bank_v2: true              # Read bank statements with the bank extractor, one call each
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)
 

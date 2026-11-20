@@ -142,7 +142,6 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "pipeline.photo_split.straighten_max_deg",
         "pipeline.photo_split.straighten_min_deg",
         "pipeline.photo_split.straighten_min_drift_heights",
-        "pipeline.processing.bank_v2",
         "pipeline.processing.batch_size",
         "pipeline.processing.debug",
         "pipeline.processing.verbose",

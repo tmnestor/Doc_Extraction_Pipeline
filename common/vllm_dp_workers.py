@@ -284,7 +284,7 @@ def classified_extract_worker(
         # Set up bank adapter if needed
         bank_adapter = None
         has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in my_classifications)
-        if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
+        if has_bank:
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
                 generate_many_fn=(

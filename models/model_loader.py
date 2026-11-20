@@ -7,7 +7,7 @@ into a ``DocumentOrchestrator``.
 Usage:
     register_vllm_model(VllmSpec(
         model_type="internvl3-vllm",
-        prompt_file="internvl3_prompts.yaml",
+        prompt_file="extraction_prompts.yaml",
     ))
 """
 
@@ -34,7 +34,7 @@ class VllmSpec:
     """
 
     model_type: str
-    prompt_file: str = "internvl3_prompts.yaml"
+    prompt_file: str = "extraction_prompts.yaml"
     description: str = ""
     attention_backend: str | None = None  # None = vLLM auto-selects
     mm_processor_kwargs: dict[str, Any] = field(default_factory=dict)

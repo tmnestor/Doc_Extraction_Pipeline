@@ -22,7 +22,7 @@ class ModelRegistration:
         loader: Callable(PipelineConfig) -> ContextManager[(model, tokenizer)].
         processor_creator: Callable(model, tokenizer, config, prompt_config,
                            universal_fields, field_definitions) -> DocumentProcessor.
-        prompt_file: Extraction prompt YAML filename, e.g. "internvl3_prompts.yaml".
+        prompt_file: Extraction prompt YAML filename, e.g. "extraction_prompts.yaml".
         description: Human-readable description for help text.
     """
 
@@ -115,7 +115,7 @@ from models.model_loader import VllmSpec, register_vllm_model  # noqa: E402
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-31b-w4a16-vllm",
-        prompt_file="internvl3_prompts.yaml",
+        prompt_file="extraction_prompts.yaml",
         description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
         # Gemma's chat template reasons by default and honours enable_thinking,
         # so it is suppressed here rather than through a template file.
@@ -148,7 +148,7 @@ register_vllm_model(
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-12b-unified-w4a16-vllm",
-        prompt_file="internvl3_prompts.yaml",
+        prompt_file="extraction_prompts.yaml",
         description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
         chat_template_kwargs={"enable_thinking": False},
         supports_data_parallel=True,

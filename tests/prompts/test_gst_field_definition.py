@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-PROMPTS = Path(__file__).resolve().parents[2] / "prompts" / "internvl3_prompts.yaml"
+PROMPTS = Path(__file__).resolve().parents[2] / "prompts" / "extraction_prompts.yaml"
 
 
 def prompt(key: str) -> str:

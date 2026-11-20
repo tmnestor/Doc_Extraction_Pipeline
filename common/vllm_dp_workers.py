@@ -558,3 +558,149 @@ def classified_extract_worker(
         return records
     finally:
         model_cm.__exit__(None, None, None)
+
+
+def sroie_worker(
+    gpu_id: int,
+    image_paths: list[str],
+    *,
+    config_path: str | None,
+    cli_overrides: dict[str, Any],
+    max_new_tokens: int,
+    tile_budget: dict[str, int],
+    batch_size: int,
+) -> list[dict[str, Any]]:
+    """Worker: build vLLM engine, ask each receipt for its four fields.
+
+    Returns RAW responses only. Parsing and scoring stay in the parent, so
+    the serial and data-parallel paths share one parser and cannot drift.
+
+    A failure on one image is recorded and the worker continues — losing a
+    whole partition to one bad receipt would waste the run.
+
+    Args:
+        gpu_id: GPU rank (for logging).
+        image_paths: Absolute paths to receipt images (strings).
+        config_path: Path to run_config.yml (or None).
+        cli_overrides: CLI args dict for AppConfig.load().
+        max_new_tokens: Generation budget per receipt.
+        tile_budget: GenerationParams.extra carrying BOTH min_tiles and
+            max_tiles, from common.sroie.tiling.tile_extra. Inert unless
+            pre-tiling is on. min_tiles is the lever — sending only the
+            ceiling leaves the backend on its min_tiles=1 default.
+        batch_size: Receipts submitted to the engine per chat() call.
+
+    Returns:
+        One dict per image: image_id, image_path, raw_response, error.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
+    )
+
+    from PIL import Image
+
+    from cli import load_pipeline_configs
+    from common.app_config import AppConfig
+    from common.pipeline_ops import create_processor, load_model
+    from common.sroie.prompt import SROIE_PROMPT
+
+    # Force single-GPU in this worker
+    overrides = dict(cli_overrides)
+    overrides["num_gpus"] = 1
+
+    cfg_path = Path(config_path) if config_path else None
+    app_cfg = AppConfig.load(overrides, config_path=cfg_path)
+    config = app_cfg.pipeline
+
+    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
+
+    logger.info("Loading model: %s (GPU %d)", config.model_type, gpu_id)
+    model_cm = load_model(config, app_config=app_cfg)
+    model, tokenizer = model_cm.__enter__()
+
+    try:
+        processor = create_processor(
+            model,
+            tokenizer,
+            config,
+            prompt_config,
+            universal_fields,
+            field_definitions,
+            app_config=app_cfg,
+        )
+
+        records: list[dict[str, Any]] = []
+        total = len(image_paths)
+
+        for start in range(0, total, batch_size):
+            chunk = image_paths[start : start + batch_size]
+            batch_start = time.time()
+
+            try:
+                images = [Image.open(p).convert("RGB") for p in chunk]
+                try:
+                    responses = processor.generate_batch(
+                        images,
+                        [SROIE_PROMPT] * len(images),
+                        max_tokens=max_new_tokens,
+                        extra=dict(tile_budget),
+                    )
+                finally:
+                    for image in images:
+                        image.close()
+                if len(responses) != len(chunk):
+                    raise ValueError(f"backend returned {len(responses)} responses for {len(chunk)} images")
+                errors: list[str | None] = [None] * len(chunk)
+            except Exception as err:  # noqa: BLE001 - a batch must not end the run
+                # Retry singly so an out-of-memory on a large batch costs
+                # only the image that genuinely fails.
+                logger.warning("Batch of %d failed (%s) — retrying one at a time", len(chunk), err)
+                responses, errors = [], []
+                for image_path in chunk:
+                    try:
+                        with Image.open(image_path) as image:
+                            responses.append(
+                                processor.generate(
+                                    image.convert("RGB"),
+                                    SROIE_PROMPT,
+                                    max_tokens=max_new_tokens,
+                                    extra=dict(tile_budget),
+                                )
+                            )
+                        errors.append(None)
+                    except Exception as inner:  # noqa: BLE001
+                        logger.error("%s FAILED: %s", Path(image_path).stem, inner)
+                        responses.append("")
+                        errors.append(str(inner))
+
+            # Charge each image an equal share of the batch's wall clock:
+            # inside a batch the requests overlap, so per-image timing is
+            # not separable, and the parent only needs the per-GPU total.
+            share = (time.time() - batch_start) / len(chunk)
+            for image_path, response, error in zip(chunk, responses, errors, strict=True):
+                records.append(
+                    {
+                        "image_id": Path(image_path).stem,
+                        "image_path": image_path,
+                        "raw_response": response,
+                        "error": error,
+                        # Tagged with the rank so the parent can report the
+                        # SLOWEST worker's inference time rather than wall
+                        # clock that includes engine startup.
+                        "gpu_id": gpu_id,
+                        "elapsed": share,
+                    }
+                )
+
+            logger.info(
+                "[%d/%d] batch of %d in %.1fs",
+                start + len(chunk),
+                total,
+                len(chunk),
+                time.time() - batch_start,
+            )
+
+        return records
+    finally:
+        model_cm.__exit__(None, None, None)

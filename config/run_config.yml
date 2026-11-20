@@ -655,6 +655,65 @@ pipeline:
       skip_visualizations: false  # Skip visualization generation
       skip_reports: false         # Skip report generation
 
+  # SROIE benchmark (KFP_TASK=sroie) — ICDAR 2019 Task 3 receipt key
+  # information extraction, on a PUBLIC dataset. Separate from
+  # information_extraction above: its own data, its own 4-field answer key
+  # (company/date/address/total), its own prompt and scorer, and its own
+  # output dir. It does NOT run classify/extract/clean/evaluate.
+  #
+  # The stage reads ONLY this block. Every key below is required — a
+  # missing key fails at startup with a diagnostic rather than defaulting.
+  #
+  # Comparability between models rests on this block and the model type
+  # being the ONLY things that differ between two runs: same prompt, same
+  # parser, same scorer. Give each model its OWN output_dir so a second run
+  # cannot overwrite the first.
+  sroie:
+    # The split ROOT — the directory CONTAINING img/ and entities/, not
+    # either subdirectory.
+    #
+    # test/ is the 347-image ICDAR leaderboard split and is what we report.
+    # The 626-image train split also ships (as img/ + key/ at the dataset
+    # root); it is NOT interchangeable — two of its records have a blank
+    # answer-key field and the loader rejects them by design.
+    # dir: /home/jovyan/nfs_share/tod_2026/data/sroie          # 626-image train split
+    data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test  # 347-image test split
+    # Dated per MODEL, not per day. Swap when switching model type, or the
+    # second model's artefacts overwrite the first's and the comparison is
+    # lost.
+    # output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_internvl3
+    # This branch runs Gemma 4 (bootstrap.model.type =
+    # gemma4-12b-unified-w4a16-vllm), so its artefacts go to their own dir.
+    # Sharing one with the InternVL3 run would overwrite it and lose the
+    # comparison.
+    output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
+    # Four short fields. 256 is ample; a larger budget only lengthens a
+    # runaway repetition loop before it is caught.
+    max_new_tokens: 256
+    # Receipts submitted to the engine in one chat() call, so vLLM's
+    # scheduler can run them concurrently instead of one at a time.
+    #
+    # THE REAL CEILING IS inference.vllm.models.<model>.max_num_seqs. This
+    # value only decides how many requests are OFFERED at once; the
+    # scheduler still runs at most max_num_seqs of them concurrently, so
+    # raising this alone changes nothing. Raise both together.
+    #
+    # 8 is a deliberate starting point, not a tuned value: SROIE receipts
+    # aspect-match to 2-3 tiles plus a thumbnail, far lighter than the
+    # 18-tile bank statements, so 8 concurrent requests is well inside the
+    # 23 GiB L4 budget. A failed batch is retried one image at a time, so
+    # an over-large value costs throughput, never results.
+    batch_size: 8
+    #
+    # There is deliberately NO max_tiles key here. Image tiling has one
+    # home — inference.tiling.budgets.receipt — and the stage reads it from
+    # there, since SROIE is 100% receipts. A tile knob in this block would
+    # read as operator intent while changing nothing: budgets apply only
+    # when inference.tiling.pre_tiling.enabled is true, and the Gemma 4
+    # loader FAILS FAST if you enable it (supports_pre_tiling=False in
+    # models/registry.py). With pre-tiling off, vLLM tiles internally and
+    # each model is measured as it is actually served.
+
   # Classification settings
   classification:
     fallback_type: UNIVERSAL     # Default type when model response can't be parsed

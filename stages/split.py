@@ -274,7 +274,7 @@ def run(
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
         return images_dir
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_ops import create_processor, load_model
 

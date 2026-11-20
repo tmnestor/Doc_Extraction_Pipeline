@@ -182,7 +182,7 @@ def run(
         msg = "--classifications is required when --graph-unified is not set"
         raise typer.BadParameter(msg)
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
     from common.pipeline_ops import create_processor, load_model
@@ -803,7 +803,7 @@ def _run_unified(
         workflow_name: YAML file under prompts/workflows/ to load.
         label: Label for log messages and prompt_used prefix.
     """
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_config import discover_images
     from common.pipeline_ops import create_processor, load_model

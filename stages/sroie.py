@@ -76,7 +76,7 @@ def run(
     from common.vllm_dp import run_dp
     from PIL import Image
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
 
     cli_args: dict[str, object] = {}
     if model_type:

@@ -60,7 +60,7 @@ def run(
     Returns:
         Path to the written classifications.jsonl.
     """
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_config import discover_images
     from common.pipeline_ops import create_processor, load_model

@@ -27,13 +27,11 @@ from common.app_config import AppConfig, ConfigError
 from common.batch_analytics import BatchAnalytics
 from common.batch_reporting import BatchReporter
 from common.batch_visualizations import BatchVisualizer
-from common.field_schema import get_field_schema
 from common.pipeline_config import (
     PipelineConfig,
     discover_images,
 )
-from common.pipeline_ops import create_processor, load_model, run_batch
-from common.prompt_catalog import PromptCatalog
+from common.pipeline_ops import create_processor, load_model, load_pipeline_configs, run_batch
 from models.registry import get_model, list_models
 
 # ============================================================================
@@ -79,57 +77,6 @@ def setup_output_directories(config: PipelineConfig) -> dict[str, Path]:
             console.print(f"  [dim]Created: {path}[/dim]")
 
     return output_dirs
-
-
-def load_prompt_config(model_type: str = "internvl3-vllm") -> dict[str, Any]:
-    """Build prompt routing config from PromptCatalog (single source of truth).
-
-    Derives supported document types from the extraction prompt YAML keys
-    rather than maintaining a hardcoded list.
-    """
-    catalog = PromptCatalog()
-
-    try:
-        routing = catalog.build_extraction_routing(model_type)
-    except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]FATAL: {e}[/red]")
-        raise typer.Exit(EXIT_CONFIG_ERROR) from None
-
-    # Build extraction_files in the legacy shape that orchestrator expects.
-    # All extraction types map to the same YAML file.
-    registration = get_model(model_type)
-    extraction_path = str(Path(__file__).parent / "prompts" / registration.prompt_file)
-    detection_path = str(Path(__file__).parent / "prompts" / "document_type_detection.yaml")
-
-    return {
-        "detection_file": detection_path,
-        "detection_key": "detection",
-        "extraction_files": {doc_type: extraction_path for doc_type in routing},
-    }
-
-
-def load_pipeline_configs(
-    model_type: str = "internvl3-vllm",
-) -> tuple[dict[str, Any], list[str], dict[str, list[str]]]:
-    """Load prompt configuration and build universal field list.
-
-    Returns:
-        Tuple of (prompt_config, sorted universal_fields, field_definitions).
-    """
-    prompt_config = load_prompt_config(model_type)
-    field_definitions = get_field_schema().get_all_doc_type_fields()
-
-    all_fields: set[str] = set()
-    for fields in field_definitions.values():
-        all_fields.update(fields)
-    universal_fields = sorted(all_fields)
-
-    if not universal_fields:
-        console.print("[red]FATAL: No field definitions found in config/field_definitions.yaml[/red]")
-        console.print("[yellow]Expected: document_fields section with field lists[/yellow]")
-        raise typer.Exit(EXIT_CONFIG_ERROR) from None
-
-    return prompt_config, universal_fields, field_definitions
 
 
 def generate_analytics(

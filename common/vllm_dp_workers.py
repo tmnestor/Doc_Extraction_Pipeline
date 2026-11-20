@@ -41,7 +41,7 @@ def classify_worker(
         format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
     )
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_ops import create_processor, load_model
 
@@ -375,7 +375,7 @@ def classified_extract_worker(
         format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
     )
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_ops import create_processor, load_model
     from common.unified_bank_extractor import UnifiedBankExtractor, serialise_bank_response
@@ -600,7 +600,7 @@ def sroie_worker(
 
     from PIL import Image
 
-    from cli import load_pipeline_configs
+    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_ops import create_processor, load_model
     from common.sroie.prompt import SROIE_PROMPT

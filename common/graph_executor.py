@@ -32,19 +32,9 @@ from common.extraction_types import (
 from common.turn_parsers import (
     ParseError,
     TurnParser,
-    dedup_by_field,
-    enforce_amount_gate,
 )
 
 logger = logging.getLogger(__name__)
-
-# Map match-response field names -> transaction_link schema field names
-_TX_LINK_FIELD_MAP: dict[str, str] = {
-    "TRANSACTION_DATE": "BANK_TRANSACTION_DATE",
-    "TRANSACTION_AMOUNT": "BANK_TRANSACTION_DEBIT",
-    "TRANSACTION_DESCRIPTION": "BANK_TRANSACTION_DESCRIPTION",
-    "RECEIPT_STORE": "RECEIPT_DESCRIPTION",
-}
 
 
 class GraphExecutor:
@@ -173,8 +163,6 @@ class GraphExecutor:
             current = next_node
 
         # Post-processing
-        post_processing = workflow_meta.get("post_processing", [])
-        self._run_post_processing(post_processing, state)
 
         # If the graph classified the document, use that type
         for type_node in ("classify_document", "select_best_type"):
@@ -446,19 +434,6 @@ class GraphExecutor:
     ) -> tuple[bool, dict[str, Any]]:
         """Run a named validator check.  Returns ``(ok, parsed_dict)``."""
         match check_name:
-            case "amount_gate":
-                receipts = state.get("extract_receipts.receipts") if state.has("extract_receipts") else []
-                matches = state.get("match_to_statement.matches") if state.has("match_to_statement") else []
-                validated = enforce_amount_gate(receipts, matches)
-                overridden = sum(
-                    1
-                    for orig, val in zip(matches, validated, strict=False)
-                    if orig.get("MATCHED_TRANSACTION") != val.get("MATCHED_TRANSACTION")
-                )
-                return overridden == 0, {
-                    "validated_matches": validated,
-                    "overridden_count": overridden,
-                }
             case "bank_post_process":
                 from common.bank_post_process import run_bank_post_process
 
@@ -471,27 +446,6 @@ class GraphExecutor:
                 return True, {}
 
     @staticmethod
-    def _run_post_processing(
-        post_processing: list[dict[str, Any]],
-        state: WorkflowState,
-    ) -> None:
-        """Run declarative post-processing steps on accumulated state."""
-        for step in post_processing:
-            match step:
-                case {"type": "dedup", "field": str(field_name)}:
-                    # Apply to validated matches first, then raw matches
-                    if state.has("validate_amounts"):
-                        parsed = state.node_results["validate_amounts"].parsed
-                        if "validated_matches" in parsed:
-                            parsed["validated_matches"] = dedup_by_field(
-                                parsed["validated_matches"], field_name
-                            )
-                    elif state.has("match_to_statement"):
-                        parsed = state.node_results["match_to_statement"].parsed
-                        if "matches" in parsed:
-                            parsed["matches"] = dedup_by_field(parsed["matches"], field_name)
-
-    @staticmethod
     def _build_final_fields(
         document_type: str,
         state: WorkflowState,
@@ -500,31 +454,6 @@ class GraphExecutor:
         """Build flat ``FIELD: value`` dict from accumulated state."""
         fields: dict[str, str] = {"DOCUMENT_TYPE": document_type}
         fields.update(extra_fields)
-
-        # Transaction linking: combine receipts + matches
-        if state.has("match_to_statement") or state.has("validate_amounts"):
-            # Prefer validated matches
-            if state.has("validate_amounts"):
-                validated = state.node_results["validate_amounts"].parsed
-                matches = validated.get("validated_matches", [])
-            else:
-                matches = state.get("match_to_statement.matches")
-
-            receipts = state.get("extract_receipts.receipts") if state.has("extract_receipts") else []
-
-            fields["RECEIPT_DATE"] = " | ".join(r.get("DATE", "NOT_FOUND") for r in receipts)
-            fields["RECEIPT_DESCRIPTION"] = " | ".join(m.get("RECEIPT_STORE", "NOT_FOUND") for m in matches)
-            fields["RECEIPT_TOTAL"] = " | ".join(m.get("RECEIPT_TOTAL", "NOT_FOUND") for m in matches)
-            fields["BANK_TRANSACTION_DATE"] = " | ".join(
-                m.get("TRANSACTION_DATE", "NOT_FOUND") for m in matches
-            )
-            fields["BANK_TRANSACTION_DESCRIPTION"] = " | ".join(
-                m.get("TRANSACTION_DESCRIPTION", "NOT_FOUND") for m in matches
-            )
-            fields["BANK_TRANSACTION_DEBIT"] = " | ".join(
-                m.get("TRANSACTION_AMOUNT", "NOT_FOUND") for m in matches
-            )
-            return fields
 
         # Standard docs: merge flat parsed dicts from model-call nodes
         for node_key in state.node_results:

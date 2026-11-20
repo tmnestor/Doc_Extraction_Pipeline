@@ -163,126 +163,6 @@ class HeaderListParser:
         return None
 
 
-class ReceiptListParser:
-    """Parse ``--- RECEIPT N ---`` blocks into receipt list + formatted_text.
-
-    Duplicates logic from the transaction-linking notebook's
-    ``parse_stage1_response()``.
-    """
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]:
-        """Parse receipt blocks, return receipts list and formatted_text."""
-        receipts = self._parse_blocks(raw_response)
-        if not receipts:
-            msg = f"No receipt blocks found in response: {raw_response[:200]}"
-            raise ParseError(msg)
-
-        formatted_parts: list[str] = []
-        for i, r in enumerate(receipts, 1):
-            store = r.get("STORE", "UNKNOWN")
-            date = r.get("DATE", "UNKNOWN")
-            total = r.get("TOTAL", "UNKNOWN")
-            formatted_parts.append(f"Purchase {i}: {store}, date {date}, total {total}")
-        formatted_text = "\n".join(formatted_parts)
-
-        return {
-            "receipts": receipts,
-            "formatted_text": formatted_text,
-            "receipt_count": len(receipts),
-        }
-
-    def _parse_blocks(self, response: str) -> list[dict[str, str]]:
-        """Split response into receipt blocks and parse each."""
-        blocks: list[dict[str, str]] = []
-        current_block: dict[str, str] = {}
-        in_block = False
-
-        for line in response.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-
-            if RECEIPT_HEADER_RE.match(line):
-                if in_block and current_block:
-                    blocks.append(current_block)
-                current_block = {}
-                in_block = True
-                continue
-
-            if in_block and ":" in line:
-                key, _, value = line.partition(":")
-                key = key.strip().upper()
-                value = value.strip()
-                if key in ("STORE", "DATE", "TOTAL"):
-                    current_block[key] = value
-
-        if in_block and current_block:
-            blocks.append(current_block)
-
-        return blocks
-
-
-class TransactionMatchParser:
-    """Parse match response blocks into per-receipt match results.
-
-    Duplicates logic from the transaction-linking notebook's match parsing.
-    """
-
-    MATCH_FIELDS = frozenset(
-        {
-            "MATCHED_TRANSACTION",
-            "TRANSACTION_DATE",
-            "TRANSACTION_AMOUNT",
-            "TRANSACTION_DESCRIPTION",
-            "RECEIPT_STORE",
-            "RECEIPT_TOTAL",
-            "AMOUNT_CHECK",
-            "NAME_CHECK",
-            "CONFIDENCE",
-            "MISMATCH_TYPE",
-            "REASONING",
-        }
-    )
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]:
-        """Parse match blocks, return matches list."""
-        matches = self._parse_blocks(raw_response)
-        if not matches:
-            msg = f"No match blocks found in response: {raw_response[:200]}"
-            raise ParseError(msg)
-        return {"matches": matches, "match_count": len(matches)}
-
-    def _parse_blocks(self, response: str) -> list[dict[str, str]]:
-        """Split response into receipt match blocks."""
-        blocks: list[dict[str, str]] = []
-        current_block: dict[str, str] = {}
-        in_block = False
-
-        for line in response.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-
-            if RECEIPT_HEADER_RE.match(line):
-                if in_block and current_block:
-                    blocks.append(current_block)
-                current_block = {}
-                in_block = True
-                continue
-
-            if in_block and ":" in line:
-                key, _, value = line.partition(":")
-                key = key.strip().upper()
-                value = value.strip()
-                if key in self.MATCH_FIELDS:
-                    current_block[key] = value
-
-        if in_block and current_block:
-            blocks.append(current_block)
-
-        return blocks
-
-
 class BalanceDescriptionParser:
     """Parse balance-description Turn 1 via ``ResponseParser.parse_balance_description()``.
 
@@ -735,56 +615,6 @@ class FieldValueParser:
 # ---------------------------------------------------------------------------
 
 
-def enforce_amount_gate(
-    receipts: list[dict[str, str]],
-    matches: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """Validate that receipt totals match transaction amounts.
-
-    For each match marked FOUND, compare the numeric amounts.
-    Override to NOT_FOUND if they differ by more than 1%.
-    """
-    validated: list[dict[str, str]] = []
-    for i, match in enumerate(matches):
-        match_copy = dict(match)
-        if match_copy.get("MATCHED_TRANSACTION") == "FOUND":
-            receipt_total = _parse_amount(receipts[i].get("TOTAL", "") if i < len(receipts) else "")
-            tx_amount = _parse_amount(match_copy.get("TRANSACTION_AMOUNT", ""))
-
-            if receipt_total is not None and tx_amount is not None:
-                if abs(receipt_total) > 0 and (
-                    abs(abs(tx_amount) - abs(receipt_total)) / abs(receipt_total) > 0.01
-                ):
-                    match_copy["MATCHED_TRANSACTION"] = "NOT_FOUND"
-                    match_copy["REASONING"] = (
-                        f"Amount gate: receipt {receipt_total} != transaction {tx_amount}"
-                    )
-        validated.append(match_copy)
-    return validated
-
-
-def dedup_by_field(
-    records: list[dict[str, str]],
-    field_name: str,
-) -> list[dict[str, str]]:
-    """Deduplicate records by a specified field, keeping first occurrence."""
-    seen: set[str] = set()
-    result: list[dict[str, str]] = []
-    for record in records:
-        key = record.get(field_name, "")
-        if key and key not in seen:
-            seen.add(key)
-            result.append(record)
-        elif not key:
-            result.append(record)
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
-
 def build_parser_registry(*, fallback_type: str = "UNIVERSAL") -> dict[str, TurnParser]:
     """Build the default parser registry.
 
@@ -795,8 +625,6 @@ def build_parser_registry(*, fallback_type: str = "UNIVERSAL") -> dict[str, Turn
     """
     return {
         "header_list": HeaderListParser(),
-        "receipt_list": ReceiptListParser(),
-        "transaction_match": TransactionMatchParser(),
         "field_value": FieldValueParser(),
         "classification": ClassificationParser(fallback_type=fallback_type),
         "balance_description": BalanceDescriptionParser(),

@@ -8,11 +8,6 @@ Prints bash-eval-able assignments:
     YAML_GROUND_TRUTH=...
     YAML_OUTPUT_DIR=...
     YAML_LOG_DIR=...
-    YAML_LINKING_DATA_DIR=...
-    YAML_LINKING_OUTPUT=...
-    YAML_LINKING_GROUND_TRUTH=...
-    YAML_LINKING_EVALUATION_DIR=...
-    YAML_LINKING_LOG_DIR=...
 
 Usage:
     eval "$(python3 scripts/resolve_yaml_defaults.py config/run_config.yml)"
@@ -45,11 +40,6 @@ def main() -> int:
         _emit("YAML_GROUND_TRUTH", "")
         _emit("YAML_OUTPUT_DIR", "")
         _emit("YAML_LOG_DIR", "")
-        _emit("YAML_LINKING_DATA_DIR", "")
-        _emit("YAML_LINKING_OUTPUT", "")
-        _emit("YAML_LINKING_GROUND_TRUTH", "")
-        _emit("YAML_LINKING_EVALUATION_DIR", "")
-        _emit("YAML_LINKING_LOG_DIR", "")
         return 0
 
     cfg = yaml.safe_load(path.read_text()) or {}
@@ -64,7 +54,6 @@ def main() -> int:
     info_extract = pipeline.get("information_extraction", {}) or {}
     data = info_extract.get("input", {}) or {}
     output = info_extract.get("output", {}) or {}
-    linking = pipeline.get("linking", {}) or {}
 
     _emit("YAML_MODEL_TYPE", model.get("type"))
     _emit("YAML_MODEL_PATH", model.get("path"))
@@ -72,11 +61,6 @@ def main() -> int:
     _emit("YAML_GROUND_TRUTH", data.get("ground_truth"))
     _emit("YAML_OUTPUT_DIR", output.get("dir"))
     _emit("YAML_LOG_DIR", log_cfg.get("log_dir"))
-    _emit("YAML_LINKING_DATA_DIR", linking.get("data_dir"))
-    _emit("YAML_LINKING_OUTPUT", linking.get("output"))
-    _emit("YAML_LINKING_GROUND_TRUTH", linking.get("ground_truth"))
-    _emit("YAML_LINKING_EVALUATION_DIR", linking.get("evaluation_dir"))
-    _emit("YAML_LINKING_LOG_DIR", linking.get("log_dir"))
     return 0
 
 

@@ -127,9 +127,6 @@ bootstrap:
     # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma31b_20260921/logs  # Gemma 31B, DONE
     log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921/logs
 
-# I/O paths moved into pipeline.information_extraction.* (2026-06-10) so all three
-# pipelines (information_extraction / linking) are symmetric
-# pipeline.<name> blocks — top-level io.* is retired. See the pipeline: section.
 
 # Inference configuration — generation budget, tiling, sampling, vLLM engine,
 # and debug tracing. Everything that shapes how the model produces output.
@@ -504,8 +501,8 @@ inference:
           max_pixels: 16777216
 
   # Raw VLM prompt/response trace (debug observability; default off).
-  # When enabled, every extraction VLM call (detection, bank turns, graph nodes,
-  # linking fallback) appends one JSONL line via the shared VllmBackend seam.
+  # When enabled, every extraction VLM call (detection, bank turns, graph nodes)
+  # appends one JSONL line via the shared VllmBackend seam.
   # The keys are, EXACTLY (see common/prompt_trace.py:record):
   #   image_name, pipeline, label, model, prompt, raw_response,
   #   prompt_tokens, completion_tokens
@@ -519,7 +516,7 @@ inference:
 
 # Pipeline configuration — per-task settings grouped together: information
 # extraction (the default classify/extract/clean/evaluate paths), classification,
-# processing toggles, token budgets, transaction linking, batch tuning,
+# processing toggles, token budgets, batch tuning,
 # extraction ordering/skip labels, and the bank-header cache.
 pipeline:
   # Information extraction — the DEFAULT image-source + output paths, used by the
@@ -527,12 +524,6 @@ pipeline:
   # classify | extract | clean | evaluate. Those read images from
   # information_extraction.input.dir, score against input.ground_truth, and write
   # to output.dir.
-  #
-  # OVERRIDE MECHANISM (why paths appear in two pipeline.<name> blocks): the
-  # standalone linking tasks REUSE the same classify/extract/clean
-  # stages but on their OWN dataset. entrypoint.sh repoints the shared
-  # image_dir/output globals at pipeline.linking.* (via _resolve_linking_vars),
-  # SHADOWING information_extraction.* for the duration of that task.
   information_extraction:
     # Data paths
     input:
@@ -542,7 +533,6 @@ pipeline:
       # ground_truth: ../evaluation_data/bank/ground_truth_bank.csv
       # dir: ../evaluation_data/synthetic_original
       # ground_truth: ../evaluation_data/synthetic_original/ground_truth_synthetic.csv
-      # dir: ../evaluation_data/synthetic_transaction_linking
       # The 165-image synthetic set for the Gemma 4 evaluation (2026-08-11).
       # Absolute, and NOT tilde-prefixed: YAML reads a bare `~` as null and
       # nothing in the entrypoint path shell-expands these values.
@@ -584,8 +574,6 @@ pipeline:
       dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
       # Extraction GT generated from the per-type YAMLs in
       # Synthetic_Doc_Generation/ground_truth via scripts/generate_extraction_gt.py.
-      # (Separate from linking.ground_truth, which the transaction-linking task uses.)
-      # ground_truth: ../evaluation_data/synthetic_transaction_linking/ground_truth_extraction.csv
       # JSONL, not CSV — load_ground_truth() dispatches on the suffix
       # (common/evaluation_metrics.py) and the evaluator runs in _jsonl_mode,
       # scoring exactly the fields each GT record carries. The set also ships a
@@ -838,8 +826,6 @@ pipeline:
     extract_travel: 1024
     extract_bank: 4096
     bank_header_detection: 500
-    transaction_match: 2000
-    receipt_extract: 500
     orchestrator_generate: 1024
     bank_statement_floor: 1500
     fallback_base: 512
@@ -1161,26 +1147,6 @@ pipeline:
       paper_refine_outside_frac: 0.02
       paper_refine_inside_frac: 0.01
 
-  linking:
-    case_key_pattern: "^(?P<case>[^_]+)_"   # group files by case (split on first "_")
-    vlm_prompt: single_receipt_link          # prompt file in prompts/ (without .yaml)
-    vlm_max_tokens: 4096                      # token budget for the fallback VLM lookup
-    vlm_temperature: 0.0                      # MUST be 0.0 — the shared generate seam is deterministic
-    hybrid_amount_tolerance: 0.01            # $ gate for an algorithmic amount match
-    hybrid_date_window_days: 5               # business-day window for date scoring
-    hybrid_description_threshold: 0.3        # min token-overlap fraction for description support
-    hybrid_min_confidence: LOW               # min matcher confidence to accept without VLM (HIGH|MEDIUM|LOW)
-    # --- Paths: these SHADOW io.input/io.output when KFP_TASK=run_transaction_link.
-    # entrypoint.sh _resolve_linking_vars points the shared classify/extract/clean
-    # stages at data_dir below and writes all artifacts under output's parent dir.
-    # (Keys above are linking-specific knobs; see the io: header for the mechanism.)
-    data_dir: ../evaluation_data/synthetic_transaction_linking
-    output: ../evaluation_data/synthetic_transaction_linking/output/transaction_links.jsonl
-    ground_truth: ../evaluation_data/synthetic_transaction_linking/transaction_links.yml   # optional eval; if set -> evaluate_linking runs
-    evaluation_dir: ../evaluation_data/synthetic_transaction_linking/output/transaction_evaluation
-    log_dir: ../evaluation_data/synthetic_transaction_linking/output/logs
-
-  # Batch processing tuning
   batch:
     # Keys are NORMALISED model types (see the generation.models note above).
     # Both Gemma variants are pinned to 1: a single-card engine has no room to

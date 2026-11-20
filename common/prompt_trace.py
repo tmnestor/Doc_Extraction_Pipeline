@@ -2,8 +2,7 @@
 
 Single-seam observability: ``VllmBackend`` records every ``generate()`` /
 ``generate_for_graph()`` call here, so the trace covers *every* extraction
-prompt across *every* pipeline (classify, batch, graph-robust,
-transaction-link) without per-stage plumbing.
+prompt across *every* pipeline (classify, batch, graph-robust) without per-stage plumbing.
 
 Callers may set per-call context (``image_name``, ``pipeline``, ``label``) via
 ``trace_context()``; because it uses ``contextvars``, setting ``image_name``
@@ -53,7 +52,7 @@ def trace_context(**fields: Any):
 
     Example::
 
-        with trace_context(image_name="CASE012_westpac_premium.png", pipeline="transaction_link"):
+        with trace_context(image_name="CASE012_westpac_premium.png", pipeline="extract"):
             ...  # every VLM call inside inherits these fields
     """
     base = _CTX.get()

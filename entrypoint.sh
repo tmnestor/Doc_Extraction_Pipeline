@@ -28,10 +28,6 @@
 # Local examples:
 #   KFP_TASK=run_info_extract image_dir=../evaluation_data/synthetic bash entrypoint.sh
 #   KFP_TASK=run_graph_robust image_dir=../evaluation_data/synthetic ground_truth=../evaluation_data/synthetic/ground_truth.jsonl bash entrypoint.sh
-#   KFP_TASK=run_transaction_link bash entrypoint.sh                                  # paths from run_config.yml linking:
-#   KFP_TASK=run_transaction_link linking_data_dir=../evaluation_data/linking bash entrypoint.sh
-#   # Or as 5 separate KFP pods (paths from run_config.yml linking:):
-#   for t in link_classify link_extract link_clean link link_evaluate; do KFP_TASK=$t bash entrypoint.sh; done
 #
 # =============================================================================
 
@@ -80,7 +76,7 @@ CONFIG_FILE="./config/run_config.yml"
 
 # ---- Resolve ALL YAML defaults up front, with the conda env's own python ----
 # A SINGLE PyYAML resolver (scripts/resolve_yaml_defaults.py) supplies every
-# YAML_* variable used below — log dirs, data/model paths, linking
+# YAML_* variable used below — log dirs, data/model paths
 # paths. It must run BEFORE the `exec`/`tee` redirect (which needs the log dir),
 # but PyYAML lives only inside the conda env, never in system/base python (the
 # base env genuinely has no `yaml` on DEV/PROD). So we run the resolver with the
@@ -122,17 +118,8 @@ fi
 # all read below as ${YAML_*:-} so `set -o nounset` is satisfied.
 eval "$("$CONDA_PY" scripts/resolve_yaml_defaults.py "$CONFIG_FILE")"
 
-# Select this task's log dir (env var > YAML > fail). Transaction-linking uses
-# pipeline.linking.log_dir;
-# everything else uses bootstrap.logging.log_dir.
-case "${KFP_TASK:-}" in
-  run_transaction_link|link_classify|link_extract|link_clean|link|link_evaluate)
-    LOG_DIR="${LMM_LINKING_LOG_DIR:-${YAML_LINKING_LOG_DIR:-${LMM_LOG_DIR:-${YAML_LOG_DIR:-}}}}"
-    ;;
-  *)
-    LOG_DIR="${LMM_LOG_DIR:-${YAML_LOG_DIR:-}}"
-    ;;
-esac
+# The log dir: env var > YAML > fail.
+LOG_DIR="${LMM_LOG_DIR:-${YAML_LOG_DIR:-}}"
 if [[ -z "$LOG_DIR" ]]; then
   echo "FATAL: No log directory configured. Set LMM_LOG_DIR env var or bootstrap.logging.log_dir in $CONFIG_FILE"
   exit 1
@@ -322,17 +309,11 @@ _print_task_help() {
   log "  Available tasks:"
   log "    run_info_extract      — 4-stage classic pipeline (classify/extract/clean/evaluate)  [local dev]"
   log "    run_graph_robust      — 3-stage probe-based pipeline (extract --graph-robust/clean/evaluate)  [local dev]"
-  log "    run_transaction_link  — 5-stage receipt->bank transaction linking (matcher-first, VLM fallback)  [local dev]"
   log "    split                   Stage 0: one image per receipt from photographs of several (GPU)"
   log "    classify              — Stage 1: document type detection (GPU)"
   log "    extract               — Stage 2: field extraction (GPU)"
   log "    clean                 — Stage 3: parse/clean responses (CPU)"
   log "    evaluate              — Stage 4: evaluation (CPU)"
-  log "    link_classify         — Linking Stage 1: document classification (GPU)"
-  log "    link_extract          — Linking Stage 2: field extraction (GPU)"
-  log "    link_clean            — Linking Stage 3: parse/clean (CPU)"
-  log "    link                  — Linking Stage 4: receipt->bank matching, matcher+VLM (GPU)"
-  log "    link_evaluate         — Linking Stage 5: link recall/precision scoring (CPU)"
   log "    sroie                 — SROIE benchmark: 347 public receipts, 4 fields (GPU)"
 }
 
@@ -356,22 +337,6 @@ _clear_prev_output() {
     rm -f "$f"
     log "  CLEAR_PREV_OUTPUT: removed $f"
   done
-}
-
-_resolve_linking_vars() {
-  # Resolve the transaction-linking paths from env vars / YAML fallbacks, then
-  # point the SHARED classify/extract/clean path globals at the linking output
-  # root so the existing _run_classify/_run_extract runners write there.
-  # linking_output is a FILE (transaction_links.jsonl); its parent dir is the
-  # output root for the intermediate JSONL artefacts.
-  LINK_OUT="$(dirname "${linking_output:-./outputs/transaction_links.jsonl}")"
-  LINK_LOG_DIR="${linking_log_dir:-${LINK_OUT}/logs}"
-  mkdir -p "$LINK_OUT" "$LINK_LOG_DIR"
-  # Drive the GPU stages off the linking dataset + output root.
-  image_dir="${linking_data_dir:-${image_dir:-}}"
-  CLASSIFICATIONS="${LINK_OUT}/classifications.jsonl"
-  RAW_EXTRACTIONS="${LINK_OUT}/raw_extractions.jsonl"
-  CLEAN_EXTRACTIONS="${LINK_OUT}/cleaned_extractions.jsonl"
 }
 
 _read_inference_elapsed() {
@@ -503,11 +468,6 @@ _default_from_yaml model                    "${YAML_MODEL_TYPE:-}"
 _default_from_yaml image_dir                "${YAML_DATA_DIR:-}"
 _default_from_yaml ground_truth             "${YAML_GROUND_TRUTH:-}"
 _default_from_yaml output                   "${YAML_OUTPUT_DIR:-}"
-_default_from_yaml linking_data_dir         "${YAML_LINKING_DATA_DIR:-}"
-_default_from_yaml linking_output           "${YAML_LINKING_OUTPUT:-}"
-_default_from_yaml linking_ground_truth     "${YAML_LINKING_GROUND_TRUTH:-}"
-_default_from_yaml linking_evaluation_dir   "${YAML_LINKING_EVALUATION_DIR:-}"
-_default_from_yaml linking_log_dir          "${YAML_LINKING_LOG_DIR:-}"
 
 # ---- CLEAR_PREV_OUTPUT toggle (validated at startup, before any work) ---- #
 # Controls whether stages start from a clean slate or resume:
@@ -832,155 +792,6 @@ case "${KFP_TASK:-}" in
     fi
     python3 -m stages.sroie "${SROIE_ARGS[@]}" || exit $?
     log "SROIE benchmark complete."
-    ;;
-
-  # ========================================================================
-  # TRANSACTION LINKING — receipt/invoice -> bank-statement debit matching.
-  # ========================================================================
-  # Local dev: chain classify + extract + clean + transaction_link (+ optional
-  # evaluate_linking) in one shell. Matcher-first: the algorithmic matcher links
-  # against the rows extract already pulled; receipts it can't confidently match
-  # fall through to a targeted single-image VLM lookup.
-  run_transaction_link)
-    log "Mode: run_transaction_link — receipt->bank transaction linking (matcher-first, VLM fallback)."
-    _resolve_linking_vars
-    log "  linking_data_dir:     ${linking_data_dir:-<not set>}"
-    log "  linking_output:       ${linking_output:-<not set>}"
-    log "  linking_ground_truth: ${linking_ground_truth:-<not set>}"
-    log "  link_out:             ${LINK_OUT}"
-    log "  link_log_dir:         ${LINK_LOG_DIR}"
-    # Clear previous outputs only when CLEAR_PREV_OUTPUT=true; otherwise the
-    # GPU stages resume and skip already-processed images from a prior run.
-    _clear_prev_output "$CLASSIFICATIONS" "$RAW_EXTRACTIONS" "$CLEAN_EXTRACTIONS" \
-      "${linking_output:-}" "${LINK_OUT}/.inference_elapsed"
-
-    INFERENCE_START=$(date +%s)
-
-    _banner "Phase 1/5: classify (GPU)"
-    _run_classify
-    log "Phase 1/5: classify complete."
-
-    _banner "Phase 2/5: extract (GPU)"
-    _run_extract classified
-    log "Phase 2/5: extract complete."
-
-    INFERENCE_ELAPSED=$(($(date +%s) - INFERENCE_START))
-    log "GPU inference elapsed: ${INFERENCE_ELAPSED}s"
-
-    _banner "Phase 3/5: clean (CPU)"
-    python3 -m stages.clean \
-      --input      "$RAW_EXTRACTIONS" \
-      --output-dir "$CLEAN_EXTRACTIONS" || exit $?
-    log "Phase 3/5: clean complete."
-
-    _banner "Phase 4/5: transaction_link (matcher-first + VLM fallback)"
-    LINK_START=$(date +%s)
-    python3 -m stages.transaction_link \
-      --extractions "$CLEAN_EXTRACTIONS" \
-      --output      "${linking_output:?linking_output is required — set via pipeline.linking.output in run_config.yml or linking_output env var}" \
-      --data-dir    "${image_dir:?image_dir is required — set via pipeline.linking.data_dir in run_config.yml or linking_data_dir env var}" \
-      --config      "$CONFIG_FILE" \
-      "${OPT_MODEL[@]}" || exit $?
-    # Add the link phase's GPU (VLM fallback) wall-clock to the inference total so
-    # the orchestrator's throughput matches the split-pod sum (classify+extract+link),
-    # which the `link` pod records by appending to .inference_elapsed.
-    INFERENCE_ELAPSED=$((INFERENCE_ELAPSED + $(date +%s) - LINK_START))
-    log "Phase 4/5: transaction_link complete (GPU inference elapsed now ${INFERENCE_ELAPSED}s)."
-
-    if _is_set "${linking_ground_truth:-}"; then
-      _banner "Phase 5/5: evaluate_linking (CPU)"
-      LINK_EVAL_DIR="${linking_evaluation_dir:?linking_evaluation_dir is required — set via pipeline.linking.evaluation_dir in run_config.yml or linking_evaluation_dir env var}"
-      mkdir -p "$LINK_EVAL_DIR"
-      # Orchestrator path: pass the single classify+extract+link wall-clock as
-      # INFERENCE_ARGS so evaluate_linking reports the same --inference-seconds the
-      # per-pod path builds from _read_inference_elapsed.
-      INFERENCE_ARGS=(--inference-seconds "$INFERENCE_ELAPSED")
-      python3 -m stages.evaluate_linking \
-        --input        "${linking_output}" \
-        --ground-truth "$linking_ground_truth" \
-        --output-dir   "$LINK_EVAL_DIR" \
-        "${INFERENCE_ARGS[@]}" || exit $?
-      log "Phase 5/5: evaluate_linking complete."
-    else
-      log ""
-      log "Phase 5/5: evaluate_linking skipped — linking_ground_truth not provided."
-    fi
-
-    log ""
-    log "Transaction linking pipeline completed successfully."
-    ;;
-
-  # -- Transaction-linking, per-pod -------------------------------------------
-  # Each pod is self-contained on the linking dataset: _resolve_linking_vars
-  # repoints the shared classify/extract/clean globals onto LINK_OUT (the parent
-  # of pipeline.linking.output), isolated from pipeline.information_extraction.*.
-  # GPU pods write their elapsed
-  # seconds to ${LINK_OUT}/.inference_elapsed (link_classify truncates as the
-  # first GPU stage; link_extract and link append) so link_evaluate can sum them
-  # for throughput.
-  link_classify)
-    _banner "Linking Stage 1/5: link_classify — document types on linking set (GPU)"
-    _resolve_linking_vars
-    # Truncate (>) the elapsed file — first GPU stage, resets stale timing on a
-    # reused KFP volume (mirrors the classify branch).
-    _clear_prev_output "$CLASSIFICATIONS" "${LINK_OUT}/.inference_elapsed"
-    LINK_START=$(date +%s)
-    _run_classify
-    echo $(($(date +%s) - LINK_START)) > "${LINK_OUT}/.inference_elapsed"
-    log "link_classify complete ($(cat "${LINK_OUT}/.inference_elapsed")s)."
-    ;;
-  link_extract)
-    _banner "Linking Stage 2/5: link_extract — field extraction on linking set (GPU)"
-    _resolve_linking_vars
-    _clear_prev_output "$RAW_EXTRACTIONS"
-    LINK_START=$(date +%s)
-    _run_extract classified
-    echo $(($(date +%s) - LINK_START)) >> "${LINK_OUT}/.inference_elapsed"
-    log "link_extract complete."
-    ;;
-  link_clean)
-    _banner "Linking Stage 3/5: link_clean — parse/clean responses (CPU, no GPU)"
-    _resolve_linking_vars
-    _clear_prev_output "$CLEAN_EXTRACTIONS"
-    python3 -m stages.clean \
-      --input      "$RAW_EXTRACTIONS" \
-      --output-dir "$CLEAN_EXTRACTIONS" || exit $?
-    log "link_clean complete."
-    ;;
-  link)
-    _banner "Linking Stage 4/5: link — receipt->bank matching (matcher-first + VLM fallback, GPU)"
-    _resolve_linking_vars
-    _clear_prev_output "${linking_output:-}"
-    LINK_START=$(date +%s)
-    python3 -m stages.transaction_link \
-      --extractions "$CLEAN_EXTRACTIONS" \
-      --output      "${linking_output:?linking_output is required — set via pipeline.linking.output in run_config.yml or linking_output env var}" \
-      --data-dir    "${image_dir:?image_dir is required — set via pipeline.linking.data_dir in run_config.yml or linking_data_dir env var}" \
-      --config      "$CONFIG_FILE" \
-      "${OPT_MODEL[@]}" || exit $?
-    # The matcher-first link step does GPU VLM only on the fallback receipts, but
-    # its wall-clock is still GPU-stage time — append so throughput counts it.
-    echo $(($(date +%s) - LINK_START)) >> "${LINK_OUT}/.inference_elapsed"
-    log "link complete."
-    ;;
-  link_evaluate)
-    _banner "Linking Stage 5/5: link_evaluate — scoring link recall/precision + throughput (CPU)"
-    _resolve_linking_vars
-    LINK_EVAL_DIR="${linking_evaluation_dir:?linking_evaluation_dir is required — set via pipeline.linking.evaluation_dir in run_config.yml or linking_evaluation_dir env var}"
-    mkdir -p "$LINK_EVAL_DIR"
-    _clear_prev_output "${LINK_EVAL_DIR}/linking_evaluation_results.jsonl"
-    # Sum GPU elapsed (link_classify + link_extract + link) -> INFERENCE_ARGS,
-    # exactly as evaluate does. Unlike the orchestrator's Phase 5
-    # (which SKIPS eval when linking_ground_truth is unset), a standalone
-    # link_evaluate pod is only ever scheduled when eval is wanted — so it FAILS
-    # FAST on a missing ground truth (the Fail-Fast rule).
-    _read_inference_elapsed "${LINK_OUT}/.inference_elapsed"
-    python3 -m stages.evaluate_linking \
-      --input        "${linking_output:?linking_output is required — set via pipeline.linking.output in run_config.yml or linking_output env var}" \
-      --ground-truth "${linking_ground_truth:?linking_ground_truth is required — set via pipeline.linking.ground_truth in run_config.yml or linking_ground_truth env var}" \
-      --output-dir   "$LINK_EVAL_DIR" \
-      "${INFERENCE_ARGS[@]}" || exit $?
-    log "link_evaluate complete."
     ;;
 
   "")

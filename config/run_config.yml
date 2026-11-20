@@ -3,7 +3,7 @@
 # CLI flags override YAML when explicitly provided
 
 # Bootstrap configuration — the minimal set the entrypoint and model loader need
-# before any pipeline work begins (model identity, tiling, GPU count, log dir).
+# before any pipeline work begins (model identity, GPU count, log dir).
 # conda_env: bootstrapped from LMM_CONDA_ENV + the entrypoint default; it CANNOT
 # be a real key here (chicken-and-egg: this YAML is read by the conda python, so
 # the env must already be chosen before this file is parsed).
@@ -30,18 +30,15 @@ bootstrap:
     # vLLM only: override the chat template used by engine.chat().
     #   none            -> use the model's own template (default)
     #   <path/to/*.jinja> -> serve with this template instead (must exist)
-    # Use this to disable a serve-side R1/thinking template that emits <think>
-    # blocks. InternVL3.5 thinking is controlled by the system prompt, not
-    # enable_thinking; a custom non-thinking template is the override of last
-    # resort when the model dir ships a thinking-by-default template.
+    # Both registered models suppress thinking through enable_thinking, so this is
+    # the override of last resort for a model whose folder ships a template that
+    # thinks by default and does not honour that flag.
     chat_template: none
     # Model loading options (merged from the old top-level model_loading:).
     device_map: auto
     default_paths:
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
       gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
-      # internvl3: /efs/shared/PTM/InternVL3_5-8B
-      # internvl3-vllm: /efs/shared/PTM/InternVL3_5-8B
   # GPU count (moved from the old top-level processing: section).
   gpus:
     num_gpus: 0                # 0 = auto-detect all GPUs, 1 = single GPU, N = use N GPUs
@@ -53,22 +50,13 @@ bootstrap:
     # Kept beside the dataset and the run outputs under tod_2026 (2026-08-11), so
     # a run's images, ground truth, artifacts and logs all live in one tree.
     # Follows output.dir when that is re-dated — keep the two in step.
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260807/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_degraded_20260811/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_nab_probe/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260811/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260811_rule9/logs
     # Keep this in step with pipeline.information_extraction.output.dir. It is a
-    # SEPARATE key, not derived from it — the Qwen run wrote its evaluation to
-    # output_qwen38_20260921 while its entrypoint log landed in
-    # output_gemma_degraded/logs, purely because this line was left stale.
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma_degraded/logs
-    # log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma31b_20260921/logs  # Gemma 31B, DONE
+    # SEPARATE key, not derived from it. A run normally sets both from the
+    # environment (LMM_LOG_DIR and output); these are what applies when it does not.
     log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921/logs
 
 
-# Inference configuration — generation budget, tiling, sampling, vLLM engine,
+# Inference configuration — generation budget, sampling, vLLM engine,
 # and debug tracing. Everything that shapes how the model produces output.
 inference:
   max_new_tokens: 3500   # Max tokens for generation (increased to avoid truncation on 30+ row statements)
@@ -139,10 +127,8 @@ inference:
         #   peak activation                  0.92 GiB
         #   KV cache                         8.02 GiB  = 19,081 tokens
         #   reported concurrency             2.33x at max_model_len 8192
-        # KV here costs ~440 KiB/token against Qwen's ~41 KiB — this is a dense
-        # full-attention model where EVERY layer carries a cache, while Qwen keeps
-        # one in only 16 of 64 layers. Hence Gemma holds 4.5x FEWER KV tokens
-        # despite having 4.7x more KV memory.
+        # KV here costs ~440 KiB/token: this is a dense full-attention model where
+        # EVERY layer carries a cache.
         # The reported 2.33x is a worst-case reservation (KV tokens /
         # max_model_len), not a cap: what fits is set by the real request size.
         # MEASURED 2026-11-16, 55 single-pass bank statements in one engine call
@@ -287,7 +273,7 @@ inference:
             # num_soft_tokens: 280
             num_soft_tokens: 560
   # Raw VLM prompt/response trace (debug observability; default off).
-  # When enabled, every extraction VLM call (detection, bank turns, graph nodes)
+  # When enabled, every model call (classification and extraction)
   # appends one JSONL line via the shared VllmBackend seam.
   # The keys are, EXACTLY (see common/prompt_trace.py:record):
   #   image_name, pipeline, label, model, prompt, raw_response,
@@ -338,8 +324,7 @@ pipeline:
       # The _20260812 pair is the ONLY dated set on the box: the _20260811 pair
       # it replaced was deleted 2026-08-13, and the earlier _20260728 /
       # _20260807 sets before that. Nothing here is a fallback — if a path below
-      # names a set that no longer exists, the run fails at the dataset check in
-      # scripts/run_full_comparison.sh rather than scoring anything.
+      # names a set that no longer exists, the stage stops because it finds no images.
       #
       # It carries the same DOCUMENTS as _20260811 (the source YAMLs have not
       # changed since 2026-08-09 and the render is deterministic) but a
@@ -351,14 +336,12 @@ pipeline:
       # Invoices are untouched — their layout has a real Unit Price column.
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/nab_probe
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
-      # Gemma 31B vs Qwen 3.8 comparison (2026-09-21): the CLEAN 165-image set,
-      # not the degraded sibling. Same date, one character apart in the path, and
-      # the wrong one answers a different question — the clean set is what the
-      # Gemma 12B baseline (0.977 median / 0.841 mean) was measured on.
+      # The CLEAN 165-image set, not the degraded sibling. Same date, one character
+      # apart in the path, and the wrong one answers a different question.
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/degraded_20260812
       dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
       # Extraction GT generated from the per-type YAMLs in
-      # Synthetic_Doc_Generation/ground_truth via scripts/generate_extraction_gt.py.
+      # Synthetic_Doc_Generation/ground_truth, by that repository's own script.
       # JSONL, not CSV — load_ground_truth() dispatches on the suffix
       # (common/evaluation_metrics.py) and the evaluator runs in _jsonl_mode,
       # scoring exactly the fields each GT record carries. The set also ships a
@@ -378,15 +361,10 @@ pipeline:
       # the wrong answer key and reports plausible numbers.
       # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/degraded_20260812/ground_truth.jsonl
       ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812/ground_truth.jsonl
-      # MUST stay null for this comparison — both models have to see the same 165
-      # images or the result is meaningless.
-      # Historical note worth keeping: until 2026-09-21 this key was DEAD on the
-      # stages path (only cli.py honoured it), so a run configured for 12 images
-      # quietly processed all 165. The Qwen headline run was started under that
-      # bug and therefore covered the full set. Now that discover_images applies
-      # it, leaving a smoke value here would make the SECOND model run 12 images
-      # against the first model's 165 and report a plausible comparison.
-      # max_images: 12       # smoke only, and never while a comparison is open
+      # Applied by the classify stage when it lists the folder. A value left here
+      # from a short trial would make a later run read fewer pages than intended
+      # and still report a plausible score.
+      # max_images: 12       # a short trial only
       max_images: null       # null = process all images
       # document_types: null   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
       document_types: [BANK_STATEMENT]   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
@@ -419,10 +397,6 @@ pipeline:
       # image_name values already present, so the second model would skip every
       # image the first completed and still report a plausible score.
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma31b_20260921  # Gemma 31B, DONE
-      # The earlier directory of this name held the VOID 12B-under-Qwen's-name run.
-      # It must be renamed away or cleared (CLEAR_PREV_OUTPUT=true) before this
-      # run starts, or the stages resume over the wrong checkpoint's records and
-      # silently blend two models into one score.
       dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921
       skip_visualizations: false  # Skip visualization generation
       skip_reports: false         # Skip report generation
@@ -450,14 +424,9 @@ pipeline:
     # answer-key field and the loader rejects them by design.
     # dir: /home/jovyan/nfs_share/tod_2026/data/sroie          # 626-image train split
     data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test  # 347-image test split
-    # Dated per MODEL, not per day. Swap when switching model type, or the
-    # second model's artefacts overwrite the first's and the comparison is
-    # lost.
-    # output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_internvl3
-    # This branch runs Gemma 4 (bootstrap.model.type =
-    # gemma4-12b-unified-w4a16-vllm), so its artefacts go to their own dir.
-    # Sharing one with the InternVL3 run would overwrite it and lose the
-    # comparison.
+    # One folder for each model. The task does not resume: every run writes over
+    # sroie_per_image.csv and sroie_summary.json here, so a second model sharing the
+    # folder would destroy the first model's results.
     output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
     # Four short fields. 256 is ample; a larger budget only lengthens a
     # runaway repetition loop before it is caught.
@@ -470,21 +439,11 @@ pipeline:
     # scheduler still runs at most max_num_seqs of them concurrently, so
     # raising this alone changes nothing. Raise both together.
     #
-    # 8 is a deliberate starting point, not a tuned value: SROIE receipts
-    # aspect-match to 2-3 tiles plus a thumbnail, far lighter than the
-    # 18-tile bank statements, so 8 concurrent requests is well inside the
-    # 23 GiB L4 budget. A failed batch is retried one image at a time, so
-    # an over-large value costs throughput, never results.
+    # 8 is a deliberate starting point, not a tuned value: a SROIE receipt is one
+    # small image, so 8 concurrent requests is well inside the 23 GiB L4 budget.
+    # A failed batch is retried one image at a time, so an over-large value costs
+    # throughput, never results.
     batch_size: 8
-    #
-    # There is deliberately NO max_tiles key here. Image tiling has one
-    # home — inference.tiling.budgets.receipt — and the stage reads it from
-    # there, since SROIE is 100% receipts. A tile knob in this block would
-    # read as operator intent while changing nothing: budgets apply only
-    # when inference.tiling.pre_tiling.enabled is true, and the Gemma 4
-    # loader FAILS FAST if you enable it (supports_pre_tiling=False in
-    # models/registry.py). With pre-tiling off, vLLM tiles internally and
-    # each model is measured as it is actually served.
 
   # Classification settings
   classification:
@@ -498,28 +457,24 @@ pipeline:
   # throughput ~3x lower than it needed to be.
   #
   # ONE BATCH HOLDS ONE DOCUMENT TYPE. An engine call carries a single
-  # GenerationParams, so every image in it shares a tile budget — an
-  # 18-tile bank statement and a 6-tile receipt cannot ride together. The
-  # classify stage runs first, so the type is known before batching.
+  # GenerationParams, so every image in it shares a completion budget, and each
+  # type has its own prompt. The classify stage runs first, so the type is known
+  # before batching.
   #
   # THE CEILING IS inference.vllm.models.<model>.max_num_seqs. These values
   # only decide how many requests are OFFERED at once; the scheduler still
   # runs at most max_num_seqs concurrently. Raise both together or neither
   # moves.
   #
-  # Sizes are bounded by peak memory, which scales with tiles per prompt:
-  # receipts carry ~6 + thumbnail, invoices up to 12, bank statements 12.
-  # Set every value to 1 to reproduce exactly the pre-batching behaviour.
-  # SIZED FOR GEMMA 4 ON THIS BRANCH (2026-08-14). Gemma sends ONE image per
-  # prompt — it pan-and-scans internally rather than receiving pre-cropped
-  # tiles — where InternVL3.5 sends up to 7. It is also smaller once
-  # quantised: 9.56 GiB of W4A16 weights against ~16 GiB of bf16, leaving
-  # ~11 GiB rather than ~4.7 for KV cache and activations on a 23 GiB L4.
+  # Sizes are bounded by peak memory. Set every value to 1 to reproduce exactly
+  # the pre-batching behaviour.
+  # SIZED FOR GEMMA 4 (2026-08-14). Gemma is sent ONE image per prompt, which it
+  # pans and scans for itself. The quantised 12B is 9.56 GiB of W4A16 weights,
+  # leaving about 11 GiB for KV cache and activations on a 23 GiB L4.
   #
   # 8 is not a guess: the SROIE benchmark ran this exact checkpoint at
   # batch 8 / max_num_seqs 8 with 560 soft tokens and no retries, reaching
-  # 106 images/min. The InternVL3.5 branch uses 4 for the same reason in
-  # reverse — 7 images per prompt is a far heavier request.
+  # 106 images/min.
   # DOSE PROBE 2026-08-14, was 8. At batch 8 the whole 165-receipt set held
   # accuracy except IS_GST_INCLUDED, which fell 0.8485 -> 0.5758 and took
   # the overall mean 0.930 -> 0.915. It is a single-token boolean, so it is

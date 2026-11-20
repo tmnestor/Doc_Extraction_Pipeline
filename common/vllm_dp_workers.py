@@ -70,39 +70,9 @@ def classify_worker(
             app_config=app_cfg,
         )
 
-        records: list[dict[str, Any]] = []
-        for idx, image_path in enumerate(image_paths):
-            img_start = time.time()
-            # image_name is resolved BEFORE the call so the raw-prompt trace can
-            # attribute each line to its image; without this context every trace
-            # row carries image_name/pipeline/label = null.
-            image_name = Path(image_path).name
-            with prompt_trace.trace_context(
-                image_name=image_name,
-                pipeline="information_extraction",
-                label="classify",
-            ):
-                result = processor.detect_and_classify_document(image_path, verbose=config.verbose)
-            records.append(
-                {
-                    "image_path": image_path,
-                    "image_name": image_name,
-                    "document_type": result["document_type"],
-                    "confidence": result.get("confidence", 1.0),
-                    "raw_response": result.get("raw_response", ""),
-                    "prompt_used": result.get("prompt_used", "detection"),
-                    # Timed so the stage can report inference separately
-                    # from wall clock, which includes engine startup.
-                    "processing_time": time.time() - img_start,
-                }
-            )
-            logger.info(
-                "[%d/%d] %s -> %s",
-                idx + 1,
-                len(image_paths),
-                image_name,
-                result["document_type"],
-            )
+        from stages.classify import _classify_batch_size
+
+        records = _classify_records(processor, image_paths, _classify_batch_size(cfg_path), config.verbose)
 
         # Tag every record with the rank that produced it. Workers run
         # concurrently, so the parent needs this to report the SLOWEST
@@ -242,6 +212,66 @@ def extract_worker(
         return records
     finally:
         model_cm.__exit__(None, None, None)
+
+
+class _Records:
+    """Collects what a stage function writes, for a worker that returns its records instead of writing them.
+
+    The one-engine stage writes each record to its output file as it goes. A worker hands its records back
+    to the parent process, which writes them. Giving the stage's own functions this in place of a file
+    writer lets both paths run the same code, so they cannot drift apart.
+    """
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = []
+
+    def write(self, record: dict[str, Any]) -> None:
+        self.records.append(record)
+
+
+def _classify_records(
+    processor: Any, image_paths: list[str], batch_size: int, verbose: bool
+) -> list[dict[str, Any]]:
+    """Classify a worker's pages, several to an engine call, exactly as the one-engine stage does.
+
+    Each record also carries a processing time, which the parent sums for each worker to report inference
+    apart from wall clock. Inside a batch the requests overlap, so a page's own time is not separable: each
+    is charged an equal share of the whole.
+
+    Args:
+        processor: The document processor.
+        image_paths: This worker's pages, in order.
+        batch_size: Pages per engine call, from pipeline.batching.classify.
+        verbose: Passed through to the processor.
+
+    Returns:
+        One classification record per page, in input order.
+    """
+    from stages.classify import _classify_images
+
+    started = time.time()
+    records = _classify_images(processor, image_paths, batch_size, verbose)
+    share = (time.time() - started) / len(records) if records else 0.0
+    for record in records:
+        record["processing_time"] = share
+    return records
+
+
+def _bank_batch_records(bank_adapter: Any, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Read a batch of bank statements single pass in one engine call, as the one-engine stage does.
+
+    Args:
+        bank_adapter: The bank reader, able to share an engine call (`can_batch`).
+        batch: The statements' classification records.
+
+    Returns:
+        One extraction record per statement, in the shape the stage writes.
+    """
+    from stages.extract import _extract_bank_single_pass_batch
+
+    collected = _Records()
+    _extract_bank_single_pass_batch(collected, bank_adapter, batch)
+    return collected.records
 
 
 def _extract_batch_records(
@@ -387,6 +417,9 @@ def classified_extract_worker(
             bank_budget = app_cfg.get_image_budget("bank_statement")
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
+                generate_many_fn=(
+                    processor.generate_many if getattr(processor, "supports_generate_many", False) else None
+                ),
                 verbose=effective_verbose,
                 use_balance_correction=config.balance_correction,
                 max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
@@ -405,7 +438,7 @@ def classified_extract_worker(
         # own share and the two levels of parallelism compose.
         from common.extraction_batching import plan_extraction_batches, read_batch_sizes
         from common.pipeline_config import load_yaml_config
-        from stages.extract import UNBATCHABLE_TYPES
+        from stages.extract import _unbatchable_types
 
         _, raw_config = load_yaml_config(
             cfg_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
@@ -417,7 +450,7 @@ def classified_extract_worker(
         batches = plan_extraction_batches(
             my_classifications,
             batch_sizes=batch_sizes,
-            unbatchable=UNBATCHABLE_TYPES,
+            unbatchable=_unbatchable_types(bank_adapter),
         )
         logger.info(
             "GPU %d: %d documents in %d engine calls", gpu_id, len(my_classifications), len(batches)
@@ -428,7 +461,10 @@ def classified_extract_worker(
             # A multi-document batch is one engine call; singletons fall
             # through to the per-image path below unchanged.
             if len(batch) > 1:
-                records.extend(_extract_batch_records(processor, batch, verbose=effective_verbose))
+                if batch[0]["document_type"].upper() == "BANK_STATEMENT" and bank_adapter is not None:
+                    records.extend(_bank_batch_records(bank_adapter, batch))
+                else:
+                    records.extend(_extract_batch_records(processor, batch, verbose=effective_verbose))
                 idx += len(batch)
                 logger.info("[%d/%d] batch of %d %s", idx, total, len(batch), batch[0]["document_type"])
                 continue

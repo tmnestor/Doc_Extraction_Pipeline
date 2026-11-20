@@ -24,7 +24,14 @@ from typing import Any
 
 import typer
 
-from .io import StreamingJsonlWriter, append_jsonl, read_completed_images, read_jsonl, write_jsonl
+from .io import (
+    RecordSink,
+    StreamingJsonlWriter,
+    append_jsonl,
+    read_completed_images,
+    read_jsonl,
+    write_jsonl,
+)
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
@@ -518,7 +525,7 @@ def _extract_bank_with_graph(
 
 
 def _extract_bank_with_adapter(
-    writer: StreamingJsonlWriter,
+    writer: RecordSink,
     bank_adapter,
     image_path: str,
     image_name: str,
@@ -593,7 +600,7 @@ def _unbatchable_types(bank_adapter: Any) -> set[str]:
 
 
 def _extract_bank_single_pass_batch(
-    writer: StreamingJsonlWriter,
+    writer: RecordSink,
     bank_adapter: Any,
     batch: list[dict[str, Any]],
 ) -> None:

@@ -564,8 +564,6 @@ class UnifiedBankExtractor:
         use_balance_correction: bool = False,
         verbose: bool = True,
         token_budgets: dict[str, int] | None = None,
-        max_tiles: int | None = None,
-        min_tiles: int | None = None,
         *,
         bank_strategy: str | None,
         generate_many_fn: Any = None,
@@ -580,13 +578,6 @@ class UnifiedBankExtractor:
         self.verbose = verbose
         self._header_tokens = (token_budgets or {}).get("bank_header_detection", 500)
         self._extract_tokens = (token_budgets or {}).get("extract_bank", 4096)
-        # Per-statement tile budget forwarded to the backend as the pre-tiling
-        # tile count. max_tiles None -> the backend's single-image path. min_tiles
-        # is the floor: dense bank tables need a denser grid than the aspect-ratio
-        # matcher picks on its own (a clean A4 portrait under-tiles to 6 without
-        # it) — see plans/2026-06-04-adaptive-tiling-dense-bank.md.
-        self._max_tiles = max_tiles
-        self._min_tiles = min_tiles
 
         catalog = _default_catalog()
         self.column_matcher = ColumnMatcher()
@@ -610,14 +601,8 @@ class UnifiedBankExtractor:
             stdout.flush()
 
     def _gen(self, image: Any, prompt: str, max_tokens: int) -> str:
-        """Call the backend, forwarding the pre-tiling tile budget when set."""
-        return self.generate_fn(image, prompt, max_tokens=max_tokens, extra=self._tile_extra())
-
-    def _tile_extra(self) -> dict[str, int] | None:
-        """The pre-tiling tile budget forwarded to the backend, or None when unset."""
-        if not self._max_tiles:
-            return None
-        return {"max_tiles": self._max_tiles, "min_tiles": self._min_tiles or 1}
+        """Call the backend."""
+        return self.generate_fn(image, prompt, max_tokens=max_tokens, extra=None)
 
     @property
     def can_batch(self) -> bool:
@@ -1254,7 +1239,7 @@ class UnifiedBankExtractor:
         """Read several statements single pass in one engine call.
 
         Every statement gets the request the one-at-a-time path gives it: the
-        schema prompt alone, the same completion budget and tile budget. They
+        schema prompt alone, and the same completion budget. They
         are submitted together so the engine can run them concurrently, and each
         reply is kept as written.
 
@@ -1289,9 +1274,7 @@ class UnifiedBankExtractor:
         prompts = [self._prompts["schema_fallback"]] * len(images)
         self._log(f"[UBE] Single pass: {len(images)} statements in one engine call...")
         with _bypass_rich_stdout():
-            responses = self.generate_many_fn(
-                images, prompts, max_tokens=self._extract_tokens, extra=self._tile_extra()
-            )
+            responses = self.generate_many_fn(images, prompts, max_tokens=self._extract_tokens, extra=None)
         if len(responses) != len(images):
             raise ValueError(
                 f"backend returned {len(responses)} replies for {len(images)} statements; "

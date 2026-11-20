@@ -49,9 +49,6 @@ class VllmSpec:
     # (Operator *intent* stays in run_config.yml; what a checkpoint can physically
     # do is structural, same rationale as attention_backend above.)
 
-    # False for models that size images themselves (Gemma 4: soft-token budget +
-    # pan-and-scan) rather than via InternVL 448-px dynamic tiling.
-    supports_pre_tiling: bool = True
     # False for models too large to hold one whole engine per GPU — the DP fast
     # path would start N independent engines and OOM.
     supports_data_parallel: bool = True
@@ -102,33 +99,6 @@ def build_vllm_loader(spec: VllmSpec):
         def _loader(cfg):
             import os
 
-            # App-side pre-tiling crops 448-px InternVL tiles. A model that sizes
-            # images its own way (Gemma 4: soft-token budget + pan-and-scan) must
-            # not be fed those crops — with limit_mm_per_prompt=1 vLLM would
-            # silently drop all but the first, so the run would look healthy while
-            # reading one corner of the page. Fail fast instead.
-            # Checked FIRST — before the vLLM import and before engine tuning is
-            # resolved — so the diagnostic appears even on a machine without vLLM
-            # installed, and isn't masked by an unrelated ImportError.
-            if cfg.pre_tiling_enabled and not spec.supports_pre_tiling:
-                raise ValueError(
-                    f"What: app-side pre-tiling is enabled, but model "
-                    f"{spec.model_type!r} does not support it — it sizes images via "
-                    f"its own budget (e.g. Gemma 4's soft-token budget + pan-and-scan), "
-                    f"not InternVL 448-px dynamic tiling.\n"
-                    f"  Where: config/run_config.yml -> "
-                    f"inference.tiling.pre_tiling.enabled (currently true), selected "
-                    f"together with bootstrap.model.type: {spec.model_type}\n"
-                    f"  Expected:\n"
-                    f"    inference:\n      tiling:\n        pre_tiling:\n"
-                    f"          enabled: false\n"
-                    f"  How to fix: set inference.tiling.pre_tiling.enabled: false when "
-                    f"running {spec.model_type} (tune image detail via that model's own "
-                    f"knobs under inference.vllm.models.{spec.model_type} instead), or "
-                    f"switch bootstrap.model.type back to a tiling model such as "
-                    f"internvl3-vllm."
-                ) from None
-
             os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
 
             from vllm import LLM
@@ -172,32 +142,6 @@ def build_vllm_loader(spec: VllmSpec):
                 effective_max_num_seqs = vllm_overrides["max_num_seqs"]
                 effective_enable_prefix_caching = vllm_overrides["enable_prefix_caching"]
                 effective_limit_mm = vllm_overrides["limit_mm_per_prompt"]
-
-                # Pre-tiling hands vLLM one image PER tile (plus a thumbnail), so
-                # limit_mm_per_prompt must admit the largest per-doc-type tile
-                # budget + 1. Fail fast here — otherwise vLLM silently drops the
-                # extra sub-images and the dense bank statements stay under-tiled.
-                if cfg.pre_tiling_enabled and "internvl" in spec.model_type:
-                    max_budget = app_config.max_image_budget_tiles()
-                    needed = max_budget + 1  # tiles + thumbnail
-                    if effective_limit_mm < needed:
-                        raise ValueError(
-                            "What: pre-tiling is enabled but "
-                            f"inference.vllm.models.{spec.model_type}.limit_mm_per_prompt="
-                            f"{effective_limit_mm} is too low — pre-tiling sends one "
-                            f"image per tile, and the largest image budget is "
-                            f"{max_budget} tiles (+1 thumbnail = {needed}).\n"
-                            f"  Where: config/run_config.yml -> inference.vllm.models."
-                            f"{spec.model_type}.limit_mm_per_prompt (and inference.tiling.budgets.*.max_tiles)\n"
-                            f"  Expected: limit_mm_per_prompt >= {needed}, e.g.:\n"
-                            f"    inference:\n      vllm:\n        models:\n"
-                            f"          {spec.model_type}:\n"
-                            f"            limit_mm_per_prompt: {needed}\n"
-                            f"  How to fix: raise limit_mm_per_prompt to at least "
-                            f"{needed} for {spec.model_type}, or set "
-                            f"inference.tiling.pre_tiling.enabled: "
-                            f"false to run the single-image baseline."
-                        ) from None
 
                 # max_num_seqs is printed because it is the ceiling on
                 # concurrency and there is otherwise NO way to tell from a run
@@ -295,9 +239,6 @@ def build_vllm_processor_creator(spec: VllmSpec):
             chat_template_kwargs=spec.chat_template_kwargs,
             default_image_first=spec.default_image_first,
             trace_path=effective_trace_path(config),
-            pre_tiling_enabled=config.pre_tiling_enabled,
-            tile_image_size=config.pre_tiling_image_size,
-            tile_use_thumbnail=config.pre_tiling_use_thumbnail,
             debug=config.debug,
         )
 
@@ -320,7 +261,7 @@ def build_vllm_processor_creator(spec: VllmSpec):
 
 # Registered specs, keyed by model_type. ``register_model`` stores loaders and
 # processor creators built from a spec via closures, so without this map a spec's
-# declared capabilities — chat_template_kwargs, supports_pre_tiling,
+# declared capabilities — chat_template_kwargs,
 # default_image_first — are unreachable once registration has happened. That
 # matters because those capabilities fail QUIETLY: a model that reasons when it
 # should not still returns a parseable response.

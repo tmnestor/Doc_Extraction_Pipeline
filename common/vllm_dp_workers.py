@@ -285,7 +285,6 @@ def classified_extract_worker(
         bank_adapter = None
         has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in my_classifications)
         if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
-            bank_budget = app_cfg.get_image_budget("bank_statement")
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
                 generate_many_fn=(
@@ -293,8 +292,6 @@ def classified_extract_worker(
                 ),
                 verbose=effective_verbose,
                 use_balance_correction=config.balance_correction,
-                max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
-                min_tiles=(bank_budget["min_tiles"] if config.pre_tiling_enabled else None),
                 bank_strategy=config.bank_strategy,
             )
             logger.info(
@@ -438,7 +435,6 @@ def sroie_worker(
     config_path: str | None,
     cli_overrides: dict[str, Any],
     max_new_tokens: int,
-    tile_budget: dict[str, int],
     batch_size: int,
 ) -> list[dict[str, Any]]:
     """Worker: build vLLM engine, ask each receipt for its four fields.
@@ -455,10 +451,6 @@ def sroie_worker(
         config_path: Path to run_config.yml (or None).
         cli_overrides: CLI args dict for AppConfig.load().
         max_new_tokens: Generation budget per receipt.
-        tile_budget: GenerationParams.extra carrying BOTH min_tiles and
-            max_tiles, from common.sroie.tiling.tile_extra. Inert unless
-            pre-tiling is on. min_tiles is the lever — sending only the
-            ceiling leaves the backend on its min_tiles=1 default.
         batch_size: Receipts submitted to the engine per chat() call.
 
     Returns:
@@ -515,7 +507,6 @@ def sroie_worker(
                         images,
                         [SROIE_PROMPT] * len(images),
                         max_tokens=max_new_tokens,
-                        extra=dict(tile_budget),
                     )
                 finally:
                     for image in images:
@@ -536,7 +527,6 @@ def sroie_worker(
                                     image.convert("RGB"),
                                     SROIE_PROMPT,
                                     max_tokens=max_new_tokens,
-                                    extra=dict(tile_budget),
                                 )
                             )
                         errors.append(None)

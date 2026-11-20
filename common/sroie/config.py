@@ -38,14 +38,7 @@ def _fail(what: str, config_path: Path, key: str, expected: str) -> None:
 
 @dataclass(frozen=True)
 class SroieSettings:
-    """Everything a SROIE benchmark run needs from THIS block.
-
-    Deliberately not here: the image tile budget. Tiling has one home,
-    ``inference.tiling.budgets.receipt``, and the stage reads it from
-    there. A second tile knob in this block would read as operator intent
-    while changing nothing — pre-tiling is off, and the Gemma 4 loader
-    rejects enabling it outright.
-    """
+    """Everything a SROIE benchmark run needs from THIS block."""
 
     data_dir: Path
     output_dir: Path

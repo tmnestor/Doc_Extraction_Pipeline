@@ -120,8 +120,6 @@ register_vllm_model(
         # Gemma's chat template reasons by default and honours enable_thinking,
         # so it is suppressed here rather than through a template file.
         chat_template_kwargs={"enable_thinking": False},
-        # Sizes images by its own soft-token budget and pan-and-scan.
-        supports_pre_tiling=False,
         # The weights exceed a single card, so one engine on each card is
         # impossible and the data-parallel path must not be taken.
         supports_data_parallel=False,
@@ -153,7 +151,6 @@ register_vllm_model(
         prompt_file="internvl3_prompts.yaml",
         description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
         chat_template_kwargs={"enable_thinking": False},
-        supports_pre_tiling=False,
         supports_data_parallel=True,
         default_image_first=True,
     )

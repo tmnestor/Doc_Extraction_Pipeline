@@ -8,9 +8,8 @@ Two constraints shape the grouping, and both come from how the engine call
 works rather than from taste:
 
 * **One batch, one document type.** A call carries ONE GenerationParams, so
-  every image in it shares a tile budget. Mixing an 18-tile bank statement
-  with a 6-tile receipt would have to pick one budget for both. classify
-  runs first, so the type is already known here.
+  every image in it shares a completion budget, and each type has its own
+  prompt. classify runs first, so the type is already known here.
 * **Consecutive runs only.** Classifications arrive sorted by
   ``sort_for_extraction`` (extraction_order, then secondary_sort), and the
   bank header cache depends on a bank's statements arriving together.

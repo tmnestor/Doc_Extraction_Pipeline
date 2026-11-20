@@ -128,8 +128,6 @@ class PipelineConfig:
 
     # Model options
     model_type: str = "internvl3-vllm"
-    max_tiles: int = 11
-    min_tiles: int | None = None  # Set to enable adaptive quality-based tiling
     flash_attn: bool = True
     enforce_eager: bool = True  # vLLM only: True = skip CUDA graph compilation
     dtype: str = "bfloat16"
@@ -137,12 +135,6 @@ class PipelineConfig:
     chat_template: str | None = None  # vLLM only: path to a chat-template override, or None
     trace_raw_prompts: bool = False  # debug: persist every VLM prompt/response to JSONL
     trace_path: str | None = None  # explicit trace JSONL path, or None for <output_dir> default
-    # vLLM pre-tiling: crop images into per-doc-type tiles ourselves and hand
-    # vLLM the crops as separate images (bypasses the checkpoint's max_dynamic_patch
-    # cap for dense bank statements). See plans/2026-06-04-adaptive-pre-tiling.md.
-    pre_tiling_enabled: bool = False
-    pre_tiling_image_size: int = 448
-    pre_tiling_use_thumbnail: bool = True
 
     # Model loading options
     trust_remote_code: bool = True
@@ -259,58 +251,6 @@ def _resolve_tracing(raw_config: dict[str, Any], config_path: Path) -> tuple[boo
     return enabled, path
 
 
-def _resolve_pre_tiling(raw_config: dict[str, Any], config_path: Path) -> tuple[bool, int, bool]:
-    """Resolve the optional ``pre_tiling`` block (vLLM app-side tiling).
-
-    An absent ``pre_tiling`` block means pre-tiling is off (it is opt-in, like
-    ``tracing``). If the block is present it must carry ``enabled`` (bool),
-    ``image_size`` (positive int) and ``use_thumbnail`` (bool); fails fast on a
-    malformed block, at config load.
-
-    Returns:
-        ``(enabled, image_size, use_thumbnail)``.
-    """
-    pre_tiling = raw_config.get("inference", {}).get("tiling", {}).get("pre_tiling")
-    if pre_tiling is None:
-        return False, 448, True
-
-    required = ("enabled", "image_size", "use_thumbnail")
-    if not isinstance(pre_tiling, dict) or any(k not in pre_tiling for k in required):
-        raise ValueError(
-            "What: the 'pre_tiling' block is malformed (needs 'enabled', "
-            "'image_size' and 'use_thumbnail').\n"
-            f"Where: {config_path} -> inference.tiling.pre_tiling\n"
-            "Expected:\n  inference:\n    tiling:\n      pre_tiling:\n        enabled: false\n"
-            "        image_size: 448\n        use_thumbnail: true\n"
-            "How to fix: add all three keys under 'inference.tiling.pre_tiling', "
-            "or remove the block entirely to disable pre-tiling."
-        )
-
-    enabled = pre_tiling["enabled"]
-    use_thumbnail = pre_tiling["use_thumbnail"]
-    image_size = pre_tiling["image_size"]
-    if not isinstance(enabled, bool) or not isinstance(use_thumbnail, bool):
-        raise ValueError(
-            "What: 'inference.tiling.pre_tiling.enabled' and "
-            "'inference.tiling.pre_tiling.use_thumbnail' must be "
-            f"booleans (got {enabled!r} and {use_thumbnail!r}).\n"
-            f"Where: {config_path} -> inference.tiling.pre_tiling.enabled / "
-            "inference.tiling.pre_tiling.use_thumbnail\n"
-            "Expected: true or false, e.g.: enabled: false\n"
-            "How to fix: set both to true or false."
-        )
-    if not isinstance(image_size, int) or image_size < 1:
-        raise ValueError(
-            "What: 'inference.tiling.pre_tiling.image_size' must be a positive "
-            f"integer (got {image_size!r}).\n"
-            f"Where: {config_path} -> inference.tiling.pre_tiling.image_size\n"
-            "Expected: the InternVL tile size in pixels, e.g.: image_size: 448\n"
-            "How to fix: set 'inference.tiling.pre_tiling.image_size' to a positive "
-            "integer (448 for InternVL3)."
-        )
-    return enabled, image_size, use_thumbnail
-
-
 def _require_section_keys(
     section: dict[str, Any],
     keys: list[str],
@@ -387,14 +327,12 @@ def load_yaml_config(
     if model_cfg:
         _require_section_keys(
             model_cfg,
-            ["type", "path", "max_tiles", "min_tiles", "flash_attn", "enforce_eager", "dtype"],
+            ["type", "path", "flash_attn", "enforce_eager", "dtype"],
             "bootstrap.model",
             config_path,
         )
         flat_config["model_type"] = model_cfg.get("type")
         flat_config["model_path"] = model_cfg.get("path")
-        flat_config["max_tiles"] = model_cfg.get("max_tiles")
-        flat_config["min_tiles"] = model_cfg.get("min_tiles")
         flat_config["flash_attn"] = model_cfg.get("flash_attn")
         flat_config["enforce_eager"] = model_cfg.get("enforce_eager")
         flat_config["dtype"] = model_cfg.get("dtype")
@@ -468,14 +406,6 @@ def load_yaml_config(
     flat_config["trace_raw_prompts"] = trace_enabled
     if trace_path is not None:
         flat_config["trace_path"] = trace_path
-
-    # vLLM pre-tiling (opt-in; absent block -> off)
-    pre_tiling_enabled, pre_tiling_image_size, pre_tiling_use_thumbnail = _resolve_pre_tiling(
-        raw_config, config_path
-    )
-    flat_config["pre_tiling_enabled"] = pre_tiling_enabled
-    flat_config["pre_tiling_image_size"] = pre_tiling_image_size
-    flat_config["pre_tiling_use_thumbnail"] = pre_tiling_use_thumbnail
 
     # Remove None values from flat config
     flat_config = {k: v for k, v in flat_config.items() if v is not None}

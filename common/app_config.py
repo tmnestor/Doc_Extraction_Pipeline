@@ -227,7 +227,6 @@ class AppConfig:
         "_extraction_order",
         "_secondary_sort",
         "_extraction_skip_labels",
-        "_image_budgets",
         "_bank_header_cache",
         "_stage",
     )
@@ -261,7 +260,6 @@ class AppConfig:
         extraction_order: list[str] | None = None,
         secondary_sort: str = "none",
         extraction_skip_labels: list[str] | None = None,
-        image_budgets: dict[str, dict[str, int]] | None = None,
         bank_header_cache: dict[str, Any] | None = None,
     ) -> None:
         self.pipeline = pipeline
@@ -277,7 +275,6 @@ class AppConfig:
         self._extraction_order = extraction_order or []
         self._secondary_sort = secondary_sort
         self._extraction_skip_labels = extraction_skip_labels or []
-        self._image_budgets = image_budgets or {}
         self._bank_header_cache = bank_header_cache or {"enabled": False, "key_pattern": ""}
         self._stage: str | None = None
 
@@ -402,9 +399,6 @@ class AppConfig:
         # 17. Validate and build extraction_skip_labels
         skip_labels = cls._validate_extraction_skip_labels(raw_config, config_file)
 
-        # 18. Validate and build image_budgets
-        image_budgets = cls._validate_image_budgets(raw_config, config_file)
-
         # 19. Validate and build bank_header_cache
         bank_header_cache = cls._validate_bank_header_cache(raw_config, config_file)
 
@@ -422,7 +416,6 @@ class AppConfig:
             extraction_order=extraction_order,
             secondary_sort=secondary_sort,
             extraction_skip_labels=skip_labels,
-            image_budgets=image_budgets,
             bank_header_cache=bank_header_cache,
         )
 
@@ -631,27 +624,6 @@ class AppConfig:
         """Classification labels that bypass extraction entirely."""
         return list(self._extraction_skip_labels)
 
-    # -- Image budgets (Phase 3) -----------------------------------------------
-
-    def get_image_budget(self, doc_type: str) -> dict[str, int]:
-        """Return tile budget for *doc_type*, falling back to ``default``.
-
-        Returns:
-            Dict with at least ``max_tiles`` key.
-        """
-        budget = self._image_budgets.get(doc_type.lower())
-        if budget is not None:
-            return dict(budget)
-        return dict(self._image_budgets["default"])
-
-    def max_image_budget_tiles(self) -> int:
-        """Return the largest ``max_tiles`` across all configured image budgets.
-
-        Used to size ``limit_mm_per_prompt`` when pre-tiling is enabled (the
-        backend sends one image per tile, so the engine must admit the ceiling).
-        """
-        return max(b["max_tiles"] for b in self._image_budgets.values())
-
     # -- Bank header cache (Phase 7) -------------------------------------------
 
     @property
@@ -781,104 +753,6 @@ class AppConfig:
                     ]
                 )
         return list(value)
-
-    @classmethod
-    def _validate_image_budgets(cls, raw_config: dict, config_file: str) -> dict[str, dict[str, int]]:
-        """Validate ``inference.tiling.budgets`` section in YAML."""
-        budgets = raw_config.get("inference", {}).get("tiling", {}).get("budgets")
-        if not budgets:
-            raise ConfigError(
-                [
-                    f"Missing required key 'inference.tiling.budgets' in {config_file}. "
-                    f"What: the key 'inference.tiling.budgets' is absent or empty. "
-                    f"Where: {config_file} → inference.tiling.budgets. "
-                    f"Expected: a mapping with at least a 'default' entry, e.g.:\n"
-                    f"  inference:\n"
-                    f"    tiling:\n"
-                    f"      budgets:\n"
-                    f"        default:\n"
-                    f"          max_tiles: 18\n"
-                    f"How to fix: add an 'inference.tiling.budgets:' section with a "
-                    f"'default' entry to {config_file}."
-                ]
-            )
-        if not isinstance(budgets, dict):
-            raise ConfigError(
-                [
-                    f"Invalid type for 'inference.tiling.budgets' in {config_file}: "
-                    f"expected a mapping, got {type(budgets).__name__}. "
-                    f"Where: {config_file} → inference.tiling.budgets. "
-                    f"Expected: a YAML mapping, e.g.:\n"
-                    f"  inference:\n"
-                    f"    tiling:\n"
-                    f"      budgets:\n"
-                    f"        default:\n"
-                    f"          max_tiles: 18\n"
-                    f"How to fix: change 'inference.tiling.budgets' to a YAML mapping "
-                    f"in {config_file}."
-                ]
-            )
-        if "default" not in budgets:
-            raise ConfigError(
-                [
-                    f"Missing required key 'inference.tiling.budgets.default' in {config_file}. "
-                    f"What: the 'default' entry is absent from 'inference.tiling.budgets'. "
-                    f"Where: {config_file} → inference.tiling.budgets.default. "
-                    f"Expected: a mapping with 'max_tiles', e.g.:\n"
-                    f"  inference:\n"
-                    f"    tiling:\n"
-                    f"      budgets:\n"
-                    f"        default:\n"
-                    f"          max_tiles: 18\n"
-                    f"How to fix: add a 'default:' entry under 'inference.tiling.budgets' "
-                    f"in {config_file}."
-                ]
-            )
-        for doc_type, entry in budgets.items():
-            if not isinstance(entry, dict) or "min_tiles" not in entry or "max_tiles" not in entry:
-                raise ConfigError(
-                    [
-                        f"Invalid entry for 'inference.tiling.budgets.{doc_type}' in {config_file}. "
-                        f"What: each entry must have both 'min_tiles' and 'max_tiles' "
-                        f"keys; one or both are missing. "
-                        f"Where: {config_file} → inference.tiling.budgets.{doc_type}. "
-                        f"Expected: a mapping with 'min_tiles' and 'max_tiles', e.g.:\n"
-                        f"  inference:\n"
-                        f"    tiling:\n"
-                        f"      budgets:\n"
-                        f"        {doc_type}:\n"
-                        f"          min_tiles: 1\n"
-                        f"          max_tiles: 18\n"
-                        f"How to fix: add 'min_tiles: <int>' and 'max_tiles: <int>' "
-                        f"under 'inference.tiling.budgets.{doc_type}' in {config_file}."
-                    ]
-                )
-            for key in ("min_tiles", "max_tiles"):
-                if not isinstance(entry[key], int) or entry[key] < 1:
-                    raise ConfigError(
-                        [
-                            f"Invalid '{key}' for 'inference.tiling.budgets.{doc_type}' in {config_file}. "
-                            f"What: '{key}' must be a positive integer, got {entry[key]!r}. "
-                            f"Where: {config_file} → inference.tiling.budgets.{doc_type}.{key}. "
-                            f"Expected: a positive integer, e.g. 18. "
-                            f"How to fix: set '{key}' to a positive integer under "
-                            f"'inference.tiling.budgets.{doc_type}' in {config_file}."
-                        ]
-                    )
-            if entry["min_tiles"] > entry["max_tiles"]:
-                raise ConfigError(
-                    [
-                        f"Invalid tile budget for 'inference.tiling.budgets.{doc_type}' in {config_file}. "
-                        f"What: min_tiles ({entry['min_tiles']}) exceeds max_tiles "
-                        f"({entry['max_tiles']}). "
-                        f"Where: {config_file} → inference.tiling.budgets.{doc_type}. "
-                        f"Expected: min_tiles <= max_tiles, e.g. min_tiles: 12, "
-                        f"max_tiles: 18. "
-                        f"How to fix: lower 'min_tiles' or raise 'max_tiles' under "
-                        f"'inference.tiling.budgets.{doc_type}' in {config_file}."
-                    ]
-                )
-        return dict(budgets)
 
     @classmethod
     def _validate_bank_header_cache(cls, raw_config: dict, config_file: str) -> dict[str, Any]:

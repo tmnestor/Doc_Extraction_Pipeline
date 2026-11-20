@@ -311,7 +311,6 @@ class DocumentOrchestrator:
 
         Args:
             extra: Optional dict passed through to GenerationParams.extra
-                (e.g. ``{"max_tiles": 6}`` for per-type tile budgets).
         """
         params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
         if self._has_oom_recovery:
@@ -359,34 +358,6 @@ class DocumentOrchestrator:
             )
         params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
         return self._backend.generate_many(images, prompts, params)  # type: ignore[attr-defined]
-
-    @staticmethod
-    def tile_extra_from_classification(classification_info: dict) -> dict | None:
-        """Build GenerationParams.extra from an injected per-type tile budget.
-
-        BOTH bounds must travel. ``min_tiles`` is the actual lever: the
-        InternVL tiling algorithm picks its grid by closest aspect-ratio
-        match, so a receipt settles on 2-3 detail tiles and never
-        approaches ``max_tiles``. Forwarding only the ceiling leaves the
-        backend on its ``min_tiles=1`` default, which made
-        ``inference.tiling.budgets.<type>.min_tiles`` inert for every type
-        except bank_statement — the one path that passed both, via
-        UnifiedBankExtractor.
-
-        Args:
-            classification_info: Classification record, optionally carrying
-                ``_max_tiles`` and ``_min_tiles`` injected by the dispatch.
-
-        Returns:
-            The extra dict, or None when no budget was injected (pre-tiling
-            off), which sends the backend down its single-image path.
-        """
-        max_tiles = classification_info.get("_max_tiles")
-        if max_tiles is None:
-            return None
-        # Absent floor reproduces the previous behaviour rather than
-        # silently forcing a dense grid on a caller that never asked.
-        return {"max_tiles": max_tiles, "min_tiles": classification_info.get("_min_tiles", 1)}
 
     def generate_batch(
         self,
@@ -638,16 +609,12 @@ class DocumentOrchestrator:
             base_doc_type = strip_structure_suffixes(document_type)
             doc_specific_tokens = self._calculate_max_tokens(len(doc_field_list), base_doc_type)
 
-            # Per-type tile budget (Phase 3: injected by extraction dispatch)
-            extra = self.tile_extra_from_classification(classification_info)
-
             # Process with document-specific settings
             result = self.process_single_image(
                 image_path,
                 custom_prompt=extraction_prompt,
                 custom_max_tokens=doc_specific_tokens,
                 field_list=doc_field_list,
-                extra=extra,
             )
 
             if verbose:
@@ -676,7 +643,6 @@ class DocumentOrchestrator:
 
         Args:
             extra: Optional dict passed through to GenerationParams.extra
-                (e.g. ``{"max_tiles": 6}`` for per-type tile budgets).
         """
         active_fields = field_list or self.field_list
         active_count = len(active_fields)
@@ -861,14 +827,7 @@ class DocumentOrchestrator:
             tokens = self._calculate_max_tokens(len(doc_field_list), base_doc_type)
             max_tokens_needed = max(max_tokens_needed, tokens)
 
-        # Per-type tile budget. A batch holds ONE document type by
-        # construction (see common/extraction_batching.py), so every image
-        # here shares a budget and the first record speaks for all of them.
-        # Without this the batch path would run with pre-tiling disabled
-        # while the per-image path tiled normally — the same output from
-        # two different pipelines.
-        extra = self.tile_extra_from_classification(classification_infos[0])
-        params = GenerationParams(max_tokens=max_tokens_needed, extra=extra or {})
+        params = GenerationParams(max_tokens=max_tokens_needed, extra={})
 
         backend = self._backend
         if not isinstance(backend, BatchInference):

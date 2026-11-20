@@ -1,7 +1,7 @@
 """SROIE benchmark stage.
 
 Runs the ICDAR 2019 SROIE Task 3 key-information benchmark through the
-repo's own model stack, so the tiling, tokenizer and chat-template
+repo's own model stack, so the tokenizer and chat-template
 handling under test are the ones production uses.
 
 The stage is deliberately thin: everything model-independent lives in
@@ -38,7 +38,6 @@ from common.sroie.runner import (
     run_benchmark_batched,
 )
 from common.sroie.scoring import MatchPolicy, score_records
-from common.sroie.tiling import tile_extra
 
 logger = logging.getLogger(__name__)
 
@@ -97,17 +96,6 @@ def run(
         records = records[:max_images]
     logger.info("SROIE: %d records from %s", len(records), settings.data_dir)
 
-    # SROIE is 100% receipts, so the tile budget is the RECEIPT budget from
-    # inference.tiling.budgets — the same one production uses. It only takes
-    # effect when inference.tiling.pre_tiling is enabled; with pre-tiling off,
-    # vLLM tiles internally and this is inert. Gemma 4 cannot pre-tile at all
-    # (its loader rejects it), so each model is measured as it is served.
-    tile_budget = app_cfg.get_image_budget("receipt")
-    logger.info(
-        "Receipt tile budget: %s (applies only when pre-tiling is enabled)",
-        tile_budget,
-    )
-
     # -- vLLM data-parallel fast path -----------------------------------------
     # 347 receipts are independent single-image requests, so one engine per
     # GPU (DP) beats one model split across GPUs (TP): the work partitions
@@ -123,7 +111,6 @@ def run(
                 "config_path": str(config_path) if config_path else None,
                 "cli_overrides": cli_args,
                 "max_new_tokens": settings.max_new_tokens,
-                "tile_budget": tile_extra(tile_budget),
                 "batch_size": settings.batch_size,
             },
             app_config=app_cfg,
@@ -171,7 +158,6 @@ def run(
                     images,
                     [SROIE_PROMPT] * len(images),
                     max_tokens=settings.max_new_tokens,
-                    extra=tile_extra(tile_budget),
                 )
             finally:
                 for image in images:

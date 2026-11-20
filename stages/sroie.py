@@ -6,9 +6,8 @@ handling under test are the ones production uses.
 
 The stage is deliberately thin: everything model-independent lives in
 ``common/sroie/`` and is unit-tested without a GPU. Swapping the model is a
-``bootstrap.model.type`` change in run_config.yml, which is what keeps the
-InternVL3 and Gemma 4 runs comparable — same prompt, same parser, same
-scorer, byte for byte.
+``bootstrap.model.type`` change in run_config.yml, which is what keeps runs of
+different models comparable: same prompt, same parser, same scorer, byte for byte.
 
 Run it through the entrypoint, never directly:
 

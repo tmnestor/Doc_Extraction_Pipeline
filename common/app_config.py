@@ -1,7 +1,7 @@
 """Unified application configuration.
 
-Single entry point (AppConfig.load) replaces the 7-step config dance
-in cli.py and eliminates mutable module globals.
+One way in (AppConfig.load) for every stage, and no module-level state that can be changed
+after loading.
 """
 
 from __future__ import annotations
@@ -202,8 +202,7 @@ class AppConfig:
     """Unified, immutable configuration surface.
 
     Constructed once at startup, threaded to all consumers.
-    Replaces the 7-step config dance in cli.py and eliminates
-    all mutable module globals in model_config and field_config.
+    Nothing in it is changed after loading.
     """
 
     __slots__ = (

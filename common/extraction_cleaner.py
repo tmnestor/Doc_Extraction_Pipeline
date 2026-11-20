@@ -3,7 +3,7 @@
 Extraction Value Cleaner - Centralized field value cleaning for document processors.
 
 This module provides standardized cleaning and normalization of extracted field values
-for both Llama and InternVL3 document-aware processors, ensuring consistent output
+for whichever model wrote them, ensuring consistent output
 formatting and improved accuracy against ground truth data.
 """
 

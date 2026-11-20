@@ -303,7 +303,7 @@ class PromptCatalog:
         data = self._load_yaml(path)
         return data.get("patterns", {})
 
-    # -- Auxiliary: extraction routing (replaces cli.py:load_prompt_config) ----
+    # -- Auxiliary: extraction routing ----
 
     def build_extraction_routing(self, model_type: str) -> dict[str, str]:
         """Derive the ``{DOC_TYPE: prompt_key}`` mapping for a given model.

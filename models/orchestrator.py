@@ -450,7 +450,7 @@ class DocumentOrchestrator:
         classified by the same rules whichever way its reply was obtained.
         """
         # Try enriched parsing (COLUMNS/PAID/ROWS) first, then legacy keywords
-        from common.turn_parsers import ClassificationParser
+        from common.classification_parser import ClassificationParser
 
         parser = ClassificationParser(fallback_type=self._fallback_type)
         enriched = parser._parse_enriched(response)
@@ -717,7 +717,7 @@ class DocumentOrchestrator:
                 "field_count": active_count,
             }
 
-    # -- Batch methods (used by DocumentPipeline when supports_batch is True) --
+    # -- Several pages in one engine call --
 
     def detect_batch(self, image_paths: list[str], verbose: bool = False) -> list[dict]:
         """Batch document detection via backend.generate_batch().
@@ -791,8 +791,7 @@ class DocumentOrchestrator:
     ) -> list[dict]:
         """Batch document extraction via backend.generate_batch().
 
-        Called by DocumentPipeline only when supports_batch is True.
-        No isinstance check here -- the pipeline handles routing.
+        Called by the extract stage for a group of pages of one document type.
         """
         if not image_paths:
             return []

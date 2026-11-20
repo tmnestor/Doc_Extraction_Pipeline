@@ -1,8 +1,8 @@
-"""Turn parsers for the agentic extraction engine.
+"""Reading the model's reply to the classification prompt.
 
-Each parser implements the TurnParser protocol: ``parse(raw_response, context) -> dict``.
-Parsers are standalone classes that duplicate algorithms from the notebook
-prototype and unified_bank_extractor.py -- no existing code is modified.
+``ClassificationParser`` turns the reply into a document type, with the evidence the model gave for it.
+``HeaderListParser`` reads a list of column headings, which the classification of a statement uses.
+Each has one method: ``parse(raw_response, context) -> dict``.
 """
 
 import re

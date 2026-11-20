@@ -44,7 +44,7 @@ class BatchStats:
     num_extraction_calls: int
 
     def to_dict(self) -> dict[str, float]:
-        """Convert to the dict shape expected by cli.py."""
+        """The same values as a plain dict."""
         return {
             "configured_batch_size": float(self.configured_batch_size),
             "avg_detection_batch": self.avg_detection_batch,

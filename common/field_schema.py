@@ -57,7 +57,7 @@ class FieldSchema:
     1. Typed field categories (evaluation_metrics.py -- 7 call sites):
        ``fields.monetary_fields``, ``fields.boolean_fields``, etc.
 
-    2. Per-doc-type field lists (cli.py, orchestrator.py, document_pipeline.py):
+    2. Per-doc-type field lists (orchestrator.py):
        ``fields.get_extraction_fields("bank_statement")``
 
     3. Raw universal field list (extraction_parser.py):

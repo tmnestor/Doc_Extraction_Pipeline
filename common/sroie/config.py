@@ -16,7 +16,7 @@ _EXAMPLE = """\
 pipeline:
   sroie:
     data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test
-    output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_internvl3
+    output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
     max_new_tokens: 256
     batch_size: 8"""
 

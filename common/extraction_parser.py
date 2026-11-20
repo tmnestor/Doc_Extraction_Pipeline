@@ -363,12 +363,12 @@ def parse_extraction_response(
     or formatting issues, extracting only the key-value pairs.
 
     Implements a two-pass parsing strategy:
-    1. First pass: Standard line-by-line parsing (works for clean outputs like Llama)
-    2. Second pass: Markdown handling fallback (handles problematic outputs like InternVL3)
+    1. First pass: Standard line-by-line parsing (works for a reply in the asked format)
+    2. Second pass: Markdown handling fallback (for a reply the model wrote as markdown)
 
     Args:
         response_text (str): Raw model response containing key-value pairs
-        clean_conversation_artifacts (bool): Whether to clean Llama-style artifacts
+        clean_conversation_artifacts (bool): Whether to strip conversational openings
         expected_fields (list[str]): Optional list of fields to parse (for filtered extraction)
 
     Returns:

@@ -5,8 +5,8 @@ prompt across *every* pipeline (classify, extract) without per-stage plumbing.
 
 Callers may set per-call context (``image_name``, ``pipeline``, ``label``) via
 ``trace_context()``; because it uses ``contextvars``, setting ``image_name``
-once per image at a stage loop propagates to every nested VLM call (detection,
-bank turns, graph nodes).
+once per image at a stage loop propagates to every nested VLM call (classification,
+extraction).
 
 Disabled by default: with no sink configured, ``record()`` is a cheap no-op.
 """

@@ -1,7 +1,5 @@
-"""Pipeline operations: model loading, processor creation, batch execution.
-
-Extracted from cli.py so the stages can share the load/create/run seams
-without importing the CLI.
+"""What every stage that reads pages needs first: the prompts and fields, the model, and the
+document processor built on it.
 """
 
 import contextlib

@@ -64,8 +64,7 @@ class VllmBackend:
     def _chat_kwargs(self) -> dict[str, Any]:
         """Extra kwargs for ``engine.chat()`` — thinking suppression, if configured.
 
-        Empty when the model's spec sets no ``chat_template_kwargs``, so the call
-        site stays identical to the old behaviour for InternVL.
+        Empty when the model's spec sets no ``chat_template_kwargs``.
         """
         if not self._chat_template_kwargs:
             return {}

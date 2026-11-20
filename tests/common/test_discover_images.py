@@ -1,10 +1,9 @@
-"""`max_images` and `document_types` must apply on the stages path, not just the CLI.
+"""`max_images` and `document_types` must be applied by the stages.
 
 Both keys are required in `pipeline.information_extraction.input` and are loaded
-into PipelineConfig, but until 2026-09-21 only ``cli.py`` honoured them:
+into PipelineConfig, but until 2026-09-21 the stages did not honour them:
 ``stages/classify.py`` and ``stages/extract.py`` called ``discover_images``
-with the directory alone. Asking for 12 images through
-``KFP_TASK=run_info_extract`` silently processed all 165: the config read as
+with the directory alone. Asking for 12 images silently processed all 165: the config read as
 applied while doing nothing, which is the exact silent-no-op the fail-fast rule
 exists to prevent.
 

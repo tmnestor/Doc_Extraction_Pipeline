@@ -1,4 +1,4 @@
-"""Pipeline configuration system for InternVL3.5-8B document extraction.
+"""Pipeline configuration for document extraction.
 
 Provides configuration loading, merging, and validation without
 framework dependencies (no typer, rich, or torch at module level).
@@ -494,11 +494,10 @@ def discover_images(
 ) -> list[Path]:
     """Discover images in a data directory, applying the configured selection.
 
-    Both filters live HERE rather than at the call sites. They used to be applied
-    only in ``cli.py``, so ``stages/classify.py`` and ``stages/extract.py`` — the
-    path ``KFP_TASK=run_info_extract`` actually drives — ignored them: asking for
-    12 images processed all 165 while the YAML read as applied. Keeping the
-    selection inside the discovery function means a caller cannot omit it.
+    Both filters live HERE and not at the call sites. Until 21 September 2026 the stages
+    called this with the folder alone and so ignored them: asking for 12 images processed
+    all 165 while the YAML read as applied. Keeping the selection inside the discovery
+    function means a caller cannot omit it.
 
     Args:
         data_dir: Directory to scan for images.

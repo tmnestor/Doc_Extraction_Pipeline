@@ -48,20 +48,6 @@ bootstrap:
   gpus:
     num_gpus: 0                # 0 = auto-detect all GPUs, 1 = single GPU, N = use N GPUs
     data_parallel_size: null   # null = auto (num_gpus for vLLM, ignored for HF)
-    # How ONE engine is spread over several cards, for a model too large for one card.
-    # (A model that fits one card runs as a whole engine on each card instead, and this
-    # key does not touch it.)
-    #   tensor   = every layer is split across the cards (vLLM tensor_parallel_size = the
-    #              number of cards). The cards exchange results at every layer. The path
-    #              every run to date has used.
-    #   pipeline = the layers are shared out in sequence, the first on one card and the
-    #              rest on the next (vLLM pipeline_parallel_size = the number of cards,
-    #              tensor_parallel_size = 1). The cards exchange results once per pass.
-    # vLLM's guide advises pipeline for cards without NVLink, which L4s are, "for higher
-    # throughput and lower communication overhead". NOT YET MEASURED HERE, and the one
-    # outside measurement found (two L40S on PCIe) favoured tensor. Whether vLLM accepts
-    # pipeline when loaded in-process, as this pipeline loads it, is also untested.
-    engine_split: tensor
   # Logging
   logging:
     # log_dir: /efs/shared/PoC_data/logs   # Directory for entrypoint log files (EFS-backed)

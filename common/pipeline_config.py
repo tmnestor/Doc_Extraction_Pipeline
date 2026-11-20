@@ -151,7 +151,6 @@ class PipelineConfig:
     # Multi-GPU options
     num_gpus: int = 0  # 0 = auto-detect all GPUs, 1 = single GPU, N = use N GPUs
     data_parallel_size: int | None = None  # None = auto (num_gpus for vLLM, ignored for HF)
-    engine_split: str = "tensor"  # how one engine spans several cards: tensor | pipeline
 
     # Output options
     skip_visualizations: bool = False
@@ -312,10 +311,6 @@ def _resolve_pre_tiling(raw_config: dict[str, Any], config_path: Path) -> tuple[
     return enabled, image_size, use_thumbnail
 
 
-# The ways one engine can be spread over several cards (bootstrap.gpus.engine_split).
-ENGINE_SPLITS = ("tensor", "pipeline")
-
-
 def _require_section_keys(
     section: dict[str, Any],
     keys: list[str],
@@ -457,20 +452,7 @@ def load_yaml_config(
 
     gpus_cfg = raw_config.get("bootstrap", {}).get("gpus", {})
     if gpus_cfg:
-        _require_section_keys(
-            gpus_cfg, ["num_gpus", "data_parallel_size", "engine_split"], "bootstrap.gpus", config_path
-        )
-        if gpus_cfg["engine_split"] not in ENGINE_SPLITS:
-            raise ValueError(
-                f"What: bootstrap.gpus.engine_split is {gpus_cfg['engine_split']!r}, which is not a way of "
-                f"spreading an engine over several cards.\n"
-                f"Where: {config_path} -> bootstrap.gpus.engine_split\n"
-                f"Expected: one of {', '.join(ENGINE_SPLITS)}, e.g.:\n"
-                f"  engine_split: tensor\n"
-                f"How to fix: set bootstrap.gpus.engine_split to tensor (every layer split across the "
-                f"cards) or pipeline (the layers shared out in sequence)."
-            )
-        flat_config["engine_split"] = gpus_cfg["engine_split"]
+        _require_section_keys(gpus_cfg, ["num_gpus", "data_parallel_size"], "bootstrap.gpus", config_path)
     flat_config["num_gpus"] = gpus_cfg.get("num_gpus") if gpus_cfg else None
     flat_config["data_parallel_size"] = gpus_cfg.get("data_parallel_size") if gpus_cfg else None
 

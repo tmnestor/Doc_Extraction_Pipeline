@@ -23,11 +23,8 @@
 # source of truth, and `_print_task_help` renders the human-readable list at
 # runtime (run with KFP_TASK unset to print it). To avoid a third copy drifting
 # out of sync, the full list is NOT duplicated here — read `_print_task_help`.
-# Note: `filter` is deprecated — kept as a no-op for KFP manifest compatibility.
 #
 # Local examples:
-#   KFP_TASK=run_info_extract image_dir=../evaluation_data/synthetic bash entrypoint.sh
-#   KFP_TASK=run_graph_robust image_dir=../evaluation_data/synthetic ground_truth=../evaluation_data/synthetic/ground_truth.jsonl bash entrypoint.sh
 #
 # =============================================================================
 
@@ -307,8 +304,6 @@ _print_task_help() {
   # and unknown (*) dispatch branches.  Keep the header comment at the top of
   # this file in sync with this list.
   log "  Available tasks:"
-  log "    run_info_extract      — 4-stage classic pipeline (classify/extract/clean/evaluate)  [local dev]"
-  log "    run_graph_robust      — 3-stage probe-based pipeline (extract --graph-robust/clean/evaluate)  [local dev]"
   log "    split                   Stage 0: one image per receipt from photographs of several (GPU)"
   log "    classify              — Stage 1: document type detection (GPU)"
   log "    extract               — Stage 2: field extraction (GPU)"
@@ -356,35 +351,6 @@ _read_inference_elapsed() {
   fi
 }
 
-_run_cpu_stages() {
-  # Run the clean + evaluate CPU tail shared by run_info_extract and
-  # run_graph_robust.  Expects INFERENCE_ELAPSED, RAW_EXTRACTIONS,
-  # CLEAN_EXTRACTIONS, EVAL_DIR to be set by the caller.
-  local clean_label="${1:?usage: _run_cpu_stages <clean_label> <eval_label>}"
-  local eval_label="${2:?usage: _run_cpu_stages <clean_label> <eval_label>}"
-
-  log ""
-  log "${clean_label}: clean (CPU, no GPU)..."
-  python3 -m stages.clean \
-    --input      "$RAW_EXTRACTIONS" \
-    --output-dir "$CLEAN_EXTRACTIONS" || exit $?
-  log "${clean_label}: clean complete."
-
-  if _is_set "${ground_truth:-}"; then
-    log ""
-    log "${eval_label}: evaluate (CPU, no GPU)..."
-    python3 -m stages.evaluate \
-      --input              "$CLEAN_EXTRACTIONS" \
-      --ground-truth       "$ground_truth" \
-      --output-dir         "$EVAL_DIR" \
-      --inference-seconds  "$INFERENCE_ELAPSED" || exit $?
-    log "${eval_label}: evaluate complete."
-  else
-    log ""
-    log "${eval_label}: evaluate skipped — ground_truth not provided."
-  fi
-}
-
 # ---- Per-stage runners (shared by KFP pods and local orchestrators) ---- #
 # Each runner is the single source of truth for one stage's `python3 -m stages.*`
 # invocation, called by BOTH its standalone KFP pod branch and the local
@@ -399,8 +365,7 @@ _run_cpu_stages() {
 # (OPT_MODEL, OUT_ROOT-derived paths).
 
 _run_classify() {
-  # GPU. Document type detection. Used by the `classify` pod and
-  # run_info_extract Phase 1 (identical invocation).
+  # GPU. Document type detection.
   python3 -m stages.classify \
     --data-dir   "${image_dir:?image_dir env var required}" \
     --output-dir "$CLASSIFICATIONS" \
@@ -408,41 +373,13 @@ _run_classify() {
 }
 
 _run_extract() {
-  # GPU. Field extraction. $1 = mode:
-  #   auto         — classified if $CLASSIFICATIONS exists, else graph-robust
-  #                  (the `extract` pod auto-detects per the KFP DAG shape)
-  #   classified   — type-specific extraction from $CLASSIFICATIONS
-  #                  (run_info_extract, where classify always ran first)
-  #   graph_robust — force probe-based extraction, ignoring any (stale)
-  #                  classifications file (run_graph_robust)
-  local mode="${1:?usage: _run_extract <auto|classified|graph_robust>}"
-  local use_classified=false
-  case "$mode" in
-    classified) use_classified=true ;;
-    graph_robust) use_classified=false ;;
-    auto)
-      if [[ -f "$CLASSIFICATIONS" ]]; then
-        use_classified=true
-        log "Found $CLASSIFICATIONS — using classified extraction."
-      else
-        log "No classifications found — using graph-robust probes."
-      fi
-      ;;
-    *) log "FATAL: _run_extract: unknown mode '$mode'"; exit 1 ;;
-  esac
-  if $use_classified; then
-    python3 -m stages.extract \
-      --classifications "$CLASSIFICATIONS" \
-      --data-dir        "${image_dir:?image_dir env var required}" \
-      --output-dir      "$RAW_EXTRACTIONS" \
-      "${OPT_MODEL[@]}" || exit $?
-  else
-    python3 -m stages.extract \
-      --data-dir   "${image_dir:?image_dir env var required}" \
-      --output-dir "$RAW_EXTRACTIONS" \
-      --graph-robust \
-      "${OPT_MODEL[@]}" || exit $?
-  fi
+  # GPU. Field extraction, by document type, from $CLASSIFICATIONS. The classify
+  # stage must have run first; the stage itself stops with a message if it has not.
+  python3 -m stages.extract \
+    --classifications "$CLASSIFICATIONS" \
+    --data-dir        "${image_dir:?image_dir env var required}" \
+    --output-dir      "$RAW_EXTRACTIONS" \
+    "${OPT_MODEL[@]}" || exit $?
 }
 
 # #############################################################################
@@ -587,86 +524,6 @@ log "KFP_TASK: ${KFP_TASK:-<not set>}"
 log ""
 
 case "${KFP_TASK:-}" in
-  # ========================================================================
-  # LOCAL DEV ONLY — NOT used by the KFP pipeline.
-  # ========================================================================
-  # In production, KFP runs each stage in its own pod by setting
-  # KFP_TASK=classify / extract / clean / evaluate (see branches below).
-  # The `run_info_extract` branch chains all stages in a single shell
-  # for sandbox/laptop iteration — it does NOT appear in the KFP DAG and
-  # should never be set by the KFP manifest. Keep it for local smoke tests.
-  # ========================================================================
-  run_info_extract)
-    # Local simulation of the KFP pipeline.
-    # Each phase is a FRESH python3 process: model loads, runs, exits,
-    # CUDA context is torn down and GPU memory fully released before the
-    # next phase starts. This mirrors pod-per-stage KFP deployment and
-    # isolates GPU state between phases (no fragmentation leak across
-    # classify → extract → clean → evaluate).
-    log "Mode: run_info_extract — simulating 4-stage KFP pipeline locally."
-    log "Output root: $OUT_ROOT"
-    mkdir -p "$OUT_ROOT"
-
-    # Clear previous outputs only when CLEAR_PREV_OUTPUT=true; otherwise the
-    # extract stage resumes and skips already-processed images from a prior run.
-    _clear_prev_output "$CLASSIFICATIONS" "$RAW_EXTRACTIONS" "$CLEAN_EXTRACTIONS" \
-      "${EVAL_DIR}/evaluation_results.jsonl" "$INFERENCE_ELAPSED_FILE"
-
-    # Track GPU inference wall-clock (classify + extract only, not clean/evaluate).
-    INFERENCE_START=$(date +%s)
-
-    _banner "Phase 1/4: classify (fresh process, model reload)"
-    _run_classify
-    log "Phase 1/4: classify complete."
-
-    _banner "Phase 2/4: extract (fresh process, model reload)"
-    _run_extract classified
-    log "Phase 2/4: extract complete."
-
-    INFERENCE_ELAPSED=$(($(date +%s) - INFERENCE_START))
-    log "GPU inference elapsed: ${INFERENCE_ELAPSED}s"
-
-    _run_cpu_stages "Phase 3/4" "Phase 4/4"
-
-    log ""
-    log "Pipeline completed successfully."
-    ;;
-
-  # ========================================================================
-  # LOCAL DEV — Robust probe-based pipeline (3 stages, 1 GPU process).
-  # ========================================================================
-  # Skips the separate classify stage entirely. The extract stage
-  # with --graph-robust runs two probes per image (document + bank headers)
-  # and picks the best type by field count. One GPU process, no wasted
-  # classification call.
-  #
-  # Model calls per type: receipt/invoice=2, travel/logbook=3, bank=4.
-  # ========================================================================
-  run_graph_robust)
-    log "Mode: graph_robust — probe-based classification (3-stage pipeline)."
-    log "Output root: $OUT_ROOT"
-    mkdir -p "$OUT_ROOT"
-
-    # Clear previous outputs only when CLEAR_PREV_OUTPUT=true; otherwise the
-    # extract stage resumes and skips already-processed images from a prior run.
-    _clear_prev_output "$RAW_EXTRACTIONS" "$CLEAN_EXTRACTIONS" \
-      "${EVAL_DIR}/evaluation_results.jsonl" "$INFERENCE_ELAPSED_FILE"
-
-    # Track GPU inference wall-clock (extract only, not clean/evaluate).
-    INFERENCE_START=$(date +%s)
-
-    _banner "Phase 1/3: extract --graph-robust (probe + extract, single GPU process)"
-    _run_extract graph_robust
-    log "Phase 1/3: extract complete."
-
-    INFERENCE_ELAPSED=$(($(date +%s) - INFERENCE_START))
-    log "GPU inference elapsed: ${INFERENCE_ELAPSED}s"
-
-    _run_cpu_stages "Phase 2/3" "Phase 3/3"
-
-    log ""
-    log "Pipeline completed successfully."
-    ;;
 
   # ========================================================================
   # KFP PRODUCTION BRANCHES — one per pod in the 4-stage DAG.
@@ -706,29 +563,16 @@ case "${KFP_TASK:-}" in
     # Stage 2: Field extraction (GPU).
     # Writes raw_extractions.jsonl.
     #
-    # Two modes, auto-detected:
-    #   - Classified: if classifications.jsonl exists (from a prior classify
-    #     pod), reads it and runs type-specific extraction per image.
-    #   - Graph-robust: if no classifications.jsonl, runs probe-based
-    #     classification + extraction in one pass (--graph-robust).
-    #     This is the default for the 3-stage KFP DAG (extract/clean/evaluate).
+    # Reads classifications.jsonl from the classify stage and reads each page by its type.
     _banner "Stage 2: extract — extracting fields (GPU)"
     mkdir -p "$OUT_ROOT"
     _clear_prev_output "$RAW_EXTRACTIONS"
     EXTRACT_START=$(date +%s)
-    _run_extract auto
+    _run_extract
     # Append extract elapsed to the shared file (classify may have written
     # the first line). The evaluate pod sums all lines.
     echo $(($(date +%s) - EXTRACT_START)) >> "$INFERENCE_ELAPSED_FILE"
     log "Extraction complete."
-    ;;
-
-  # -- Deprecated stages (kept as no-ops for KFP manifest compatibility) ------
-  filter)
-    # The filter stage was removed — cleaning now handles everything.
-    # Keep as a no-op so existing KFP DAGs that include a filter pod
-    # don't fail. Remove this case once the KFP manifest is updated.
-    log "Stage filter: skipped (deprecated — no longer needed)."
     ;;
 
   # -- Staged pipeline (CPU stages) ------------------------------------------
@@ -797,7 +641,7 @@ case "${KFP_TASK:-}" in
   "")
     log "FATAL: KFP_TASK is not set. This script must be run by the KFP pipeline."
     log "  For local dev, set KFP_TASK explicitly:"
-    log "  KFP_TASK=run_info_extract bash entrypoint.sh --model internvl3"
+    log "  KFP_TASK=classify model=gemma4-31b-w4a16-vllm image_dir=<folder> output=<folder> bash entrypoint.sh"
     log ""
     _print_task_help
     exit 1

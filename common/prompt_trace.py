@@ -2,7 +2,7 @@
 
 Single-seam observability: ``VllmBackend`` records every ``generate()`` /
 ``generate_for_graph()`` call here, so the trace covers *every* extraction
-prompt across *every* pipeline (classify, batch, graph-robust) without per-stage plumbing.
+prompt across *every* pipeline (classify, extract) without per-stage plumbing.
 
 Callers may set per-call context (``image_name``, ``pipeline``, ``label``) via
 ``trace_context()``; because it uses ``contextvars``, setting ``image_name``

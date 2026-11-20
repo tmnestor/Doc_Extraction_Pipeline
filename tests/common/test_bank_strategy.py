@@ -241,10 +241,7 @@ def test_the_clean_stage_reads_a_single_pass_reply(statement_png, tmp_path):
 # --- the call sites -----------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "module_path",
-    ["stages/extract.py", "common/vllm_dp_workers.py", "common/pipeline_ops.py"],
-)
+@pytest.mark.parametrize("module_path", ["stages/extract.py", "common/vllm_dp_workers.py"])
 def test_every_call_site_passes_the_configured_strategy(module_path):
     source = (REPO_ROOT / module_path).read_text()
     assert source.count("UnifiedBankExtractor(") == 1

@@ -120,7 +120,6 @@ def run(
     balance_correction: bool | None = None,
     graph_bank: bool = False,
     graph_unified: bool = False,
-    graph_robust: bool = False,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -148,9 +147,6 @@ def run(
         graph_unified: Use unified graph workflow (classify + extract in one
             graph walk). Skips Stage 1 -- discovers images directly from
             image_dir.
-        graph_robust: Use robust probe-based classification (extraction probes
-            determine doc type). Skips Stage 1 -- discovers images directly
-            from image_dir.
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
         config_path: Optional path to run_config.yml.
@@ -158,17 +154,6 @@ def run(
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    if graph_robust:
-        return _run_unified(
-            image_dir=image_dir,
-            output_path=output_path,
-            model_type=model_type,
-            verbose=verbose,
-            debug=debug,
-            config_path=config_path,
-            workflow_name="robust_extract.yaml",
-            label="robust",
-        )
     if graph_unified:
         return _run_unified(
             image_dir=image_dir,
@@ -1026,11 +1011,6 @@ def main(
         "--graph-unified/--no-graph-unified",
         help="Unified graph workflow: classify + extract in one pass (skips Stage 1).",
     ),
-    graph_robust: bool = typer.Option(
-        False,
-        "--graph-robust/--no-graph-robust",
-        help="Robust probe-based classification: extraction probes determine doc type (skips Stage 1).",
-    ),
     max_num_seqs: int | None = typer.Option(
         None,
         "--max-num-seqs",
@@ -1066,7 +1046,6 @@ def main(
         balance_correction=balance_correction,
         graph_bank=graph_bank,
         graph_unified=graph_unified,
-        graph_robust=graph_robust,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,

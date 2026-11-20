@@ -165,7 +165,7 @@ class GraphExecutor:
         # Post-processing
 
         # If the graph classified the document, use that type
-        for type_node in ("classify_document", "select_best_type"):
+        for type_node in ("classify_document",):
             if state.has(type_node):
                 detected = state.get(f"{type_node}.DOCUMENT_TYPE")
                 if isinstance(detected, str) and detected:
@@ -400,8 +400,8 @@ class GraphExecutor:
         state: WorkflowState,
     ) -> str:
         """Select edge based on accumulated state."""
-        # Document-type routing (from classification or best-type selection)
-        for node_key in ("classify_document", "select_best_type"):
+        # Document-type routing (from classification)
+        for node_key in ("classify_document",):
             if state.has(node_key):
                 doc_type = state.get(f"{node_key}.DOCUMENT_TYPE")
                 if isinstance(doc_type, str):
@@ -438,10 +438,6 @@ class GraphExecutor:
                 from common.bank_post_process import run_bank_post_process
 
                 return run_bank_post_process(state)
-            case "select_best_type":
-                from common.bank_post_process import run_select_best_type
-
-                return run_select_best_type(state)
             case _:
                 return True, {}
 

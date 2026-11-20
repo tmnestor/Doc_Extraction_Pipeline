@@ -97,6 +97,21 @@ def test_a_setting_from_before_the_refactor_is_refused(tmp_path: Path, removed: 
     assert ".".join((*section, key)) in str(raised.value)
 
 
+def test_generation_settings_are_never_supplied_by_the_code() -> None:
+    """Before 21 November 2026 a file without them ran on values written in Python for a removed model."""
+    from common.app_config import _build_generation_registry
+
+    raw = shipped()
+    del raw["inference"]["generation"]["defaults"]
+
+    with pytest.raises(ValueError) as raised:
+        _build_generation_registry(raw, str(RUN_CONFIG))
+
+    message = str(raised.value)
+    assert "inference.generation.defaults" in message and str(RUN_CONFIG) in message
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+
+
 def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -> None:
     path = config_with(tmp_path, lambda raw: raw["pipeline"]["batching"].update(reciept=10))
 

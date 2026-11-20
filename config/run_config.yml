@@ -88,9 +88,6 @@ inference:
       gemma4-12b-unified:
         max_new_tokens_base: 512
         max_new_tokens_per_field: 64
-    token_limits:
-      2b: null                    # use calculation
-      8b: 800
 
   # vLLM engine parameters — per-model overrides for VllmSpec defaults
   vllm:

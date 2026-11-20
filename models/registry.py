@@ -18,7 +18,7 @@ class ModelRegistration:
     """Registration entry for a vision-language model.
 
     Attributes:
-        model_type: Short identifier, e.g. "internvl3".
+        model_type: The name a task asks for, e.g. "gemma4-31b-w4a16-vllm".
         loader: Callable(PipelineConfig) -> ContextManager[(model, tokenizer)].
         processor_creator: Callable(model, tokenizer, config, prompt_config,
                            universal_fields, field_definitions) -> DocumentProcessor.

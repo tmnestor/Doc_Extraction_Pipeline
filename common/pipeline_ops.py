@@ -20,7 +20,7 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-def load_prompt_config(model_type: str = "internvl3-vllm") -> dict[str, Any]:
+def load_prompt_config(model_type: str) -> dict[str, Any]:
     """Build prompt routing config from PromptCatalog (single source of truth).
 
     Derives supported document types from the extraction prompt YAML keys
@@ -48,7 +48,7 @@ def load_prompt_config(model_type: str = "internvl3-vllm") -> dict[str, Any]:
 
 
 def load_pipeline_configs(
-    model_type: str = "internvl3-vllm",
+    model_type: str,
 ) -> tuple[dict[str, Any], list[str], dict[str, list[str]]]:
     """Load prompt configuration and build universal field list.
 

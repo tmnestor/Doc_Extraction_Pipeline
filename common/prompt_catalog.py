@@ -7,7 +7,7 @@ Usage:
     from common.prompt_catalog import PromptCatalog
 
     catalog = PromptCatalog()
-    prompt = catalog.get_prompt("internvl3", "invoice")
+    prompt = catalog.get_prompt("gemma4-31b-w4a16-vllm", "invoice")
     bank_prompt = catalog.get_prompt("bank", "schema_fallback_extraction")
 """
 
@@ -313,7 +313,7 @@ class PromptCatalog:
         strips structure suffixes, and returns the canonical mapping.
 
         Args:
-            model_type: Registered model type string (e.g. ``"internvl3"``).
+            model_type: Registered model type string (e.g. ``"gemma4-31b-w4a16-vllm"``).
 
         Returns:
             Dict mapping uppercase canonical types to prompt keys.

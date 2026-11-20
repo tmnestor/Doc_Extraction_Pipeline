@@ -53,7 +53,7 @@ class DocumentOrchestrator:
         verbose: bool = False,
         device: str = "cuda",
         batch_size: int | None = None,
-        model_type_key: str = "internvl3",
+        model_type_key: str,
         app_config: AppConfig,
         has_oom_recovery: bool = True,
     ) -> None:

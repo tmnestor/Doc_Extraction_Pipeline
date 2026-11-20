@@ -6,7 +6,7 @@ into a ``DocumentOrchestrator``.
 
 Usage:
     register_vllm_model(VllmSpec(
-        model_type="internvl3-vllm",
+        model_type="gemma4-31b-w4a16-vllm",
         prompt_file="extraction_prompts.yaml",
     ))
 """

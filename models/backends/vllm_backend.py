@@ -28,7 +28,7 @@ class VllmBackend:
         self,
         engine: Any,
         *,
-        model_type_key: str = "internvl3",
+        model_type_key: str,
         chat_template: str | None = None,
         chat_template_kwargs: dict[str, Any] | None = None,
         default_image_first: bool = False,

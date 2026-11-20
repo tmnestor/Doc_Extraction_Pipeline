@@ -22,7 +22,7 @@ MODELS_NORMALISED = ("gemma4-31b", "gemma4-12b-unified")
 @pytest.fixture(scope="module")
 def generation_registry(run_config_path) -> dict[str, dict]:
     """The generation registry with `defaults` merged into each model entry."""
-    return _build_generation_registry(yaml.safe_load(run_config_path.read_text()))
+    return _build_generation_registry(yaml.safe_load(run_config_path.read_text()), str(run_config_path))
 
 
 def test_the_vllm_extraction_path_hardcodes_temperature_zero():

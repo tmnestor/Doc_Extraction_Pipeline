@@ -30,7 +30,7 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True)
 class BatchSettings:
-    """Typed replacement for the 13 mutable batch/GPU globals in model_config.py."""
+    """The batch and card settings, read once."""
 
     default_sizes: dict[str, int]
     max_sizes: dict[str, int]
@@ -154,47 +154,35 @@ def _validate_model_override_keys(
     raise ValueError(msg)
 
 
-def _build_generation_registry(raw_config: dict) -> dict[str, dict]:
-    """Build generation config registry with YAML overrides applied.
+def _build_generation_registry(raw_config: dict, config_file: str) -> dict[str, dict]:
+    """The generation settings of each model: ``generation.defaults`` with the model's own laid over them.
 
-    Supports two YAML formats:
-    - **New structured format** (``generation.defaults`` + ``generation.models``):
-      builds per-model configs by merging ``defaults | per_model_overrides``.
-    - **Legacy flat format** (``generation.max_new_tokens_base``, etc.):
-      deep-copies the base registry from model_config and applies flat overrides
-      to the InternVL3 entry only (backwards compat).
-
-    Returns the result without mutating the originals.
+    Raises:
+        ValueError: If ``inference.generation.defaults`` is missing. Nothing is assumed in its place.
     """
     gen = raw_config.get("inference", {}).get("generation", {})
-
-    # ── New structured format ──────────────────────────────────────────
-    if "defaults" in gen:
-        defaults = dict(gen["defaults"])
-        models_section = gen.get("models", {})
-        registry: dict[str, dict] = {}
-        for model_name, overrides in models_section.items():
-            registry[model_name] = {**defaults, **overrides}
-        # Ensure a "__defaults__" sentinel so callers can get generic config
-        registry["__defaults__"] = dict(defaults)
-        return registry
-
-    # ── Legacy flat format (backwards compat) ──────────────────────────
-    from common.model_config import _GENERATION_CONFIG_REGISTRY
-
-    registry = copy.deepcopy(_GENERATION_CONFIG_REGISTRY)
-
-    if gen and "internvl3" in registry:
-        ivl_config = registry["internvl3"]
-        for key in (
-            "max_new_tokens_base",
-            "max_new_tokens_per_field",
-            "do_sample",
-            "use_cache",
-        ):
-            if key in gen:
-                ivl_config[key] = gen[key]
-
+    if not isinstance(gen.get("defaults"), dict):
+        raise ValueError(
+            "What: the settings file has no inference.generation.defaults block.\n"
+            f"Where: {config_file}, key inference.generation.defaults.\n"
+            "Expected: a block such as\n"
+            "  inference:\n"
+            "    generation:\n"
+            "      defaults:\n"
+            "        max_new_tokens_base: 512\n"
+            "        max_new_tokens_per_field: 64\n"
+            "        temperature: 0.0\n"
+            "        do_sample: false\n"
+            "        top_p: 0.95\n"
+            "        use_cache: true\n"
+            f"How to fix: add that block to {config_file}."
+        )
+    defaults = dict(gen["defaults"])
+    registry: dict[str, dict] = {
+        model_name: {**defaults, **overrides} for model_name, overrides in (gen.get("models") or {}).items()
+    }
+    # What a model with no block of its own gets.
+    registry["__defaults__"] = defaults
     return registry
 
 
@@ -210,8 +198,6 @@ class AppConfig:
         "batch",
         "fields",
         "_generation_registry",
-        "_token_limits",
-        "_min_tokens_by_type",
         "_token_budgets",
         "_vllm_config",
         "_infrastructure",
@@ -243,8 +229,6 @@ class AppConfig:
         batch: BatchSettings,
         fields: FieldSchema,
         generation_registry: dict[str, dict],
-        token_limits: dict[str, int | None] | None = None,
-        min_tokens_by_type: dict[str, int] | None = None,
         token_budgets: dict[str, int] | None = None,
         vllm_config: dict[str, dict] | None = None,
         infrastructure: dict[str, int | float] | None = None,
@@ -257,8 +241,6 @@ class AppConfig:
         self.batch = batch
         self.fields = fields
         self._generation_registry = generation_registry
-        self._token_limits = token_limits or {}
-        self._min_tokens_by_type = min_tokens_by_type or {}
         self._token_budgets = token_budgets or {}
         self._vllm_config = vllm_config or {}
         self._infrastructure = {**self._DEFAULT_INFRASTRUCTURE, **(infrastructure or {})}
@@ -296,6 +278,7 @@ class AppConfig:
         # 1. Resolve config path
         default = Path(__file__).parent.parent / "config" / "run_config.yml"
         resolved = config_path or (default if default.exists() else None)
+        config_file = str(resolved) if resolved else "config/run_config.yml"
 
         # 2. Load YAML
         yaml_config: dict[str, Any] = {}
@@ -335,14 +318,7 @@ class AppConfig:
         batch = BatchSettings.from_raw(raw_config)
 
         # 7. Build generation registry (immutable copy with YAML overrides)
-        generation_registry = _build_generation_registry(raw_config)
-
-        # 8. Build token limits from YAML overrides
-        token_limits: dict[str, int | None] = {"2b": None, "8b": 800}
-        gen = raw_config.get("inference", {}).get("generation", {})
-        yaml_limits = gen.get("token_limits", {})
-        for size_key, value in yaml_limits.items():
-            token_limits[str(size_key)] = value
+        generation_registry = _build_generation_registry(raw_config, config_file)
 
         # 9-10. Load field schema (single YAML read) and extract min_tokens
         fields = get_field_schema()
@@ -361,7 +337,7 @@ class AppConfig:
         # GPU run whose tuning was silently ignored.
         _validate_model_override_keys(
             vllm_models=vllm_models,
-            generation_models=gen.get("models", {}),
+            generation_models=raw_config.get("inference", {}).get("generation", {}).get("models", {}),
         )
         validate_stage_overrides(
             vllm_models, config_path=str(resolved) if resolved else "config/run_config.yml"
@@ -382,7 +358,6 @@ class AppConfig:
         classification_section = raw_config.get("pipeline", {}).get("classification", {})
 
         # 15. Validate and build extraction_order
-        config_file = str(resolved) if resolved else "config/run_config.yml"
         extraction_order = cls._validate_extraction_order(raw_config, config_file)
 
         # 16. Validate and build secondary_sort
@@ -396,8 +371,6 @@ class AppConfig:
             batch=batch,
             fields=fields,
             generation_registry=generation_registry,
-            token_limits=token_limits,
-            min_tokens_by_type=fields.min_tokens_by_type,
             token_budgets=yaml_budgets,
             vllm_config=vllm_config,
             infrastructure=infra_section,
@@ -498,24 +471,14 @@ class AppConfig:
         """Default document type when classification response can't be parsed."""
         return self._classification["fallback_type"]
 
-    # -- Drop-in replacements for model_config functions -----------------------
-
-    # Fallback generation config for unknown model types
-    _FALLBACK_GENERATION_CONFIG: dict[str, Any] = {
-        "max_new_tokens_base": 512,
-        "max_new_tokens_per_field": 64,
-        "temperature": 0.0,
-        "do_sample": False,
-        "top_p": 0.95,
-        "use_cache": True,
-    }
+    # -- Generation and batch settings by model ---------------------------------
 
     @staticmethod
     def _normalize_model_type(model_type: str) -> str:
         """Strip deployment suffixes to find base model config.
 
-        ``"internvl3-vllm"`` -> ``"internvl3"``,
-        ``"internvl3-14b-vllm"`` -> ``"internvl3"``.
+        ``"gemma4-31b-w4a16-vllm"`` -> ``"gemma4-31b"``,
+        ``"gemma4-12b-unified-w4a16-vllm"`` -> ``"gemma4-12b-unified"``.
         """
         key = model_type.lower()
         # Strip -vllm suffix
@@ -531,20 +494,13 @@ class AppConfig:
         return key
 
     def get_generation_config(self, model_type: str) -> dict[str, Any]:
-        """Same signature as model_config.get_generation_config().
+        """The generation settings of a model: its own block, else ``generation.defaults``.
 
-        Returns a copy so callers can mutate freely.
-        Strips deployment suffixes (``-vllm``, ``-14b``) for config lookup.
+        Returns a copy so callers can mutate freely. The name is looked up without its deployment
+        suffixes (``-vllm``, the size, ``-w4a16``).
         """
         key = self._normalize_model_type(model_type)
-        base = self._generation_registry.get(key)
-        if base is not None:
-            return dict(base)
-        # Try __defaults__ sentinel from structured format
-        defaults = self._generation_registry.get("__defaults__")
-        if defaults is not None:
-            return dict(defaults)
-        return dict(self._FALLBACK_GENERATION_CONFIG)
+        return dict(self._generation_registry.get(key) or self._generation_registry["__defaults__"])
 
     def get_batch_size_for_model(self, model_name: str, strategy: str | None = None) -> int:
         """Get recommended batch size for a model based on strategy."""
@@ -559,7 +515,7 @@ class AppConfig:
             return self.batch.default_sizes.get(model_name, self.batch.min_size)
 
     def get_auto_batch_size(self, model_name: str, available_memory_gb: float | None = None) -> int:
-        """Same signature as model_config.get_auto_batch_size()."""
+        """The batch size for a model, by the memory free on the card when that is known."""
         if not self.batch.auto_detect or available_memory_gb is None:
             return self.get_batch_size_for_model(model_name, self.batch.strategy)
 
@@ -574,26 +530,6 @@ class AppConfig:
             strategy = "conservative"
 
         return self.get_batch_size_for_model(model_name, strategy)
-
-    def get_max_new_tokens(
-        self,
-        field_count: int | None = None,
-        document_type: str | None = None,
-    ) -> int:
-        """Same signature as model_config.get_max_new_tokens()."""
-        effective_count = field_count or self.fields.field_count or 15
-
-        config = self._generation_registry.get("internvl3", {})
-        base = int(config.get("max_new_tokens_base", 2000))
-        per_field = int(config.get("max_new_tokens_per_field", 50))
-        base_tokens = max(base, effective_count * per_field)
-
-        if document_type:
-            min_tokens = self._min_tokens_by_type.get(document_type)
-            if min_tokens:
-                return max(base_tokens, min_tokens)
-
-        return base_tokens
 
     # -- Extraction ordering (Phase 2) -----------------------------------------
 

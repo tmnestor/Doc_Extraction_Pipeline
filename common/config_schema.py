@@ -38,8 +38,6 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "inference.generation.defaults.use_cache",
         "inference.generation.models.*.max_new_tokens_base",
         "inference.generation.models.*.max_new_tokens_per_field",
-        "inference.generation.token_limits.2b",
-        "inference.generation.token_limits.8b",
         "inference.max_new_tokens",
         "inference.tracing.path",
         "inference.tracing.raw_prompts",

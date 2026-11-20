@@ -274,9 +274,8 @@ def run(
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
         return images_dir
 
-    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
-    from common.pipeline_ops import create_processor, load_model
+    from common.pipeline_ops import open_processor
 
     cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_dir)}
     if model_type is not None:
@@ -284,14 +283,7 @@ def run(
     app_cfg = AppConfig.load(cli_args, config_path=config_path)
     config = app_cfg.pipeline
 
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-    logger.info("Loading model: %s", config.model_type)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-    try:
-        processor = create_processor(
-            model, tokenizer, config, prompt_config, universal_fields, field_definitions, app_config=app_cfg
-        )
+    with open_processor(app_cfg) as processor:
         start = time.time()
         replies = _ask(processor, todo, split_config)
         elapsed = time.time() - start
@@ -301,8 +293,6 @@ def run(
             elapsed,
             elapsed / len(todo),
         )
-    finally:
-        model_cm.__exit__(None, None, None)
 
     finder = None
     if split_config.straighten:

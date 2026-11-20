@@ -18,12 +18,6 @@ from common.config_schema import check_known_keys
 # Constants
 # ============================================================================
 
-DEFAULT_MODEL_PATHS = [
-    "/home/jovyan/nfs_share/models/InternVL3_5-8B",
-    "/models/InternVL3_5-8B",
-    "./models/InternVL3_5-8B",
-]
-
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp"}
 
 # Default structure suffixes (overridden by extraction YAML settings.structure_suffixes)
@@ -123,7 +117,7 @@ class PipelineConfig:
     batch_size: int | None = None  # None = auto-detect from VRAM
 
     # Model options
-    model_type: str = "internvl3-vllm"
+    model_type: str = ""  # always given: bootstrap.model.type, or the model the task names
     flash_attn: bool = True
     enforce_eager: bool = True  # vLLM only: True = skip CUDA graph compilation
     dtype: str = "bfloat16"
@@ -412,9 +406,9 @@ def auto_detect_model_path(
     """Auto-detect model path from common locations.
 
     Args:
-        search_paths: Custom list of paths to search. Falls back to DEFAULT_MODEL_PATHS.
+        search_paths: The folders to look in, from bootstrap.model.default_paths. None looks nowhere.
     """
-    paths = search_paths or DEFAULT_MODEL_PATHS
+    paths = search_paths or []
     for path_str in paths:
         path = Path(path_str)
         if path.exists() and (path / "config.json").exists():
@@ -447,7 +441,7 @@ def merge_configs(
 
     # Auto-detect model path if not specified
     if not merged.get("model_path"):
-        model_type = merged.get("model_type", "internvl3-vllm")
+        model_type = merged.get("model_type", "")
         search_paths = _resolve_default_paths(raw_config, model_type)
         detected = auto_detect_model_path(search_paths)
         if detected:
@@ -556,11 +550,11 @@ def validate_config(config: PipelineConfig) -> list[str]:
 
     # Validate model path
     if not config.model_path:
-        searched = ", ".join(DEFAULT_MODEL_PATHS)
         errors.append(
-            f"Model path not specified and could not be auto-detected. "
-            f"Searched: {searched}. "
-            f"Specify with --model-path or bootstrap.model.path in config/run_config.yml."
+            f"No folder was found for the model {config.model_type!r}. "
+            f"Looked in the folder bootstrap.model.default_paths gives for that model in "
+            f"config/run_config.yml. Give that key the folder that holds the model's config.json, "
+            f"or set bootstrap.model.path."
         )
         return errors
 

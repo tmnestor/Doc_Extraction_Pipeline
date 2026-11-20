@@ -4,6 +4,9 @@ Extracted from cli.py so the stages can share the load/create/run seams
 without importing the CLI.
 """
 
+import contextlib
+import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,7 @@ from common.prompt_catalog import PromptCatalog
 from models.registry import get_model
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def load_prompt_config(model_type: str = "internvl3-vllm") -> dict[str, Any]:
@@ -80,6 +84,35 @@ def load_model(config: PipelineConfig, *, app_config: Any | None = None):
 
     registration = get_model(config.model_type)
     return registration.loader(config, app_config=app_config)
+
+
+@contextlib.contextmanager
+def open_processor(app_config: Any) -> Iterator[Any]:
+    """Load the run's model and give the document processor built on it; unload the model on the way out.
+
+    Every stage that reads pages, and every worker that reads a share of them, gets its processor here, so
+    the model is loaded and the processor built in one way only.
+
+    Args:
+        app_config: The run's settings; for a stage with its own engine settings, the copy made by
+            ``for_stage``.
+
+    Yields:
+        The document processor.
+    """
+    config = app_config.pipeline
+    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
+    logger.info("Loading model: %s", config.model_type)
+    with load_model(config, app_config=app_config) as (model, tokenizer):
+        yield create_processor(
+            model,
+            tokenizer,
+            config,
+            prompt_config,
+            universal_fields,
+            field_definitions,
+            app_config=app_config,
+        )
 
 
 def create_processor(

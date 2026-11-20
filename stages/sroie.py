@@ -32,11 +32,7 @@ from common.sroie.report import (
     write_per_image_csv,
     write_summary_json,
 )
-from common.sroie.runner import (
-    benchmark_from_worker_responses,
-    inference_seconds_from_responses,
-    run_benchmark_batched,
-)
+from common.sroie.runner import benchmark_from_worker_responses, inference_seconds_from_responses
 from common.sroie.scoring import MatchPolicy, score_records
 
 logger = logging.getLogger(__name__)
@@ -70,12 +66,8 @@ def run(
         SroieDatasetError: If the split on disk is unusable.
     """
     from common.app_config import AppConfig
-    from common.pipeline_config import load_yaml_config
-    from common.pipeline_ops import create_processor, load_model
-    from common.vllm_dp import run_dp
-    from PIL import Image
-
-    from common.pipeline_ops import load_pipeline_configs
+    from common.pipeline_ops import open_processor
+    from common.vllm_dp import resolve_dp_gpus, run_dp
 
     cli_args: dict[str, object] = {}
     if model_type:
@@ -83,78 +75,93 @@ def run(
 
     app_cfg = AppConfig.load(cli_args, config_path=config_path)
     config = app_cfg.pipeline
-
-    # AppConfig keeps the raw mapping local to load(), so read it here
-    # rather than widening shared config code for one stage. Same file,
-    # same resolution order.
-    resolved_config = config_path or Path(__file__).parent.parent / "config" / "run_config.yml"
-    _, raw_config = load_yaml_config(resolved_config)
-    settings = SroieSettings.from_raw(raw_config, config_path=resolved_config)
+    settings = _settings(app_cfg.config_path)
 
     records = load_sroie_split(settings.data_dir)
     if max_images is not None:
         records = records[:max_images]
     logger.info("SROIE: %d records from %s", len(records), settings.data_dir)
+    image_paths = [str(record.image_path) for record in records]
 
-    # -- vLLM data-parallel fast path -----------------------------------------
-    # 347 receipts are independent single-image requests, so one engine per
-    # GPU (DP) beats one model split across GPUs (TP): the work partitions
-    # perfectly and nothing is shared. Mirrors stages/classify.py.
-    dp_gpus = _resolve_dp_ranks(config)
-    if dp_gpus:
-        started = time.time()
-        worker_records = run_dp(
-            num_gpus=dp_gpus,
+    # One engine on each card where the model allows it, else one engine across the cards. Either way the
+    # receipts are read by read_sroie; only where the engine is started differs.
+    started = time.time()
+    engines = resolve_dp_gpus(config, config.model_type)
+    if engines:
+        responses = run_dp(
+            num_gpus=engines,
             images=[record.image_path for record in records],
             worker_fn=SROIE_WORKER_FN,
             worker_kwargs={
                 "config_path": str(config_path) if config_path else None,
                 "cli_overrides": cli_args,
-                "max_new_tokens": settings.max_new_tokens,
-                "batch_size": settings.batch_size,
             },
             app_config=app_cfg,
         )
-        wall_clock = time.time() - started
-        result = benchmark_from_worker_responses(records, worker_records)
-        # Wall clock here includes each worker spinning up its own vLLM
-        # engine. Report the slowest worker's INFERENCE time instead, so
-        # throughput means the same thing as on the single-engine path —
-        # which starts its timer after the model has loaded.
-        elapsed = inference_seconds_from_responses(worker_records, fallback=wall_clock)
-        return _finish(
-            records=records,
-            result=result,
-            settings=settings,
-            model_name=config.model_type,
-            elapsed=elapsed,
-            execution_mode=f"data-parallel ({dp_gpus} GPUs)",
-            wall_clock=wall_clock,
-        )
+        wall_clock: float | None = time.time() - started
+        execution_mode = f"data-parallel ({engines} GPUs)"
+    else:
+        with open_processor(app_cfg) as processor:
+            started = time.time()
+            responses = read_sroie(processor, image_paths, app_cfg)
+        wall_clock = None
+        execution_mode = "single-engine"
 
-    # -- Single-engine path ---------------------------------------------------
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
+    # The model's time, apart from starting the engine: with an engine on each card, the slowest card's.
+    elapsed = inference_seconds_from_responses(responses, fallback=time.time() - started)
+    return _finish(
+        records=records,
+        result=benchmark_from_worker_responses(records, responses),
+        settings=settings,
+        model_name=config.model_type,
+        elapsed=elapsed,
+        execution_mode=execution_mode,
+        wall_clock=wall_clock,
+    )
 
-    logger.info("Loading model: %s", config.model_type)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
 
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
-        )
+def _settings(config_path: Path | None) -> SroieSettings:
+    """The pipeline.sroie block of the run's settings file."""
+    from common.pipeline_config import load_yaml_config
 
-        def generate_batch(batch: list[SroieRecord]) -> list[str]:
-            """Ask the model for a batch of receipts' four fields."""
-            images = [Image.open(record.image_path).convert("RGB") for record in batch]
+    resolved = config_path or Path(__file__).parent.parent / "config" / "run_config.yml"
+    _, raw_config = load_yaml_config(resolved)
+    return SroieSettings.from_raw(raw_config, config_path=resolved)
+
+
+def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[dict[str, Any]]:
+    """Ask the model for each receipt's four fields. The one place receipts are read.
+
+    One engine across the cards calls this once with every receipt. With an engine on each card, each
+    worker calls it with its share. Replies come back as the model wrote them: parsing and scoring happen
+    once, in ``run``.
+
+    Receipts go to the engine several to a call, by ``pipeline.sroie.batch_size``. A call that fails is
+    tried again one receipt at a time, and a receipt that still fails is recorded with its error, so one
+    receipt never ends the run.
+
+    Args:
+        processor: The document processor.
+        image_paths: The receipts, in order.
+        app_config: The run's settings.
+
+    Returns:
+        One record per receipt, in the order given: image_id, image_path, raw_response, error, elapsed.
+    """
+    from PIL import Image
+
+    settings = _settings(app_config.config_path)
+    records: list[dict[str, Any]] = []
+    total = len(image_paths)
+
+    for start in range(0, total, settings.batch_size):
+        chunk = image_paths[start : start + settings.batch_size]
+        batch_start = time.time()
+
+        try:
+            images = [Image.open(p).convert("RGB") for p in chunk]
             try:
-                return processor.generate_batch(
+                responses = processor.generate_batch(
                     images,
                     [SROIE_PROMPT] * len(images),
                     max_tokens=settings.max_new_tokens,
@@ -162,50 +169,47 @@ def run(
             finally:
                 for image in images:
                     image.close()
+            if len(responses) != len(chunk):
+                raise ValueError(f"backend returned {len(responses)} responses for {len(chunk)} images")
+            errors: list[str | None] = [None] * len(chunk)
+        except Exception as err:  # noqa: BLE001 - a batch must not end the run
+            logger.warning("Batch of %d failed (%s): retrying one at a time", len(chunk), err)
+            responses, errors = [], []
+            for image_path in chunk:
+                try:
+                    with Image.open(image_path) as image:
+                        responses.append(
+                            processor.generate(
+                                image.convert("RGB"),
+                                SROIE_PROMPT,
+                                max_tokens=settings.max_new_tokens,
+                            )
+                        )
+                    errors.append(None)
+                except Exception as inner:  # noqa: BLE001 - recorded, not raised
+                    logger.error("%s FAILED: %s", Path(image_path).stem, inner)
+                    responses.append("")
+                    errors.append(str(inner))
 
-        started = time.time()
-        result = run_benchmark_batched(records, generate_batch, batch_size=settings.batch_size)
-        elapsed = time.time() - started
-    finally:
-        model_cm.__exit__(None, None, None)
+        # Inside a call the requests overlap, so a receipt's own time is not separable: each is charged an
+        # equal share of the call.
+        share = (time.time() - batch_start) / len(chunk)
+        for image_path, response, error in zip(chunk, responses, errors, strict=True):
+            records.append(
+                {
+                    "image_id": Path(image_path).stem,
+                    "image_path": image_path,
+                    "raw_response": response,
+                    "error": error,
+                    "elapsed": share,
+                }
+            )
 
-    return _finish(
-        records=records,
-        result=result,
-        settings=settings,
-        model_name=config.model_type,
-        elapsed=elapsed,
-        execution_mode="single-engine",
-        wall_clock=None,
-    )
+        logger.info(
+            "[%d/%d] batch of %d in %.1fs", start + len(chunk), total, len(chunk), time.time() - batch_start
+        )
 
-
-def _resolve_dp_ranks(config: Any) -> int | None:
-    """Return the DP rank count, or None for the single-engine path.
-
-    Prefers ``resolve_dp_gpus``, which also refuses DP for models that
-    cannot hold one whole engine per GPU. That helper exists only on the
-    branches carrying Gemma 4; elsewhere fall back to the plain GPU count,
-    which is what stages/classify.py uses. Keeping both here lets this
-    file stay byte-identical across the model branches — the thing the
-    whole comparison rests on.
-    """
-    from models.registry import is_vllm_model
-
-    if not is_vllm_model(config.model_type):
-        return None
-
-    try:
-        # Absent on the InternVL3 line, so mypy cannot see it from here.
-        from common.vllm_dp import resolve_dp_gpus  # type: ignore[attr-defined]
-    except ImportError:
-        from common.vllm_dp import resolve_gpu_count
-
-        gpus = resolve_gpu_count(config)
-        return gpus if gpus > 1 else None
-
-    ranks: int | None = resolve_dp_gpus(config, config.model_type)
-    return ranks
+    return records
 
 
 def _finish(

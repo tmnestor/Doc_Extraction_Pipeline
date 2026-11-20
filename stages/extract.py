@@ -127,7 +127,7 @@ def run(
         classifications_path: Path to classifications.jsonl from Stage 1.
         image_dir: Directory containing the original images.
         output_path: Path to write raw_extractions.jsonl.
-        model_type: Model type (e.g. "internvl3-vllm").
+        model_type: A registered model.
         batch_size: Images per batch (None = auto-detect, 1 = sequential).
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
@@ -140,11 +140,9 @@ def run(
         msg = "--classifications is required"
         raise typer.BadParameter(msg)
 
-    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
-    from common.pipeline_ops import create_processor, load_model
-    from common.unified_bank_extractor import UnifiedBankExtractor
+    from common.pipeline_ops import open_processor
 
     # Read classifications
     classifications = read_jsonl(classifications_path)
@@ -184,9 +182,6 @@ def run(
 
     app_cfg = AppConfig.load(cli_args, config_path=config_path)
     config = app_cfg.pipeline
-    # Tier B gate — resolved from CLI > YAML > defaults.
-    effective_verbose = config.verbose
-
     # -- Phase 4: filter out skip-labels before extraction -----------------------
     classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
     if skipped:
@@ -226,178 +221,198 @@ def run(
         app_cfg.secondary_sort,
     )
 
-    # Stage wall clock, used by BOTH paths below so "Total Wall Clock" and
-    # "Engine Startup" mean the same thing however the stage ran.
+    # One engine on each card where the model allows it, else one engine across the cards. Either way the
+    # pages are read by extract_pages; only where the engine is started differs.
+    from common.stage_timing import inference_seconds_from_records
+    from common.vllm_dp import resolve_dp_gpus, run_dp
+
     stage_started = time.time()
-
-    # -- vLLM data-parallel fast path (classified) --------------------------------
-    from models.registry import is_vllm_model
-
-    if is_vllm_model(config.model_type):
-        from common.vllm_dp import resolve_dp_gpus, run_dp
-
-        # None -> single GPU, or a model that can't replicate per GPU.
-        resolved_gpus = resolve_dp_gpus(config, config.model_type)
-        if resolved_gpus:
-            records = run_dp(
-                num_gpus=resolved_gpus,
-                images=[Path(c["image_path"]) for c in classifications],
-                worker_fn="common.vllm_dp_workers.classified_extract_worker",
-                worker_kwargs={
-                    "config_path": str(config_path) if config_path else None,
-                    "cli_overrides": cli_args,
-                    "classifications": classifications,
-                },
-            )
-            # Wall clock here spans each worker spinning up its own engine;
-            # inference comes from the slowest worker's per-image times.
-            _record_stage_timing(
-                output_path.parent,
-                stage="extract",
-                records=records,
-                wall_clock=time.time() - stage_started,
-                execution_mode=f"data-parallel ({resolved_gpus} GPUs)",
-            )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            # Resume-safe: APPEND when resuming (preserve already-extracted
-            # records) OR when skip-label records were written above (a fresh DP
-            # run with skips). write_jsonl truncates, which would drop either.
-            write_fn = append_jsonl if (completed or skipped) else write_jsonl
-            count = write_fn(output_path, records)
-            logger.info("Wrote %d extractions to %s", count, output_path)
-            return output_path
-
-    # -- Single-GPU / HF path ----------------------------------------------------
-
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-
-    # Load model
-    logger.info("Loading model: %s", config.model_type)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    engines = resolve_dp_gpus(config, config.model_type)
+    if engines:
+        records = run_dp(
+            num_gpus=engines,
+            images=[Path(c["image_path"]) for c in classifications],
+            worker_fn="common.vllm_dp_workers.extract_worker",
+            worker_kwargs={
+                "config_path": str(config_path) if config_path else None,
+                "cli_overrides": cli_args,
+                "classifications": classifications,
+            },
         )
+        # The workers hand their records back when they finish. Append when resuming, or when skipped
+        # pages were written above: write_jsonl starts the file again and would drop either.
+        write_fn = append_jsonl if (completed or skipped) else write_jsonl
+        write_fn(output_path, records)
+        execution_mode = f"data-parallel ({engines} GPUs)"
+    else:
+        # One engine writes each record as it is made, so a run that stops part way can be resumed.
+        with open_processor(app_cfg) as processor, StreamingJsonlWriter(output_path) as writer:
+            records = extract_pages(processor, classifications, app_cfg, sink=writer)
+        execution_mode = "single-engine"
 
-        # Set up bank processing
-        bank_adapter = None
-        has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in classifications)
-
-        if has_bank:
-            bank_adapter = UnifiedBankExtractor(
-                generate_fn=processor.generate,
-                generate_many_fn=(
-                    processor.generate_many if getattr(processor, "supports_generate_many", False) else None
-                ),
-                verbose=effective_verbose,
-                extract_tokens=app_cfg.get_token_budget("extract_bank"),
-            )
-            logger.info("Bank adapter enabled")
-
-        # Process images with streaming writer (flush per record for crash recovery)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        start = time.time()
-        count = 0
-        total = len(classifications)
-
-        batches = _plan_batches(classifications, config_path, _unbatchable_types(bank_adapter))
-
-        with StreamingJsonlWriter(output_path) as writer:
-            for batch in batches:
-                # A multi-document batch is one engine call. Singletons (any type
-                # whose batch size is 1) fall through to the per-image path below.
-                if len(batch) > 1:
-                    if batch[0]["document_type"].upper() == "BANK_STATEMENT":
-                        # Only planned when the adapter can batch.
-                        _extract_bank_single_pass_batch(writer, bank_adapter, batch)
-                    else:
-                        _extract_standard_batch(writer, processor, batch, effective_verbose)
-                    count += len(batch)
-                    logger.info(
-                        "[%d/%d] batch of %d %s",
-                        count,
-                        total,
-                        len(batch),
-                        batch[0]["document_type"],
-                    )
-                    continue
-
-                classification = batch[0]
-                image_path = classification["image_path"]
-                image_name = classification["image_name"]
-                doc_type = classification["document_type"]
-
-                img_start = time.time()
-
-                try:
-                    if doc_type.upper() == "BANK_STATEMENT" and bank_adapter is not None:
-                        _extract_bank_with_adapter(
-                            writer,
-                            bank_adapter,
-                            image_path,
-                            image_name,
-                            doc_type,
-                        )
-                    else:
-                        _extract_standard(
-                            writer,
-                            processor,
-                            image_path,
-                            image_name,
-                            doc_type,
-                            classification,
-                            effective_verbose,
-                        )
-                except Exception as e:
-                    logger.error("Error extracting %s: %s", image_name, e)
-                    img_time = time.time() - img_start
-                    writer.write(
-                        {
-                            "image_name": image_name,
-                            "image_path": image_path,
-                            "document_type": doc_type,
-                            "raw_response": "",
-                            "processing_time": img_time,
-                            "prompt_used": "error",
-                            "error": str(e),
-                        }
-                    )
-
-                count += 1
-                img_time = time.time() - img_start
-                logger.info(
-                    "[%d/%d] %s: %s (%.1fs)",
-                    count,
-                    total,
-                    image_name,
-                    doc_type,
-                    img_time,
-                )
-
-        elapsed = time.time() - start
-        logger.info("Extraction complete: %d images in %.1fs", count, elapsed)
-        # Sequential, so the loop's elapsed IS the inference time; the gap
-        # to stage wall clock is engine startup.
-        _record_stage_timing(
-            output_path.parent,
-            stage="extract",
-            records=[{"processing_time": elapsed}],
-            wall_clock=time.time() - stage_started,
-            execution_mode="single-engine",
-        )
-    finally:
-        model_cm.__exit__(None, None, None)
-
+    wall_clock = time.time() - stage_started
+    # The model's time, apart from starting the engine: the sum of the pages' times, and with an engine on
+    # each card the slowest card's sum.
+    logger.info(
+        "Extraction complete: %d images in %.1fs",
+        len(records),
+        inference_seconds_from_records(records, fallback=wall_clock),
+    )
+    _record_stage_timing(
+        output_path.parent,
+        stage="extract",
+        records=records,
+        wall_clock=wall_clock,
+        execution_mode=execution_mode,
+    )
+    logger.info("Wrote %d extractions to %s", len(records), output_path)
     return output_path
+
+
+class _Collected:
+    """Keeps every record a reading function writes, and passes each on to a sink if there is one."""
+
+    def __init__(self, sink: RecordSink | None) -> None:
+        self.records: list[dict[str, Any]] = []
+        self._sink = sink
+
+    def write(self, record: dict[str, Any]) -> None:
+        self.records.append(record)
+        if self._sink is not None:
+            self._sink.write(record)
+
+
+def extract_pages(
+    processor: Any,
+    classified: list[dict[str, Any]],
+    app_config: Any,
+    *,
+    sink: RecordSink | None = None,
+) -> list[dict[str, Any]]:
+    """Read the fields of each classified page. The one place pages are read, however engines are arranged.
+
+    One engine across the cards calls this once with every page. With an engine on each card, each worker
+    calls it with its share. It loads no model and decides nothing about which pages are already done: the
+    stage's ``run`` does those.
+
+    Pages are grouped into engine calls by document type, by the sizes in ``pipeline.batching``. A call that
+    fails is tried again one page at a time, and a page that still fails is recorded with its error, so one
+    page never ends the run.
+
+    Args:
+        processor: The document processor.
+        classified: The pages' classification records, one document type after another.
+        app_config: The run's settings.
+        sink: Where to write each record as soon as it is made, if anywhere.
+
+    Returns:
+        One record per page, holding the model's raw reply, in the order given.
+    """
+    from common import prompt_trace
+    from common.unified_bank_extractor import UnifiedBankExtractor
+
+    verbose = app_config.pipeline.verbose
+    bank_adapter = None
+    if any(_is_statement(c) for c in classified):
+        bank_adapter = UnifiedBankExtractor(
+            generate_fn=processor.generate,
+            generate_many_fn=(
+                processor.generate_many if getattr(processor, "supports_generate_many", False) else None
+            ),
+            verbose=verbose,
+            extract_tokens=app_config.get_token_budget("extract_bank"),
+        )
+        logger.info("Bank adapter enabled")
+
+    collected = _Collected(sink)
+    done, total = 0, len(classified)
+    for batch in _plan_batches(classified, app_config.config_path, _unbatchable_types(bank_adapter)):
+        # Several pages are one engine call. A type whose batch size is 1 is read a page at a time below.
+        if len(batch) > 1:
+            if _is_statement(batch[0]):
+                # Only planned when the adapter can share a call.
+                _extract_bank_single_pass_batch(collected, bank_adapter, batch)
+            else:
+                _extract_standard_batch(collected, processor, batch, verbose)
+            done += len(batch)
+            logger.info("[%d/%d] batch of %d %s", done, total, len(batch), batch[0]["document_type"])
+            continue
+
+        classification = batch[0]
+        done += 1
+        # A dense statement can take a while, so say which page is in flight before it starts.
+        logger.info(
+            "[%d/%d] extracting %s (%s)...",
+            done,
+            total,
+            classification["image_name"],
+            classification["document_type"],
+        )
+        started = time.time()
+        # Names the page in the trace of what was sent to the model, when that trace is switched on.
+        with prompt_trace.trace_context(
+            image_name=classification["image_name"],
+            pipeline="information_extraction",
+            label=f"extract_{classification['document_type'].lower()}",
+        ):
+            _extract_one(collected, processor, bank_adapter, classification, verbose)
+        logger.info(
+            "[%d/%d] %s: %s (%.1fs)",
+            done,
+            total,
+            classification["image_name"],
+            classification["document_type"],
+            time.time() - started,
+        )
+    return collected.records
+
+
+def _is_statement(classification: dict[str, Any]) -> bool:
+    return classification["document_type"].upper() == "BANK_STATEMENT"
+
+
+def _extract_one(
+    writer: RecordSink,
+    processor: Any,
+    bank_adapter: Any,
+    classification: dict[str, Any],
+    verbose: bool,
+) -> None:
+    """Read one page in a call of its own. A page that cannot be read is recorded with its error."""
+    started = time.time()
+    try:
+        if _is_statement(classification) and bank_adapter is not None:
+            _extract_bank_with_adapter(
+                writer,
+                bank_adapter,
+                classification["image_path"],
+                classification["image_name"],
+                classification["document_type"],
+            )
+        else:
+            _extract_standard(
+                writer,
+                processor,
+                classification["image_path"],
+                classification["image_name"],
+                classification["document_type"],
+                classification,
+                verbose,
+            )
+    except Exception as err:  # noqa: BLE001 - recorded, not raised: one page must not end the run
+        logger.error("Error extracting %s: %s", classification["image_name"], err)
+        writer.write(
+            {
+                "image_name": classification["image_name"],
+                "image_path": classification["image_path"],
+                "document_type": classification["document_type"],
+                "raw_response": "",
+                "processing_time": time.time() - started,
+                "prompt_used": "error",
+                "error": str(err),
+            }
+        )
 
 
 def _extract_bank_with_adapter(
@@ -462,7 +477,7 @@ def _extract_bank_single_pass_batch(
     Writes the record _extract_bank_with_adapter writes for each statement,
     so batched and unbatched runs are indistinguishable in the output file. A
     batch that raises is retried one statement at a time, and a statement that
-    still fails is recorded as an error, as on the per-image path.
+    still fails is recorded as an error.
     """
     from common.unified_bank_extractor import serialise_bank_response
 
@@ -476,28 +491,7 @@ def _extract_bank_single_pass_batch(
             err,
         )
         for classification in batch:
-            retry_started = time.time()
-            try:
-                _extract_bank_with_adapter(
-                    writer,
-                    bank_adapter,
-                    classification["image_path"],
-                    classification["image_name"],
-                    classification["document_type"],
-                )
-            except Exception as retry_err:  # noqa: BLE001 - recorded, not raised
-                logger.error("Error extracting %s: %s", classification["image_name"], retry_err)
-                writer.write(
-                    {
-                        "image_name": classification["image_name"],
-                        "image_path": classification["image_path"],
-                        "document_type": classification["document_type"],
-                        "raw_response": "",
-                        "processing_time": time.time() - retry_started,
-                        "prompt_used": "error",
-                        "error": str(retry_err),
-                    }
-                )
+            _extract_one(writer, None, bank_adapter, classification, verbose=False)
         return
 
     # Inside a batch the requests overlap, so per-image timing is not
@@ -549,7 +543,7 @@ def _plan_batches(
 
 
 def _extract_standard_batch(
-    writer: StreamingJsonlWriter,
+    writer: RecordSink,
     processor,
     batch: list[dict[str, Any]],
     verbose: bool,
@@ -582,15 +576,7 @@ def _extract_standard_batch(
             err,
         )
         for classification in batch:
-            _extract_standard(
-                writer,
-                processor,
-                classification["image_path"],
-                classification["image_name"],
-                classification["document_type"],
-                classification,
-                verbose,
-            )
+            _extract_one(writer, processor, None, classification, verbose)
         return
 
     # Inside a batch the requests overlap, so per-image timing is not
@@ -611,7 +597,7 @@ def _extract_standard_batch(
 
 
 def _extract_standard(
-    writer: StreamingJsonlWriter,
+    writer: RecordSink,
     processor,
     image_path: str,
     image_name: str,

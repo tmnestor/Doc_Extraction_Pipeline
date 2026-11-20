@@ -221,6 +221,7 @@ class AppConfig:
         "_secondary_sort",
         "_extraction_skip_labels",
         "_stage",
+        "config_path",
     )
 
     _DEFAULT_VLLM_CONFIG: ClassVar[dict[str, Any]] = {
@@ -267,6 +268,8 @@ class AppConfig:
         self._secondary_sort = secondary_sort
         self._extraction_skip_labels = extraction_skip_labels or []
         self._stage: str | None = None
+        # The settings file this was loaded from; None when it was built without one.
+        self.config_path: Path | None = None
 
     @classmethod
     def load(
@@ -389,7 +392,7 @@ class AppConfig:
         # 17. Validate and build extraction_skip_labels
         skip_labels = cls._validate_extraction_skip_labels(raw_config, config_file)
 
-        return cls(
+        loaded = cls(
             pipeline=pipeline,
             batch=batch,
             fields=fields,
@@ -404,6 +407,8 @@ class AppConfig:
             secondary_sort=secondary_sort,
             extraction_skip_labels=skip_labels,
         )
+        loaded.config_path = resolved
+        return loaded
 
     # -- Token budgets (Phase 1) -----------------------------------------------
 

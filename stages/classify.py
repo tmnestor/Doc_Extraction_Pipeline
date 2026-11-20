@@ -5,7 +5,6 @@ Detects document types for all images and writes classifications.jsonl.
 
 Usage:
     python -m stages.classify --image-dir /data --output /artifacts/classifications.jsonl
-    python -m stages.classify --image-dir /data --output /artifacts/classifications.jsonl --model llama
 """
 
 import logging
@@ -51,7 +50,7 @@ def run(
     Args:
         image_dir: Directory containing images.
         output_path: Path to write classifications.jsonl.
-        model_type: Model type (e.g. "internvl3-vllm").
+        model_type: A registered model.
         batch_size: Images per batch (None = auto-detect, 1 = sequential).
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
@@ -60,10 +59,9 @@ def run(
     Returns:
         Path to the written classifications.jsonl.
     """
-    from common.pipeline_ops import load_pipeline_configs
     from common.app_config import AppConfig
     from common.pipeline_config import discover_images
-    from common.pipeline_ops import create_processor, load_model
+    from common.pipeline_ops import open_processor
 
     # Build config through the standard cascade. Only inject verbose/debug
     # when the caller passed an explicit bool — None means "let YAML win".
@@ -82,9 +80,6 @@ def run(
 
     app_cfg = AppConfig.load(cli_args, config_path=config_path).for_stage("classify")
     config = app_cfg.pipeline
-    # Tier B gate — resolved from CLI > YAML > defaults.
-    effective_verbose = config.verbose
-
     # Discover images
     # Both filters are config-driven and MUST be passed: calling with the
     # directory alone silently ignored max_images and document_types, so a
@@ -121,109 +116,34 @@ def run(
         logger.info("All images already classified -- nothing to do")
         return output_path
 
-    # -- vLLM data-parallel fast path ------------------------------------------
-    from models.registry import is_vllm_model
+    # One engine on each card where the model allows it, else one engine across the cards. Either way the
+    # pages are read by classify_pages; only where the engine is started differs.
+    from common.stage_timing import inference_seconds_from_records
+    from common.vllm_dp import resolve_dp_gpus, run_dp
 
-    if is_vllm_model(config.model_type):
-        from common.vllm_dp import resolve_dp_gpus, run_dp
-
-        # None -> single GPU, or a model that can't replicate per GPU.
-        resolved_gpus = resolve_dp_gpus(config, config.model_type)
-        if resolved_gpus:
-            dp_records = run_dp(
-                num_gpus=resolved_gpus,
-                images=images,
-                worker_fn="common.vllm_dp_workers.classify_worker",
-                worker_kwargs={
-                    "config_path": str(config_path) if config_path else None,
-                    "cli_overrides": cli_args,
-                },
-            )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            write_fn = append_jsonl if resuming else write_jsonl
-            count = write_fn(output_path, dp_records)
-            logger.info("Wrote %d classifications to %s", count, output_path)
-            return output_path
-
-    # -- Single-GPU / HF path -------------------------------------------------
-
-    # Load pipeline configs (prompts, fields)
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-
-    # Load model and run detection
-    logger.info("Loading model: %s", config.model_type)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
+    started = time.time()
+    engines = resolve_dp_gpus(config, config.model_type)
+    if engines:
+        records = run_dp(
+            num_gpus=engines,
+            images=images,
+            worker_fn="common.vllm_dp_workers.classify_worker",
+            worker_kwargs={
+                "config_path": str(config_path) if config_path else None,
+                "cli_overrides": cli_args,
+            },
         )
+    else:
+        with open_processor(app_cfg) as processor:
+            records = classify_pages(processor, images, app_cfg)
 
-        image_paths = [str(img) for img in images]
-        records: list[dict[str, Any]] = []
-
-        effective_batch = config.batch_size or 1
-        shares_calls = getattr(processor, "supports_generate_many", False)
-        can_batch = not shares_calls and getattr(processor, "supports_batch", False) and effective_batch > 1
-
-        start = time.time()
-
-        if shares_calls:
-            records = _classify_images(
-                processor, image_paths, _classify_batch_size(config_path), effective_verbose
-            )
-        elif can_batch:
-            for batch_start in range(0, len(image_paths), effective_batch):
-                batch_end = min(batch_start + effective_batch, len(image_paths))
-                batch = image_paths[batch_start:batch_end]
-
-                logger.info(
-                    "Detecting batch [%d-%d] / %d",
-                    batch_start + 1,
-                    batch_end,
-                    len(image_paths),
-                )
-
-                results = processor.detect_batch(batch, verbose=effective_verbose)
-                for i, result in enumerate(results):
-                    image_name = Path(batch[i]).name
-                    records.append(
-                        {
-                            "image_path": batch[i],
-                            "image_name": image_name,
-                            "document_type": result["document_type"],
-                            "confidence": result.get("confidence", 1.0),
-                            "raw_response": result.get("raw_response", ""),
-                            "prompt_used": result.get("prompt_used", "detection"),
-                        }
-                    )
-                    # Tier A: always-on per-image progress.
-                    logger.info(
-                        "[%d/%d] %s -> %s",
-                        batch_start + i + 1,
-                        len(image_paths),
-                        image_name,
-                        result["document_type"],
-                    )
-        else:
-            records = _classify_images(processor, image_paths, 1, effective_verbose)
-
-        elapsed = time.time() - start
-        logger.info(
-            "Classification complete: %d images in %.1fs (%.2fs/image)",
-            len(records),
-            elapsed,
-            elapsed / len(records) if records else 0,
-        )
-    finally:
-        model_cm.__exit__(None, None, None)
+    elapsed = inference_seconds_from_records(records, fallback=time.time() - started)
+    logger.info(
+        "Classification complete: %d images in %.1fs (%.2fs/image)",
+        len(records),
+        elapsed,
+        elapsed / len(records) if records else 0,
+    )
 
     # Write output (append when resuming so prior records are preserved)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -232,6 +152,37 @@ def run(
     logger.info("Wrote %d classifications to %s", count, output_path)
 
     return output_path
+
+
+def classify_pages(processor: Any, images: list[Path], app_config: Any) -> list[dict[str, Any]]:
+    """Give each page its document type. The one place pages are classified, however engines are arranged.
+
+    One engine across the cards calls this once with every page. With an engine on each card, each worker
+    calls it with its share. It loads no model, opens no file and decides nothing about which pages are
+    already done: the stage's ``run`` does those.
+
+    Each record carries a processing time. Inside a shared engine call the requests overlap, so a page's
+    own time is not separable: each page is charged an equal share of the whole.
+
+    Args:
+        processor: The document processor.
+        images: The pages, in order.
+        app_config: The run's settings.
+
+    Returns:
+        One classification record per page, in the order given.
+    """
+    started = time.time()
+    records = _classify_images(
+        processor,
+        [str(image) for image in images],
+        _classify_batch_size(app_config.config_path),
+        app_config.pipeline.verbose,
+    )
+    share = (time.time() - started) / len(records) if records else 0.0
+    for record in records:
+        record["processing_time"] = share
+    return records
 
 
 def _classify_batch_size(config_path: Path | None) -> int:

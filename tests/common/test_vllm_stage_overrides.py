@@ -229,5 +229,6 @@ def test_the_shipped_classify_values_move_together():
 
 def test_the_classify_stage_and_its_worker_load_through_the_staged_config():
     assert "classify" in STAGES
-    for source in ("stages/classify.py", "common/vllm_dp_workers.py"):
-        assert '.for_stage("classify")' in (REPO_ROOT / source).read_text()
+    assert '.for_stage("classify")' in (REPO_ROOT / "stages/classify.py").read_text()
+    worker = (REPO_ROOT / "common/vllm_dp_workers.py").read_text()
+    assert 'stage="classify"' in worker and ".for_stage(stage)" in worker

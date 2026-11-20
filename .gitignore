@@ -71,7 +71,6 @@ Thumbs.db
 
 # Local-only directories
 # docs/
-tests/
 .coverage
 htmlcov/
 .pytest_cache/
@@ -101,7 +100,6 @@ synthetic_invoice.json
 .env
 standard_labels.txt
 
-tests/
 plans/
 PrivateWealth/
 data/

@@ -128,7 +128,7 @@ bootstrap:
     log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921/logs
 
 # I/O paths moved into pipeline.information_extraction.* (2026-06-10) so all three
-# pipelines (information_extraction / trust / linking) are symmetric
+# pipelines (information_extraction / linking) are symmetric
 # pipeline.<name> blocks — top-level io.* is retired. See the pipeline: section.
 
 # Inference configuration — generation budget, tiling, sampling, vLLM engine,
@@ -519,7 +519,7 @@ inference:
 
 # Pipeline configuration — per-task settings grouped together: information
 # extraction (the default classify/extract/clean/evaluate paths), classification,
-# processing toggles, token budgets, trust + transaction linking, batch tuning,
+# processing toggles, token budgets, transaction linking, batch tuning,
 # extraction ordering/skip labels, and the bank-header cache.
 pipeline:
   # Information extraction — the DEFAULT image-source + output paths, used by the
@@ -528,12 +528,11 @@ pipeline:
   # information_extraction.input.dir, score against input.ground_truth, and write
   # to output.dir.
   #
-  # OVERRIDE MECHANISM (why paths appear in three pipeline.<name> blocks): the
-  # standalone linking and trust tasks REUSE the same classify/extract/clean
+  # OVERRIDE MECHANISM (why paths appear in two pipeline.<name> blocks): the
+  # standalone linking tasks REUSE the same classify/extract/clean
   # stages but on their OWN dataset. entrypoint.sh repoints the shared
-  # image_dir/output globals at pipeline.linking.* (via _resolve_linking_vars) or
-  # pipeline.trust.* (via _resolve_trust_vars), SHADOWING information_extraction.*
-  # for the duration of that task.
+  # image_dir/output globals at pipeline.linking.* (via _resolve_linking_vars),
+  # SHADOWING information_extraction.* for the duration of that task.
   information_extraction:
     # Data paths
     input:
@@ -845,8 +844,6 @@ pipeline:
     bank_statement_floor: 1500
     fallback_base: 512
     fallback_per_field: 64
-    trust_classify: 300
-    trust_field_extract: 500
 
   # Photographs of receipts. People often lay a few receipts on a table and take one
   # photograph; every later stage expects one document per image. The split stage
@@ -1164,50 +1161,6 @@ pipeline:
       paper_refine_outside_frac: 0.02
       paper_refine_inside_frac: 0.01
 
-  # Trust distribution linking — NRO Private Wealth compliance checking.
-  # Paths below SHADOW io.input/io.output when KFP_TASK=trust_* (entrypoint.sh
-  # _resolve_trust_vars repoints the shared stages here; see the io: header).
-  trust:
-    data_dir: ../private_wealth_docs
-    quads: ../private_wealth_docs/output/trust_quads.csv
-    quads_incomplete: ../private_wealth_docs/output/trust_quads_incomplete.csv
-    ground_truth: ../private_wealth_docs/ground_truth/trust_distribution_links.yml
-    classification_ground_truth: ../private_wealth_docs/ground_truth/trust_classification_gt.yml
-    classifications: ../private_wealth_docs/output/trust_classifications.jsonl
-    raw_extractions: ../private_wealth_docs/output/raw_extractions.jsonl
-    compliance_results: ../private_wealth_docs/output/trust_compliance_results.jsonl
-    output_dir: ../private_wealth_docs/output
-    evaluation_dir: ../private_wealth_docs/output/trust_evaluation
-    log_dir: ../private_wealth_docs/output/logs
-    subdirectories:
-      # Production (flat directory, trust_classify generates quads):
-      trust_return: .
-      distribution_stmt: .
-      income_schedule: .
-      beneficiary_itr: .
-      # Development (pre-sorted subdirectories):
-      #   trust_return: trust_returns
-      #   distribution_stmt: distribution_statements
-      #   income_schedule: trust_income_schedules
-      #   beneficiary_itr: beneficiary_itrs
-    amount_tolerance: 0.01    # trust-eval amount match tolerance (relative)
-    linking_fields:
-      # ID fields compared as ABN/TFN (space-normalised exact match)
-      id_fields:
-        - trust_abn
-        - beneficiary_tfn
-      # Amount fields compared numerically within amount_tolerance
-      amount_fields:
-        - share_of_net_income
-        - franking_credit
-        - capital_gain_component
-
-  # Transaction linking — receipt/invoice -> bank-statement debit matching.
-  # Standalone task (KFP_TASK=run_transaction_link); does NOT touch the trust
-  # pipeline. Matcher-first: the algorithmic matcher links against the rows the
-  # extract stage already pulled; receipts it can't confidently match fall
-  # through to a targeted single-image VLM lookup. Every key is required —
-  # stages/transaction_link.py fails fast on a missing one.
   linking:
     case_key_pattern: "^(?P<case>[^_]+)_"   # group files by case (split on first "_")
     vlm_prompt: single_receipt_link          # prompt file in prompts/ (without .yaml)

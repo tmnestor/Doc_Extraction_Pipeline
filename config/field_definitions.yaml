@@ -77,19 +77,6 @@ document_fields:
       - BANK_TRANSACTION_DESCRIPTION
       - BANK_TRANSACTION_DEBIT
 
-  trust_distribution_link:
-    count: 9
-    fields:
-      - DOCUMENT_TYPE
-      - TRUST_ABN
-      - BENEFICIARY_TFN
-      - SHARE_OF_NET_INCOME
-      - FRANKING_CREDIT
-      - CAPITAL_GAIN_COMPONENT
-      - COMPLIANCE_STATUS
-      - DISCREPANCY_TYPE
-      - DISCREPANCY_DETAILS
-
   logbook:
     count: 15
     fields:
@@ -194,15 +181,6 @@ field_descriptions:
   JOURNEY_DATES: "List of journey dates (DD Mon YYYY with | separator)"
   JOURNEY_DISTANCES: "List of journey distances in km (with | separator)"
   JOURNEY_PURPOSES: "List of journey purposes/descriptions (with | separator)"
-  # Trust distribution linking fields
-  TRUST_ABN: "11-digit Australian Business Number of the trust"
-  BENEFICIARY_TFN: "9-digit Tax File Number of the beneficiary"
-  SHARE_OF_NET_INCOME: "Beneficiary's share of trust net income"
-  FRANKING_CREDIT: "Franking credit amount allocated to beneficiary"
-  CAPITAL_GAIN_COMPONENT: "Capital gain component of trust distribution"
-  COMPLIANCE_STATUS: "Compliance status (compliant or non_compliant)"
-  DISCREPANCY_TYPE: "Type of discrepancy detected (null if compliant)"
-  DISCREPANCY_DETAILS: "Details of discrepancy (null if compliant)"
   # Transaction linking fields
   BANK_STATEMENT_FILE: "Filename of the paired bank statement image"
   RECEIPT_DATE: "Receipt purchase date (DD/MM/YYYY format)"
@@ -263,16 +241,6 @@ field_categories:
     - BANK_TRANSACTION_DATE
     - BANK_TRANSACTION_DESCRIPTION
     - BANK_TRANSACTION_DEBIT
-
-  trust_distribution_link:
-    - TRUST_ABN
-    - BENEFICIARY_TFN
-    - SHARE_OF_NET_INCOME
-    - FRANKING_CREDIT
-    - CAPITAL_GAIN_COMPONENT
-    - COMPLIANCE_STATUS
-    - DISCREPANCY_TYPE
-    - DISCREPANCY_DETAILS
 
   vehicle_logbook:
     - VEHICLE_MAKE
@@ -469,12 +437,6 @@ document_type_aliases:
     - receipt matching
     - receipt to statement
 
-  trust_distribution_link:
-    - trust distribution link
-    - trust distribution linking
-    - trust compliance
-    - trust distribution
-
 # ============================================================================
 # SUPPORTED DOCUMENT TYPES
 # ============================================================================
@@ -485,5 +447,4 @@ supported_document_types:
   - travel
   - logbook
   - transaction_link
-  - trust_distribution_link
   - universal

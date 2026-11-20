@@ -8,17 +8,6 @@ Prints bash-eval-able assignments:
     YAML_GROUND_TRUTH=...
     YAML_OUTPUT_DIR=...
     YAML_LOG_DIR=...
-    YAML_TRUST_DATA_DIR=...
-    YAML_TRUST_QUADS=...
-    YAML_TRUST_QUADS_INCOMPLETE=...
-    YAML_TRUST_GROUND_TRUTH=...
-    YAML_TRUST_CLASSIFICATION_GT=...
-    YAML_TRUST_CLASSIFICATIONS=...
-    YAML_TRUST_RAW_EXTRACTIONS=...
-    YAML_TRUST_COMPLIANCE_RESULTS=...
-    YAML_TRUST_OUTPUT_DIR=...
-    YAML_TRUST_EVALUATION_DIR=...
-    YAML_TRUST_LOG_DIR=...
     YAML_LINKING_DATA_DIR=...
     YAML_LINKING_OUTPUT=...
     YAML_LINKING_GROUND_TRUTH=...
@@ -56,17 +45,6 @@ def main() -> int:
         _emit("YAML_GROUND_TRUTH", "")
         _emit("YAML_OUTPUT_DIR", "")
         _emit("YAML_LOG_DIR", "")
-        _emit("YAML_TRUST_DATA_DIR", "")
-        _emit("YAML_TRUST_QUADS", "")
-        _emit("YAML_TRUST_QUADS_INCOMPLETE", "")
-        _emit("YAML_TRUST_GROUND_TRUTH", "")
-        _emit("YAML_TRUST_CLASSIFICATION_GT", "")
-        _emit("YAML_TRUST_CLASSIFICATIONS", "")
-        _emit("YAML_TRUST_RAW_EXTRACTIONS", "")
-        _emit("YAML_TRUST_COMPLIANCE_RESULTS", "")
-        _emit("YAML_TRUST_OUTPUT_DIR", "")
-        _emit("YAML_TRUST_EVALUATION_DIR", "")
-        _emit("YAML_TRUST_LOG_DIR", "")
         _emit("YAML_LINKING_DATA_DIR", "")
         _emit("YAML_LINKING_OUTPUT", "")
         _emit("YAML_LINKING_GROUND_TRUTH", "")
@@ -86,7 +64,6 @@ def main() -> int:
     info_extract = pipeline.get("information_extraction", {}) or {}
     data = info_extract.get("input", {}) or {}
     output = info_extract.get("output", {}) or {}
-    trust = pipeline.get("trust", {}) or {}
     linking = pipeline.get("linking", {}) or {}
 
     _emit("YAML_MODEL_TYPE", model.get("type"))
@@ -95,17 +72,6 @@ def main() -> int:
     _emit("YAML_GROUND_TRUTH", data.get("ground_truth"))
     _emit("YAML_OUTPUT_DIR", output.get("dir"))
     _emit("YAML_LOG_DIR", log_cfg.get("log_dir"))
-    _emit("YAML_TRUST_DATA_DIR", trust.get("data_dir"))
-    _emit("YAML_TRUST_QUADS", trust.get("quads"))
-    _emit("YAML_TRUST_QUADS_INCOMPLETE", trust.get("quads_incomplete"))
-    _emit("YAML_TRUST_GROUND_TRUTH", trust.get("ground_truth"))
-    _emit("YAML_TRUST_CLASSIFICATION_GT", trust.get("classification_ground_truth"))
-    _emit("YAML_TRUST_CLASSIFICATIONS", trust.get("classifications"))
-    _emit("YAML_TRUST_RAW_EXTRACTIONS", trust.get("raw_extractions"))
-    _emit("YAML_TRUST_COMPLIANCE_RESULTS", trust.get("compliance_results"))
-    _emit("YAML_TRUST_OUTPUT_DIR", trust.get("output_dir"))
-    _emit("YAML_TRUST_EVALUATION_DIR", trust.get("evaluation_dir"))
-    _emit("YAML_TRUST_LOG_DIR", trust.get("log_dir"))
     _emit("YAML_LINKING_DATA_DIR", linking.get("data_dir"))
     _emit("YAML_LINKING_OUTPUT", linking.get("output"))
     _emit("YAML_LINKING_GROUND_TRUTH", linking.get("ground_truth"))

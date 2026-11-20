@@ -383,11 +383,3 @@ The reusable principle, regardless of domain:
 > **Ask the VLM for facts it can see. Decide the label in code from those facts.**
 > Strip any chain-of-thought before parsing, and only treat strongly-structured
 > output (tables/pipes) as data — never prose.
-
-A second, fully worked example of this exact pattern already exists for trust
-documents: `prompts/trust_document_type_detection.yaml` +
-`common/trust_classify_parser.py` (`stages/trust_classify.py`). It asks
-HEADER / HAS_ABN / HAS_TFN / HAS_DISTRIBUTION_TABLE / HAS_ITEM_13 / ADDRESSED_TO
-and derives `TRUST_RETURN` / `DISTRIBUTION_STMT` / `INCOME_SCHEDULE` /
-`BENEFICIARY_ITR` with priority-ordered rules. Copy whichever is closer to your
-task.

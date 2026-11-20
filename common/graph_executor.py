@@ -467,10 +467,6 @@ class GraphExecutor:
                 from common.bank_post_process import run_select_best_type
 
                 return run_select_best_type(state)
-            case "trust_compliance":
-                from common.trust_compliance import run_trust_compliance
-
-                return run_trust_compliance(state)
             case _:
                 return True, {}
 
@@ -504,23 +500,6 @@ class GraphExecutor:
         """Build flat ``FIELD: value`` dict from accumulated state."""
         fields: dict[str, str] = {"DOCUMENT_TYPE": document_type}
         fields.update(extra_fields)
-
-        # Trust distribution linking: use validator output
-        if state.has("validate_compliance"):
-            validated = state.node_results["validate_compliance"].parsed
-            for key in (
-                "TRUST_ABN",
-                "BENEFICIARY_TFN",
-                "SHARE_OF_NET_INCOME",
-                "FRANKING_CREDIT",
-                "CAPITAL_GAIN_COMPONENT",
-                "COMPLIANCE_STATUS",
-                "DISCREPANCY_TYPE",
-                "DISCREPANCY_DETAILS",
-            ):
-                if key in validated:
-                    fields[key] = str(validated[key])
-            return fields
 
         # Transaction linking: combine receipts + matches
         if state.has("match_to_statement") or state.has("validate_amounts"):

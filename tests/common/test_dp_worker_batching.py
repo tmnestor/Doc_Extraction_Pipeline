@@ -93,10 +93,8 @@ def statements(tmp_path: Path) -> list[Path]:
     return paths
 
 
-def bank(strategy: str, many=None, one=None) -> UnifiedBankExtractor:
-    return UnifiedBankExtractor(
-        generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False, bank_strategy=strategy
-    )
+def bank(many=None, one=None) -> UnifiedBankExtractor:
+    return UnifiedBankExtractor(generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False)
 
 
 def classified(paths: list[Path]) -> list[dict]:
@@ -151,7 +149,7 @@ def test_no_pages_give_no_records() -> None:
 
 def test_single_pass_statements_share_a_call_on_the_two_engine_path(statements) -> None:
     many = FakeMany()
-    adapter = bank("single_pass", many=many)
+    adapter = bank(many=many)
     batches = plan(classified(statements), adapter)
 
     assert [len(batch) for batch in batches] == [5]
@@ -162,15 +160,8 @@ def test_single_pass_statements_share_a_call_on_the_two_engine_path(statements) 
     assert all(r["error"] is None and r["prompt_used"].startswith("unified_bank_") for r in records)
 
 
-def test_two_turn_statements_are_still_read_one_at_a_time(statements) -> None:
-    """Their second call depends on their first, so there is nothing to batch."""
-    batches = plan(classified(statements), bank("two_turn", many=FakeMany()))
-
-    assert [len(batch) for batch in batches] == [1] * 5
-
-
 def test_without_a_batched_call_statements_are_read_one_at_a_time(statements) -> None:
-    batches = plan(classified(statements), bank("single_pass", many=None))
+    batches = plan(classified(statements), bank(many=None))
 
     assert [len(batch) for batch in batches] == [1] * 5
 
@@ -178,9 +169,9 @@ def test_without_a_batched_call_statements_are_read_one_at_a_time(statements) ->
 def test_the_two_paths_write_the_same_record_for_a_statement(statements) -> None:
     """Apart from the time taken, which is a measurement and not a result."""
     batch = classified(statements)
-    by_worker = workers._bank_batch_records(bank("single_pass", many=FakeMany()), batch)
+    by_worker = workers._bank_batch_records(bank(many=FakeMany()), batch)
     by_stage = workers._Records()
-    extract_stage._extract_bank_single_pass_batch(by_stage, bank("single_pass", many=FakeMany()), batch)
+    extract_stage._extract_bank_single_pass_batch(by_stage, bank(many=FakeMany()), batch)
 
     def without_time(records: list[dict]) -> list[dict]:
         return [{k: v for k, v in r.items() if k != "processing_time"} for r in records]
@@ -191,7 +182,7 @@ def test_the_two_paths_write_the_same_record_for_a_statement(statements) -> None
 
 def test_a_bank_batch_that_fails_is_retried_one_statement_at_a_time(statements) -> None:
     one = FakeOne()
-    adapter = bank("single_pass", many=FakeMany(fail=True), one=one)
+    adapter = bank(many=FakeMany(fail=True), one=one)
 
     records = workers._bank_batch_records(adapter, classified(statements))
 

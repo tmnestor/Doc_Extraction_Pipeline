@@ -78,7 +78,6 @@ def _build_cli_args(
     model_type: str | None = None,
     batch_size: int | None = None,
     bank_v2: bool | None = None,
-    balance_correction: bool | None = None,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -98,8 +97,6 @@ def _build_cli_args(
         cli_args["batch_size"] = batch_size
     if bank_v2 is not None:
         cli_args["bank_v2"] = bank_v2
-    if balance_correction is not None:
-        cli_args["balance_correction"] = balance_correction
     if max_num_seqs is not None:
         cli_args["max_num_seqs"] = max_num_seqs
     if verbose is not None:
@@ -117,7 +114,6 @@ def run(
     model_type: str | None = None,
     batch_size: int | None = None,
     bank_v2: bool | None = None,
-    balance_correction: bool | None = None,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -139,8 +135,6 @@ def run(
         batch_size: Images per batch (None = auto-detect, 1 = sequential).
         bank_v2: Use UnifiedBankExtractor for bank statements. None = YAML
             processing.bank_v2.
-        balance_correction: Enable balance validation in bank extraction.
-            None = YAML processing.balance_correction.
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
         config_path: Optional path to run_config.yml.
@@ -190,7 +184,6 @@ def run(
         model_type=model_type,
         batch_size=batch_size,
         bank_v2=bank_v2,
-        balance_correction=balance_correction,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,
@@ -303,7 +296,6 @@ def run(
 
         # Set up bank processing
         bank_adapter = None
-        bank_cache = None
         has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in classifications)
 
         if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
@@ -313,17 +305,8 @@ def run(
                     processor.generate_many if getattr(processor, "supports_generate_many", False) else None
                 ),
                 verbose=effective_verbose,
-                use_balance_correction=config.balance_correction,
-                bank_strategy=config.bank_strategy,
             )
-            logger.info("Bank adapter enabled (bank_strategy=%s)", bank_adapter.bank_strategy)
-
-            # Phase 7: per-bank column-mapping cache
-            from common.bank_header_cache import BankHeaderCache
-
-            bank_cache = BankHeaderCache.from_config(app_cfg.bank_header_cache_config)
-            if bank_cache.enabled:
-                logger.info("Bank header cache enabled")
+            logger.info("Bank adapter enabled")
 
         # Process images with streaming writer (flush per record for crash recovery)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -336,12 +319,11 @@ def run(
 
         with StreamingJsonlWriter(output_path) as writer:
             for batch in batches:
-                # A multi-document batch is one engine call. Singletons —
-                # two-turn bank statements, and any type whose batch size is 1,
-                # fall through to the per-image path below, unchanged.
+                # A multi-document batch is one engine call. Singletons (any type
+                # whose batch size is 1) fall through to the per-image path below.
                 if len(batch) > 1:
                     if batch[0]["document_type"].upper() == "BANK_STATEMENT":
-                        # Only planned when the adapter can batch (single pass).
+                        # Only planned when the adapter can batch.
                         _extract_bank_single_pass_batch(writer, bank_adapter, batch)
                     else:
                         _extract_standard_batch(writer, processor, batch, effective_verbose)
@@ -370,7 +352,6 @@ def run(
                             image_path,
                             image_name,
                             doc_type,
-                            bank_cache=bank_cache,
                         )
                     else:
                         _extract_standard(
@@ -431,30 +412,11 @@ def _extract_bank_with_adapter(
     image_path: str,
     image_name: str,
     doc_type: str,
-    bank_cache=None,
 ) -> None:
     """Extract bank statement via UnifiedBankExtractor, write raw responses."""
     start = time.time()
 
-    # Phase 7: check bank header cache before extraction
-    cached_mapping = None
-    if bank_cache is not None:
-        cached_mapping_raw = bank_cache.lookup(image_path)
-        if cached_mapping_raw is not None:
-            from common.bank_types import ColumnMapping
-
-            cached_mapping = ColumnMapping(**cached_mapping_raw)
-            logger.info("Bank cache hit for %s", image_name)
-
-    schema_fields, metadata = bank_adapter.extract_bank_statement(
-        image_path, cached_column_mapping=cached_mapping
-    )
-
-    # Phase 7: store result in cache on miss
-    if bank_cache is not None and cached_mapping is None:
-        result_mapping = metadata.get("column_mapping")
-        if result_mapping:
-            bank_cache.store(image_path, result_mapping)
+    schema_fields, metadata = bank_adapter.extract_bank_statement(image_path)
 
     img_time = time.time() - start
 
@@ -480,19 +442,15 @@ def _extract_bank_with_adapter(
     )
 
 
-# Types that cannot share an engine call by default. Bank statements run
-# multi-turn through UnifiedBankExtractor (or the graph executor), where turn N
-# depends on turn N-1's answer, so there is nothing to batch.
+# Types that cannot share an engine call unless the run can batch them.
 UNBATCHABLE_TYPES = {"BANK_STATEMENT"}
 
 
 def _unbatchable_types(bank_adapter: Any) -> set[str]:
     """The document types that must each be their own engine call in this run.
 
-    Bank statements are the exception to their own rule when read single pass:
-    each is then one independent call, so several can be submitted together and
-    run concurrently. That needs the adapter (not the graph executor, not the
-    standard path) and a backend with a batched call; otherwise they stay
+    A bank statement is one independent call, so several can be submitted together and run
+    concurrently. That needs the adapter and a backend with a batched call; otherwise they stay
     unbatched.
     """
     if bank_adapter is not None and bank_adapter.can_batch:
@@ -699,11 +657,6 @@ def main(
         "--bank-v2/--no-bank-v2",
         help="Use UnifiedBankExtractor for bank statements. Default: YAML processing.bank_v2.",
     ),
-    balance_correction: bool | None = typer.Option(
-        None,
-        "--balance-correction/--no-balance-correction",
-        help="Enable balance validation in bank extraction. Default: YAML processing.balance_correction.",
-    ),
     max_num_seqs: int | None = typer.Option(
         None,
         "--max-num-seqs",
@@ -736,7 +689,6 @@ def main(
         model_type=model,
         batch_size=batch_size,
         bank_v2=bank_v2,
-        balance_correction=balance_correction,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,

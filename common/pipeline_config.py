@@ -11,7 +11,6 @@ from typing import Any
 
 import yaml
 
-from common.bank_types import validate_bank_strategy
 
 # ============================================================================
 # Constants
@@ -121,10 +120,6 @@ class PipelineConfig:
     document_types: list[str] | None = None
     batch_size: int | None = None  # None = auto-detect from VRAM
     bank_v2: bool = True
-    # No default: the run config must state it (two_turn or single_pass). It is
-    # checked where the bank extractor is built, so a run without one fails there.
-    bank_strategy: str | None = None
-    balance_correction: bool = True
 
     # Model options
     model_type: str = "internvl3-vllm"
@@ -375,16 +370,12 @@ def load_yaml_config(
     if processing_cfg:
         _require_section_keys(
             processing_cfg,
-            ["batch_size", "bank_v2", "bank_strategy", "balance_correction", "verbose", "debug"],
+            ["batch_size", "bank_v2", "verbose", "debug"],
             "pipeline.processing",
             config_path,
         )
-        flat_config["bank_strategy"] = validate_bank_strategy(
-            processing_cfg.get("bank_strategy"), config_path.resolve()
-        )
         flat_config["batch_size"] = processing_cfg.get("batch_size")
         flat_config["bank_v2"] = processing_cfg.get("bank_v2")
-        flat_config["balance_correction"] = processing_cfg.get("balance_correction")
         flat_config["verbose"] = processing_cfg.get("verbose")
         flat_config["debug"] = processing_cfg.get("debug")
 

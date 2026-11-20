@@ -291,12 +291,8 @@ def classified_extract_worker(
                     processor.generate_many if getattr(processor, "supports_generate_many", False) else None
                 ),
                 verbose=effective_verbose,
-                use_balance_correction=config.balance_correction,
-                bank_strategy=config.bank_strategy,
             )
-            logger.info(
-                "Bank adapter enabled (GPU %d, bank_strategy=%s)", gpu_id, bank_adapter.bank_strategy
-            )
+            logger.info("Bank adapter enabled (GPU %d)", gpu_id)
 
         records: list[dict[str, Any]] = []
         total = len(my_classifications)

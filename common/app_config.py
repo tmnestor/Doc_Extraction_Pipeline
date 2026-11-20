@@ -7,7 +7,6 @@ in cli.py and eliminates mutable module globals.
 from __future__ import annotations
 
 import copy
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -227,7 +226,6 @@ class AppConfig:
         "_extraction_order",
         "_secondary_sort",
         "_extraction_skip_labels",
-        "_bank_header_cache",
         "_stage",
     )
 
@@ -260,7 +258,6 @@ class AppConfig:
         extraction_order: list[str] | None = None,
         secondary_sort: str = "none",
         extraction_skip_labels: list[str] | None = None,
-        bank_header_cache: dict[str, Any] | None = None,
     ) -> None:
         self.pipeline = pipeline
         self.batch = batch
@@ -275,7 +272,6 @@ class AppConfig:
         self._extraction_order = extraction_order or []
         self._secondary_sort = secondary_sort
         self._extraction_skip_labels = extraction_skip_labels or []
-        self._bank_header_cache = bank_header_cache or {"enabled": False, "key_pattern": ""}
         self._stage: str | None = None
 
     @classmethod
@@ -399,9 +395,6 @@ class AppConfig:
         # 17. Validate and build extraction_skip_labels
         skip_labels = cls._validate_extraction_skip_labels(raw_config, config_file)
 
-        # 19. Validate and build bank_header_cache
-        bank_header_cache = cls._validate_bank_header_cache(raw_config, config_file)
-
         return cls(
             pipeline=pipeline,
             batch=batch,
@@ -416,7 +409,6 @@ class AppConfig:
             extraction_order=extraction_order,
             secondary_sort=secondary_sort,
             extraction_skip_labels=skip_labels,
-            bank_header_cache=bank_header_cache,
         )
 
     # -- Token budgets (Phase 1) -----------------------------------------------
@@ -624,13 +616,6 @@ class AppConfig:
         """Classification labels that bypass extraction entirely."""
         return list(self._extraction_skip_labels)
 
-    # -- Bank header cache (Phase 7) -------------------------------------------
-
-    @property
-    def bank_header_cache_config(self) -> dict[str, Any]:
-        """Bank header cache configuration dict."""
-        return dict(self._bank_header_cache)
-
     # -- Validation classmethods -----------------------------------------------
 
     @classmethod
@@ -753,80 +738,3 @@ class AppConfig:
                     ]
                 )
         return list(value)
-
-    @classmethod
-    def _validate_bank_header_cache(cls, raw_config: dict, config_file: str) -> dict[str, Any]:
-        """Validate ``pipeline.bank_header_cache`` section in YAML."""
-        cache = raw_config.get("pipeline", {}).get("bank_header_cache")
-        if cache is None:
-            raise ConfigError(
-                [
-                    f"Missing required key 'pipeline.bank_header_cache' in {config_file}. "
-                    f"What: the key 'pipeline.bank_header_cache' is absent. "
-                    f"Where: {config_file} → pipeline.bank_header_cache. "
-                    f"Expected: a mapping with 'enabled' and 'key_pattern', e.g.:\n"
-                    f"  pipeline:\n"
-                    f"    bank_header_cache:\n"
-                    f"      enabled: false\n"
-                    f'      key_pattern: "^(?P<institution>[A-Za-z_]+)_"\n'
-                    f"How to fix: add a 'pipeline.bank_header_cache:' section to {config_file}."
-                ]
-            )
-        if not isinstance(cache, dict):
-            raise ConfigError(
-                [
-                    f"Invalid type for 'pipeline.bank_header_cache' in {config_file}: "
-                    f"expected a mapping, got {type(cache).__name__}. "
-                    f"Where: {config_file} → pipeline.bank_header_cache. "
-                    f"Expected: a mapping with 'enabled' and 'key_pattern'. "
-                    f"How to fix: change 'pipeline.bank_header_cache' to a YAML mapping "
-                    f"in {config_file}."
-                ]
-            )
-        if "enabled" not in cache:
-            raise ConfigError(
-                [
-                    f"Missing required key 'pipeline.bank_header_cache.enabled' in "
-                    f"{config_file}. "
-                    f"What: the 'enabled' key is absent from 'pipeline.bank_header_cache'. "
-                    f"Where: {config_file} → pipeline.bank_header_cache.enabled. "
-                    f"Expected: a boolean (true/false), e.g.:\n"
-                    f"  pipeline:\n"
-                    f"    bank_header_cache:\n"
-                    f"      enabled: false\n"
-                    f"How to fix: add 'enabled: false' under 'pipeline.bank_header_cache' "
-                    f"in {config_file}."
-                ]
-            )
-        if "key_pattern" not in cache:
-            raise ConfigError(
-                [
-                    f"Missing required key 'pipeline.bank_header_cache.key_pattern' in "
-                    f"{config_file}. "
-                    f"What: the 'key_pattern' key is absent from 'pipeline.bank_header_cache'. "
-                    f"Where: {config_file} → pipeline.bank_header_cache.key_pattern. "
-                    f"Expected: a regex string, e.g.:\n"
-                    f"  pipeline:\n"
-                    f"    bank_header_cache:\n"
-                    f'      key_pattern: "^(?P<institution>[A-Za-z_]+)_"\n'
-                    f"How to fix: add 'key_pattern: <regex>' under "
-                    f"'pipeline.bank_header_cache' in {config_file}."
-                ]
-            )
-        # Validate regex compiles
-        pattern = cache["key_pattern"]
-        try:
-            re.compile(pattern)
-        except re.error as exc:
-            raise ConfigError(
-                [
-                    f"Invalid regex in 'pipeline.bank_header_cache.key_pattern' in "
-                    f"{config_file}: {exc}. "
-                    f"Pattern: {pattern!r}. "
-                    f"Where: {config_file} → pipeline.bank_header_cache.key_pattern. "
-                    f"Expected: a valid Python regex string. "
-                    f"How to fix: correct the regex pattern in "
-                    f"'pipeline.bank_header_cache.key_pattern' in {config_file}."
-                ]
-            ) from None
-        return dict(cache)

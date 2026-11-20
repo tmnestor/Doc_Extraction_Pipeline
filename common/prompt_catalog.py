@@ -8,7 +8,7 @@ Usage:
 
     catalog = PromptCatalog()
     prompt = catalog.get_prompt("internvl3", "invoice")
-    bank_prompt = catalog.get_prompt("bank", "turn0_header_detection")
+    bank_prompt = catalog.get_prompt("bank", "schema_fallback_extraction")
 """
 
 from pathlib import Path

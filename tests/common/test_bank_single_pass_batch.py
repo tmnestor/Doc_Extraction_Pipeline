@@ -1,7 +1,6 @@
-"""Single-pass bank statements share an engine call, so the engine can run them concurrently.
+"""Bank statements share an engine call, so the engine can run them concurrently.
 
-A two-turn statement cannot be batched: its second call depends on its first.
-A single-pass statement is one independent call, so several can be submitted
+A statement is read in one independent call, so several can be submitted
 together. Each request must be built exactly as the one-at-a-time call builds
 it (same prompt, same token budget, image before text, thinking suppressed),
 and each reply must reach the extraction record unaltered, or a batched run
@@ -82,10 +81,8 @@ def statements(tmp_path: Path) -> list[Path]:
     return paths
 
 
-def extractor(strategy: str = "single_pass", many=None, one=None) -> UnifiedBankExtractor:
-    return UnifiedBankExtractor(
-        generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False, bank_strategy=strategy
-    )
+def extractor(many=None, one=None) -> UnifiedBankExtractor:
+    return UnifiedBankExtractor(generate_fn=one or FakeOne(), generate_many_fn=many, verbose=False)
 
 
 def classifications(paths: list[Path]) -> list[dict]:
@@ -125,21 +122,20 @@ def test_a_batched_statement_has_the_metadata_of_an_unbatched_one(statements):
     assert many == one
 
 
-def test_two_turn_statements_cannot_be_batched(statements):
+def test_statements_cannot_be_batched_without_a_batched_call(statements):
     with pytest.raises(ValueError) as caught:
-        extractor("two_turn", many=FakeMany()).extract_bank_statements_single_pass(statements)
+        extractor(many=None).extract_bank_statements_single_pass(statements)
 
     message = str(caught.value)
-    assert "What:" in message and "two_turn" in message
-    assert "Where:" in message and "pipeline.processing.bank_strategy" in message
-    assert "Expected:" in message and "bank_strategy: single_pass" in message
+    assert "What:" in message and "generate_many_fn" in message
+    assert "Where:" in message and "stages/extract.py" in message
+    assert "Expected:" in message and "generate_many" in message
     assert "How to fix:" in message
 
 
-def test_can_batch_needs_single_pass_and_a_batch_call():
+def test_can_batch_needs_a_batch_call():
     assert extractor(many=FakeMany()).can_batch
     assert not extractor(many=None).can_batch
-    assert not extractor("two_turn", many=FakeMany()).can_batch
 
 
 # --- the backend: a batched request is built as the single request is -----------
@@ -216,17 +212,15 @@ def test_single_pass_statements_are_planned_into_shared_calls(statements):
     batchable = plan_extraction_batches(
         records, batch_sizes=sizes, unbatchable=extract_stage._unbatchable_types(extractor(many=FakeMany()))
     )
-    two_turn = plan_extraction_batches(
-        records,
-        batch_sizes=sizes,
-        unbatchable=extract_stage._unbatchable_types(extractor("two_turn", many=FakeMany())),
+    no_batched_call = plan_extraction_batches(
+        records, batch_sizes=sizes, unbatchable=extract_stage._unbatchable_types(extractor(many=None))
     )
     no_adapter = plan_extraction_batches(
         records, batch_sizes=sizes, unbatchable=extract_stage._unbatchable_types(None)
     )
 
     assert [len(b) for b in batchable] == [2, 1]
-    assert [len(b) for b in two_turn] == [1, 1, 1]
+    assert [len(b) for b in no_batched_call] == [1, 1, 1]
     assert [len(b) for b in no_adapter] == [1, 1, 1]
 
 
@@ -284,7 +278,7 @@ def test_the_shipped_bank_batch_size_is_stated_and_explained():
 
     assert sizes["bank_statement"] >= 1
     assert "it is NOT in effect today" not in text
-    assert "single_pass" in text.split("batching:")[1].split("processing:")[0]
+    assert "one independent" in text.split("batching:")[1].split("processing:")[0]
 
 
 def test_records_round_trip_as_json(statements):

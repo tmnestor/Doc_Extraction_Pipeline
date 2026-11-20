@@ -118,8 +118,6 @@ def run(
     batch_size: int | None = None,
     bank_v2: bool | None = None,
     balance_correction: bool | None = None,
-    graph_bank: bool = False,
-    graph_unified: bool = False,
     max_num_seqs: int | None = None,
     verbose: bool | None = None,
     debug: bool | None = None,
@@ -143,10 +141,6 @@ def run(
             processing.bank_v2.
         balance_correction: Enable balance validation in bank extraction.
             None = YAML processing.balance_correction.
-        graph_bank: Use graph-based bank extraction (opt-in, overrides bank_v2).
-        graph_unified: Use unified graph workflow (classify + extract in one
-            graph walk). Skips Stage 1 -- discovers images directly from
-            image_dir.
         verbose: Tier B output (init/config details). None = read from YAML.
         debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
         config_path: Optional path to run_config.yml.
@@ -154,17 +148,8 @@ def run(
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    if graph_unified:
-        return _run_unified(
-            image_dir=image_dir,
-            output_path=output_path,
-            model_type=model_type,
-            verbose=verbose,
-            debug=debug,
-            config_path=config_path,
-        )
     if classifications_path is None:
-        msg = "--classifications is required when --graph-unified is not set"
+        msg = "--classifications is required"
         raise typer.BadParameter(msg)
 
     from common.pipeline_ops import load_pipeline_configs
@@ -327,16 +312,12 @@ def run(
             app_config=app_cfg,
         )
 
-        # Set up bank processing: graph executor (opt-in) or legacy adapter
+        # Set up bank processing
         bank_adapter = None
-        graph_bank_executor = None
         bank_cache = None
         has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in classifications)
 
-        if has_bank and graph_bank:
-            graph_bank_executor = _build_graph_bank_executor(processor, app_cfg)
-            logger.info("Bank graph executor enabled")
-        elif has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
+        if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
             bank_budget = app_cfg.get_image_budget("bank_statement")
             bank_adapter = UnifiedBankExtractor(
                 generate_fn=processor.generate,
@@ -396,15 +377,7 @@ def run(
                 img_start = time.time()
 
                 try:
-                    if doc_type.upper() == "BANK_STATEMENT" and graph_bank_executor is not None:
-                        _extract_bank_with_graph(
-                            writer,
-                            graph_bank_executor,
-                            image_path,
-                            image_name,
-                            doc_type,
-                        )
-                    elif doc_type.upper() == "BANK_STATEMENT" and bank_adapter is not None:
+                    if doc_type.upper() == "BANK_STATEMENT" and bank_adapter is not None:
                         _extract_bank_with_adapter(
                             writer,
                             bank_adapter,
@@ -464,49 +437,6 @@ def run(
         model_cm.__exit__(None, None, None)
 
     return output_path
-
-
-def _build_graph_bank_executor(processor: Any, app_cfg: Any) -> tuple[Any, dict[str, Any]]:
-    """Build a GraphExecutor + workflow definition for bank extraction."""
-    import yaml
-
-    from common.extraction_types import GenerateResult, NodeGenParams
-    from common.graph_executor import GraphExecutor
-    from common.turn_parsers import build_parser_registry
-
-    workflow_path = Path(__file__).resolve().parent.parent / "prompts" / "workflows" / "bank_extract.yaml"
-    with workflow_path.open() as f:
-        definition = yaml.safe_load(f)
-
-    def generate_fn(image: Any, prompt: str, params: NodeGenParams) -> GenerateResult:
-        text = processor.generate(image, prompt, max_tokens=params.max_tokens)
-        return GenerateResult(text=text)
-
-    parsers = build_parser_registry(fallback_type=app_cfg.classification_fallback_type)
-    executor = GraphExecutor(generate_fn, parsers, budget_resolver=app_cfg.get_token_budget)
-    return executor, definition
-
-
-def _extract_bank_with_graph(
-    writer: "StreamingJsonlWriter",
-    executor_and_def: tuple[Any, dict[str, Any]],
-    image_path: str,
-    image_name: str,
-    doc_type: str,
-) -> None:
-    """Extract bank statement via GraphExecutor, write raw responses."""
-    executor, definition = executor_and_def
-
-    session = executor.run(
-        document_type=doc_type,
-        definition=definition,
-        image_path=image_path,
-        image_name=image_name,
-    )
-
-    record = session.to_record()
-    record["prompt_used"] = f"graph_bank_{session.strategy}"
-    writer.write(record)
 
 
 def _extract_bank_with_adapter(
@@ -769,219 +699,6 @@ def _extract_standard(
     )
 
 
-def _run_unified(
-    image_dir: Path,
-    output_path: Path,
-    *,
-    model_type: str | None = None,
-    verbose: bool | None = None,
-    debug: bool | None = None,
-    config_path: Path | None = None,
-    workflow_name: str = "unified_extract.yaml",
-    label: str = "unified",
-) -> Path:
-    """Graph-based extraction: classify + extract in one graph walk per image.
-
-    Discovers images directly from image_dir (no classifications.jsonl needed).
-
-    Args:
-        workflow_name: YAML file under prompts/workflows/ to load.
-        label: Label for log messages and prompt_used prefix.
-    """
-    from common.pipeline_ops import load_pipeline_configs
-    from common.app_config import AppConfig
-    from common.pipeline_config import discover_images
-    from common.pipeline_ops import create_processor, load_model
-
-    # Build config FIRST: discovery needs max_images and document_types from it.
-    # This used to run after discover_images, which is why calling it with the
-    # directory alone looked harmless — the config simply was not available yet.
-    cli_args: dict[str, Any] = {
-        "data_dir": str(image_dir),
-        "output_dir": str(output_path.parent),
-    }
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-    if verbose is not None:
-        cli_args["verbose"] = verbose
-    if debug is not None:
-        cli_args["debug"] = debug
-
-    app_cfg = AppConfig.load(cli_args, config_path=config_path)
-    config = app_cfg.pipeline
-
-    # Discover images
-    images = list(
-        discover_images(
-            image_dir,
-            document_types=config.document_types,
-            max_images=config.max_images,
-        )
-    )
-    if not images:
-        msg = f"No images found in {image_dir}"
-        raise FileNotFoundError(msg)
-    logger.info("Found %d images in %s", len(images), image_dir)
-
-    # Check for resumption
-    completed = read_completed_images(output_path)
-    if completed:
-        original_count = len(images)
-        images = [img for img in images if img.name not in completed]
-        logger.info(
-            "Resuming: %d already done, %d remaining (of %d total)",
-            len(completed),
-            len(images),
-            original_count,
-        )
-
-    if not images:
-        logger.info("All images already processed -- nothing to do")
-        return output_path
-
-    # -- vLLM data-parallel fast path ------------------------------------------
-    from models.registry import is_vllm_model
-
-    if is_vllm_model(config.model_type):
-        from common.vllm_dp import resolve_dp_gpus, run_dp
-
-        # None -> single GPU, or a model that can't replicate per GPU.
-        resolved_gpus = resolve_dp_gpus(config, config.model_type)
-        if resolved_gpus:
-            records = run_dp(
-                num_gpus=resolved_gpus,
-                images=images,
-                worker_fn="common.vllm_dp_workers.extract_worker",
-                worker_kwargs={
-                    "config_path": str(config_path) if config_path else None,
-                    "cli_overrides": cli_args,
-                    "workflow_name": workflow_name,
-                    "label": label,
-                },
-            )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            # Resume-safe: APPEND when resuming so the already-extracted records
-            # (filtered out of the work list above) are preserved. write_jsonl
-            # truncates, which on a DP-path resume would drop the completed work.
-            write_fn = append_jsonl if completed else write_jsonl
-            count = write_fn(output_path, records)
-            logger.info("Wrote %d extractions to %s", count, output_path)
-            return output_path
-
-    # -- Single-GPU / HF path -------------------------------------------------
-
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-
-    # Load model
-    logger.info("Loading model: %s", config.model_type)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
-        )
-
-        executor, definition = _build_unified_executor(processor, app_cfg, workflow_name)
-
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        start = time.time()
-        count = 0
-        total = len(images)
-
-        with StreamingJsonlWriter(output_path) as writer:
-            for img_path in images:
-                image_name = img_path.name
-                img_start = time.time()
-
-                try:
-                    session = executor.run(
-                        document_type="UNKNOWN",
-                        definition=definition,
-                        image_path=str(img_path),
-                        image_name=image_name,
-                    )
-
-                    record = session.to_record()
-                    record["prompt_used"] = f"graph_{label}_{session.strategy}"
-                    writer.write(record)
-
-                except Exception as e:
-                    logger.error("Error processing %s: %s", image_name, e)
-                    img_time = time.time() - img_start
-                    writer.write(
-                        {
-                            "image_name": image_name,
-                            "image_path": str(img_path),
-                            "document_type": "UNKNOWN",
-                            "raw_response": "",
-                            "processing_time": img_time,
-                            "prompt_used": "error",
-                            "error": str(e),
-                        }
-                    )
-
-                count += 1
-                img_time = time.time() - img_start
-                doc_type = "UNKNOWN"
-                try:
-                    doc_type = session.document_type
-                except UnboundLocalError:
-                    pass
-                logger.info(
-                    "[%d/%d] %s: %s (%.1fs)",
-                    count,
-                    total,
-                    image_name,
-                    doc_type,
-                    img_time,
-                )
-
-        elapsed = time.time() - start
-        logger.info(
-            "%s extraction complete: %d images in %.1fs",
-            label.capitalize(),
-            count,
-            elapsed,
-        )
-    finally:
-        model_cm.__exit__(None, None, None)
-
-    return output_path
-
-
-def _build_unified_executor(
-    processor: Any,
-    app_cfg: Any,
-    workflow_name: str = "unified_extract.yaml",
-) -> tuple[Any, dict[str, Any]]:
-    """Build a GraphExecutor + workflow definition for a graph workflow."""
-    import yaml
-
-    from common.extraction_types import GenerateResult, NodeGenParams
-    from common.graph_executor import GraphExecutor
-    from common.turn_parsers import build_parser_registry
-
-    workflow_path = Path(__file__).resolve().parent.parent / "prompts" / "workflows" / workflow_name
-    with workflow_path.open() as f:
-        definition = yaml.safe_load(f)
-
-    def generate_fn(image: Any, prompt: str, params: NodeGenParams) -> GenerateResult:
-        text = processor.generate(image, prompt, max_tokens=params.max_tokens)
-        return GenerateResult(text=text)
-
-    budget_resolver = app_cfg.get_token_budget
-    parsers = build_parser_registry(fallback_type=app_cfg.classification_fallback_type)
-    executor = GraphExecutor(generate_fn, parsers, budget_resolver=budget_resolver)
-    return executor, definition
-
-
 @app.command()
 def main(
     classifications: Path | None = typer.Option(
@@ -1000,16 +717,6 @@ def main(
         None,
         "--balance-correction/--no-balance-correction",
         help="Enable balance validation in bank extraction. Default: YAML processing.balance_correction.",
-    ),
-    graph_bank: bool = typer.Option(
-        False,
-        "--graph-bank/--no-graph-bank",
-        help="Use graph-based bank extraction (opt-in, overrides bank-v2).",
-    ),
-    graph_unified: bool = typer.Option(
-        False,
-        "--graph-unified/--no-graph-unified",
-        help="Unified graph workflow: classify + extract in one pass (skips Stage 1).",
     ),
     max_num_seqs: int | None = typer.Option(
         None,
@@ -1044,8 +751,6 @@ def main(
         batch_size=batch_size,
         bank_v2=bank_v2,
         balance_correction=balance_correction,
-        graph_bank=graph_bank,
-        graph_unified=graph_unified,
         max_num_seqs=max_num_seqs,
         verbose=verbose,
         debug=debug,

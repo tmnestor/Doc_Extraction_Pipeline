@@ -66,10 +66,11 @@ def test_document_types_and_max_images_compose(image_dir):
     assert [p.name for p in found] == ["receipt_01.png"]
 
 
-@pytest.mark.parametrize("module_name", ["stages.classify", "stages.extract"])
+@pytest.mark.parametrize("module_name", ["stages.classify"])
 def test_the_stage_call_sites_pass_both_filters(module_name):
     # Guards the regression that started this: a stage calling
     # discover_images(dir) alone silently ignores both config keys.
+    # Only classify lists the folder. Extract reads the pages classify recorded.
     import importlib
 
     source = inspect.getsource(importlib.import_module(module_name))

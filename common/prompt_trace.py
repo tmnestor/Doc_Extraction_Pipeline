@@ -1,7 +1,6 @@
 """Raw VLM prompt/response trace -- one JSONL line per extraction call.
 
-Single-seam observability: ``VllmBackend`` records every ``generate()`` /
-``generate_for_graph()`` call here, so the trace covers *every* extraction
+Single-seam observability: ``VllmBackend`` records every ``generate()`` call here, so the trace covers *every* extraction
 prompt across *every* pipeline (classify, extract) without per-stage plumbing.
 
 Callers may set per-call context (``image_name``, ``pipeline``, ``label``) via

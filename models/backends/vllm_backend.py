@@ -12,7 +12,6 @@ from typing import Any
 from PIL import Image
 
 from common import image_tiling, prompt_trace
-from common.extraction_types import GenerateResult, NodeGenParams
 from models.backend import GenerationParams, ModelBackend
 
 logger = logging.getLogger(__name__)
@@ -23,9 +22,6 @@ class VllmBackend:
 
     Implements ModelBackend protocol only (vLLM handles batching internally).
     No OOM recovery needed -- vLLM manages memory via PagedAttention.
-
-    Also provides ``generate_for_graph()`` for the GraphExecutor interface,
-    ensuring a single source of truth for vLLM message construction.
     """
 
     def __init__(
@@ -68,7 +64,7 @@ class VllmBackend:
         # separate images, so OUR tile count is authoritative (vLLM's per-image
         # max_dynamic_patch cap no longer bounds dense bank statements). The
         # per-call tile count arrives via params.extra["max_tiles"] (generate) or
-        # params.max_tiles (generate_for_graph); None -> the legacy single-image
+        # params.max_tiles; None -> the legacy single-image
         # path. See plans/2026-06-04-adaptive-pre-tiling.md.
         self._pre_tiling_enabled = pre_tiling_enabled
         self._tile_image_size = tile_image_size
@@ -421,74 +417,6 @@ class VllmBackend:
         # Free vLLM output objects to release shared memory buffer slots.
         del outputs, conversations
         return texts
-
-    def generate_for_graph(
-        self,
-        image: Image.Image,
-        prompt: str,
-        params: NodeGenParams,
-    ) -> GenerateResult:
-        """Run inference for GraphExecutor.
-
-        Accepts ``NodeGenParams`` and returns ``GenerateResult``, matching
-        the ``(Image, str, NodeGenParams) -> GenerateResult`` signature
-        expected by ``GraphExecutor``.
-
-        Uses image-first ordering — empirically produces fewer false
-        positives on extraction/compliance tasks than text-first.
-        """
-        from vllm import SamplingParams
-
-        messages = self._build_messages(
-            image,
-            prompt,
-            image_first=True,
-            max_tiles=getattr(params, "max_tiles", None),
-            min_tiles=getattr(params, "min_tiles", 1),
-        )
-
-        # Build SamplingParams from NodeGenParams fields
-        sampling_kwargs: dict[str, Any] = {
-            "max_tokens": params.max_tokens,
-            "temperature": params.temperature,
-        }
-
-        if params.output_schema is not None:
-            from vllm.sampling_params import StructuredOutputsParams
-
-            sampling_kwargs["structured_output"] = StructuredOutputsParams(json=params.output_schema)
-        elif params.stop:
-            sampling_kwargs["stop"] = params.stop
-
-        if params.logprobs is not None:
-            sampling_kwargs["logprobs"] = params.logprobs
-
-        sampling = SamplingParams(**sampling_kwargs)
-
-        outputs = self.model.chat(
-            messages=messages,
-            sampling_params=sampling,
-            chat_template=self._chat_template,
-            use_tqdm=False,
-            **self._chat_kwargs(),
-        )
-
-        self._record_cache_stats(outputs[0])
-        text = outputs[0].outputs[0].text.strip()
-        self._emit_trace(
-            prompt, text, getattr(outputs[0], "prompt_token_ids", None), outputs[0].outputs[0].token_ids
-        )
-
-        # Extract logprobs if requested
-        token_logprobs = None
-        if params.logprobs and outputs[0].outputs[0].logprobs:
-            token_logprobs = [
-                {tok.decoded_token: tok.logprob for tok in step.values()}
-                for step in outputs[0].outputs[0].logprobs
-            ]
-
-        del outputs, messages
-        return GenerateResult(text=text, logprobs=token_logprobs)
 
 
 # Verify protocol compliance at import time

@@ -28,49 +28,11 @@ class ParseError(Exception):
 RECEIPT_HEADER_RE = re.compile(r"(?:---\s*)?RECEIPT\s+(\d+)(?:\s*---)?", re.IGNORECASE)
 
 
-def _resolve_column_mapping(context: WorkflowState) -> dict[str, str | None]:
-    """Resolve column_mapping from whichever upstream node produced it.
-
-    Checks ``detect_headers`` (standalone bank workflow) first, then
-    ``classify_document`` (unified workflow).  Raises ``KeyError`` with
-    diagnostics if neither source has a column_mapping.
-    """
-    for source in ("detect_headers", "classify_document"):
-        mapping = context.get(f"{source}.column_mapping", None)
-        if isinstance(mapping, dict):
-            return mapping
-    sources_present = [k for k in ("detect_headers", "classify_document") if context.has(k)]
-    msg = (
-        f"No column_mapping found in state. "
-        f"Checked: detect_headers, classify_document. "
-        f"Nodes present: {sources_present or 'none'}"
-    )
-    raise KeyError(msg)
-
-
 def _strip_bullet(line: str) -> str:
     """Remove numbering, bullets, and markdown formatting from a line."""
     cleaned = line.lstrip("0123456789.-\u2022* ").strip()
     cleaned = cleaned.replace("**", "").replace("__", "")
     return cleaned
-
-
-def _parse_amount(s: str) -> float | None:
-    """Parse a currency string to float, returning None on failure."""
-    if not s or s.upper() == "NOT_FOUND":
-        return None
-    cleaned = re.sub(r"[$,\s]", "", s.strip())
-    if cleaned.startswith("(") and cleaned.endswith(")"):
-        cleaned = "-" + cleaned[1:-1]
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Concrete Parsers
-# ---------------------------------------------------------------------------
 
 
 class HeaderListParser:
@@ -161,89 +123,6 @@ class HeaderListParser:
                     if len(header_lower) <= 20 and keyword in header_lower:
                         return headers[i]
         return None
-
-
-class BalanceDescriptionParser:
-    """Parse balance-description Turn 1 via ``ResponseParser.parse_balance_description()``.
-
-    Reads column names from ``column_mapping`` in the accumulated workflow
-    state.  Checks ``detect_headers`` (standalone bank workflow) then
-    ``classify_document`` (unified workflow).  Returns ``rows``,
-    ``row_count``, and per-column name metadata for downstream
-    post-processing.
-    """
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]:
-        from common.unified_bank_extractor import ResponseParser
-
-        mapping = _resolve_column_mapping(context)
-        date_col = mapping.get("date") or "Date"
-        desc_col = mapping.get("description") or "Description"
-        debit_col = mapping.get("debit") or "Debit"
-        credit_col = mapping.get("credit") or "Credit"
-        balance_col = mapping.get("balance") or "Balance"
-
-        rows = ResponseParser.parse_balance_description(
-            raw_response,
-            date_col=date_col,
-            desc_col=desc_col,
-            debit_col=debit_col,
-            credit_col=credit_col,
-            balance_col=balance_col,
-        )
-
-        if not rows:
-            msg = f"No transaction rows parsed from response: {raw_response[:200]}"
-            raise ParseError(msg)
-
-        return {
-            "rows": rows,
-            "row_count": len(rows),
-            "date_col": date_col,
-            "desc_col": desc_col,
-            "debit_col": debit_col,
-            "credit_col": credit_col,
-            "balance_col": balance_col,
-        }
-
-
-class AmountDescriptionParser:
-    """Parse amount-description Turn 1 via ``ResponseParser.parse_amount_description()``.
-
-    For statements with a signed Amount column (negative = withdrawal).
-    Reads column names from ``column_mapping`` in the accumulated workflow
-    state (``detect_headers`` or ``classify_document``).
-    """
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]:
-        from common.unified_bank_extractor import ResponseParser
-
-        mapping = _resolve_column_mapping(context)
-        date_col = mapping.get("date") or "Date"
-        desc_col = mapping.get("description") or "Description"
-        amount_col = mapping.get("amount") or "Amount"
-        balance_col = mapping.get("balance")  # May be None
-
-        rows = ResponseParser.parse_amount_description(
-            raw_response,
-            date_col=date_col,
-            desc_col=desc_col,
-            amount_col=amount_col,
-            balance_col=balance_col,
-        )
-
-        if not rows:
-            msg = f"No transaction rows parsed from response: {raw_response[:200]}"
-            raise ParseError(msg)
-
-        return {
-            "rows": rows,
-            "row_count": len(rows),
-            "date_col": date_col,
-            "desc_col": desc_col,
-            "amount_col": amount_col,
-            "balance_col": balance_col,
-        }
 
 
 class ClassificationParser:
@@ -586,47 +465,3 @@ def _compute_complexity(row_count: int) -> str:
     if row_count <= 20:
         return "MEDIUM"
     return "HIGH"
-
-
-class FieldValueParser:
-    """Parse ``FIELD: value`` lines (standard document extraction)."""
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]:
-        """Parse FIELD: value lines into a flat dict."""
-        fields: dict[str, str] = {}
-        for line in raw_response.split("\n"):
-            line = line.strip()
-            if not line or ":" not in line:
-                continue
-            key, _, value = line.partition(":")
-            key = key.strip().upper()
-            value = value.strip()
-            if key and value:
-                fields[key] = value
-
-        if not fields:
-            msg = f"No FIELD: value pairs found in response: {raw_response[:200]}"
-            raise ParseError(msg)
-        return fields
-
-
-# ---------------------------------------------------------------------------
-# Post-processing helpers
-# ---------------------------------------------------------------------------
-
-
-def build_parser_registry(*, fallback_type: str = "UNIVERSAL") -> dict[str, TurnParser]:
-    """Build the default parser registry.
-
-    Args:
-        fallback_type: Default document type when classification can't parse
-            the model response. Reads from ``run_config.yml`` classification
-            section at call sites that have ``AppConfig``.
-    """
-    return {
-        "header_list": HeaderListParser(),
-        "field_value": FieldValueParser(),
-        "classification": ClassificationParser(fallback_type=fallback_type),
-        "balance_description": BalanceDescriptionParser(),
-        "amount_description": AmountDescriptionParser(),
-    }

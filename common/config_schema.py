@@ -147,7 +147,6 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "pipeline.sroie.data_dir",
         "pipeline.sroie.max_new_tokens",
         "pipeline.sroie.output_dir",
-        "pipeline.token_budgets.bank_statement_floor",
         "pipeline.token_budgets.classify",
         "pipeline.token_budgets.extract_bank",
         "pipeline.token_budgets.fallback_base",

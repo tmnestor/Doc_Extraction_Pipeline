@@ -183,14 +183,14 @@ fallback_keywords:
     - tax
 
 # ============================================================================
-# EVIDENCE-BASED CLASSIFICATION (primary path: ClassificationParser._parse_enriched)
+# EVIDENCE-BASED CLASSIFICATION (primary path: common/classification.py)
 # ============================================================================
 # These two blocks drive the evidence-based classifier. The model is asked for
 # observable facts (COLUMNS / PAID / ROWS); the Python layer derives the type
 # from those facts using the declarative rules below — no hardcoded heuristics.
 
 # Semantic column roles: role -> header keywords that map to it.
-# Source of truth for HeaderListParser._match_columns (replaces the former
+# Read by common/classification.py (replaces the former
 # hardcoded COLUMN_PATTERNS literal). Keywords are matched case-insensitively.
 column_roles:
   date:

@@ -543,7 +543,6 @@ pipeline:
   token_budgets:
     classify: 150
     extract_bank: 4096
-    bank_statement_floor: 1500
     fallback_base: 512
     fallback_per_field: 64
 

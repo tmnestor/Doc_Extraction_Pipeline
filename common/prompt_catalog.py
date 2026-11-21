@@ -131,7 +131,7 @@ class PromptCatalog:
     def get_column_roles(self) -> dict[str, list[str]]:
         """Load semantic column-role -> header-keyword lists from detection YAML.
 
-        Source of truth for ``HeaderListParser._match_columns``.
+        Read by ``common.classification``.
 
         Returns:
             Mapping of role name to its list of header keywords.
@@ -166,7 +166,7 @@ class PromptCatalog:
     def get_classification_evidence(self) -> dict[str, Any]:
         """Load the evidence-based classification rule set from detection YAML.
 
-        Drives ``ClassificationParser._parse_enriched``: an ordered list of
+        Read by ``common.classification``: an ordered list of
         ``rules`` (first match wins) plus a ``default`` for when none match.
 
         Returns:

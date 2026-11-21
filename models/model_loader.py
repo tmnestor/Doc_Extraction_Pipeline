@@ -246,7 +246,6 @@ def build_vllm_processor_creator(spec: VllmSpec):
             debug=config.debug,
             verbose=config.verbose,
             device=str(config.device_map),
-            batch_size=config.batch_size,
             model_type_key=spec.model_type,
             app_config=app_config,
         )

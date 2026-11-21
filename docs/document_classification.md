@@ -44,7 +44,7 @@ If you want to adapt this to a new task, the pattern to copy is
 | Component | Path |
 |---|---|
 | Entry method `detect_and_classify_document()` | `models/orchestrator.py` |
-| Evidence parser + rule evaluator | `common/classification_parser.py` (`ClassificationParser`) |
+| Evidence parser + rule evaluator | `common/classification.py` |
 | Classification prompt + evidence rules (`column_roles`, `classification_evidence`) | `prompts/document_type_detection.yaml` |
 | Pipeline stage (`KFP_TASK=classify`) | `stages/classify.py` |
 | Config | `config/run_config.yml` (`classification:`, `token_budgets.classify`) |
@@ -59,7 +59,7 @@ flowchart TD
     B --> C[Load detection prompt<br/>key = 'detection']
     C --> D["generate(image, prompt, max_tokens=150)<br/>InternVL3.5 vLLM .chat()"]
     D --> E[Raw model response text]
-    E --> F{ClassificationParser<br/>._parse_enriched}
+    E --> F{classification<br/>.document_type}
     F -->|COLUMNS label present| G[Evidence-based derivation]
     F -->|no COLUMNS label| H[Legacy keyword fallback]
     G --> I[document_type + confidence + column_mapping]
@@ -136,7 +136,7 @@ Why this shape:
 
 ## Step 2 — Derive the type from the evidence (YAML-driven rules)
 
-`ClassificationParser._parse_enriched()` (`common/classification_parser.py`) turns the
+`document_type()` (`common/classification.py`) turns the
 answers into a label. The Python layer parses the evidence — matching headers to
 a `column_mapping` and reading the `paid` / `travel` booleans; the **decision
 itself is declared in YAML** (`classification_evidence` in
@@ -264,7 +264,7 @@ they resolve to the configured fallback type.
 ## Step 3 — Routing into extraction
 
 The classification result selects the **type-specific extraction prompt** and
-**field list** downstream (`extract_batch()` in `orchestrator.py`):
+**field list** downstream (`read_pages()` in `orchestrator.py`):
 
 ```mermaid
 flowchart LR
@@ -363,7 +363,7 @@ edits (see the `TRAVEL` commit as the reference diff):
 
 1. **Prompt** — add a new observable question (e.g. a `FOO: YES/NO` field) to the
    `detection` prompt.
-2. **Parser** (`common/classification_parser.py`) — extract the new field in
+2. **Parser** (`common/classification.py`) — extract the new field in
    `_parse_enriched` and thread it through `_when_matches` /
    `_evaluate_classification` as a new flag (mirror how `travel` is wired); or,
    for a new column role, just add it under `column_roles`.

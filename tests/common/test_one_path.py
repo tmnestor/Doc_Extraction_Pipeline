@@ -61,21 +61,11 @@ class StandIn:
         self.calls.append(("classify", [Path(image_path).name]))
         return self._type(image_path)
 
-    def extract_batch(
-        self, image_paths: list[str], classifications: list[dict[str, Any]], verbose: bool = False
-    ) -> list[dict[str, Any]]:
+    def read_pages(self, image_paths: list[str], document_type: str) -> list[str]:
         self.calls.append(("extract", [Path(p).name for p in image_paths]))
-        return [{"raw_response": f"TOTAL_AMOUNT: read from {Path(p).name}"} for p in image_paths]
-
-    def generate_many(
-        self, images: list[Any], prompts: list[str], max_tokens=None, extra=None
-    ) -> list[str]:
-        self.calls.append(("statements", [str(len(images))]))
-        return [statement_reply(str(image.size[0])) for image in images]
-
-    def generate(self, image: Any, prompt: str, max_tokens=None, extra=None) -> str:
-        self.calls.append(("statements", ["1"]))
-        return statement_reply(str(image.size[0]))
+        if document_type.upper() == "BANK_STATEMENT":
+            return [statement_reply(Path(p).name) for p in image_paths]
+        return [f"TOTAL_AMOUNT: read from {Path(p).name}" for p in image_paths]
 
     @staticmethod
     def _type(image_path: str) -> dict[str, Any]:
@@ -221,14 +211,14 @@ def test_a_page_that_cannot_be_read_is_recorded_and_the_rest_are_read(bench: Ben
     """In a shared call that fails, each page is tried alone; one that still fails must not end the run."""
     pages = bench.pages(3, kinds=("invoice",))
 
-    def read(image_paths, classifications, verbose=False):
+    def read(image_paths, document_type):
         if len(image_paths) > 1:
             raise RuntimeError("engine refused the batch")
         if "CASE001" in image_paths[0]:
             raise RuntimeError("page too large")
-        return [{"raw_response": "TOTAL_AMOUNT: $12.00"}]
+        return ["TOTAL_AMOUNT: $12.00"]
 
-    bench.processor.extract_batch = read  # type: ignore[method-assign]
+    bench.processor.read_pages = read  # type: ignore[method-assign]
 
     records = bench.records("extract", pages, engines=1)
 

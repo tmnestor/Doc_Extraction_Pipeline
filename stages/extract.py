@@ -309,212 +309,95 @@ def extract_pages(
     Returns:
         One record per page, holding the model's raw reply, in the order given.
     """
-    from common import prompt_trace
-    from common.unified_bank_extractor import UnifiedBankExtractor
-
-    verbose = app_config.pipeline.verbose
-    bank_adapter = None
-    if any(_is_statement(c) for c in classified):
-        bank_adapter = UnifiedBankExtractor(
-            generate_fn=processor.generate,
-            generate_many_fn=(
-                processor.generate_many if getattr(processor, "supports_generate_many", False) else None
-            ),
-            verbose=verbose,
-            extract_tokens=app_config.get_token_budget("extract_bank"),
-        )
-        logger.info("Bank adapter enabled")
-
     collected = _Collected(sink)
     done, total = 0, len(classified)
-    for batch in _plan_batches(classified, app_config.config_path, _unbatchable_types(bank_adapter)):
-        # Several pages are one engine call. A type whose batch size is 1 is read a page at a time below.
-        if len(batch) > 1:
-            if _is_statement(batch[0]):
-                # Only planned when the adapter can share a call.
-                _extract_bank_single_pass_batch(collected, bank_adapter, batch)
-            else:
-                _extract_standard_batch(collected, processor, batch, verbose)
-            done += len(batch)
-            logger.info("[%d/%d] batch of %d %s", done, total, len(batch), batch[0]["document_type"])
-            continue
-
-        classification = batch[0]
-        done += 1
-        # A dense statement can take a while, so say which page is in flight before it starts.
+    for batch in _plan_batches(classified, app_config.config_path):
+        # A dense statement can take a while, so say what is in flight before it starts.
         logger.info(
-            "[%d/%d] extracting %s (%s)...",
-            done,
-            total,
-            classification["image_name"],
-            classification["document_type"],
+            "[%d/%d] reading %d %s...", done + len(batch), total, len(batch), batch[0]["document_type"]
         )
-        started = time.time()
-        # Names the page in the trace of what was sent to the model, when that trace is switched on.
-        with prompt_trace.trace_context(
-            image_name=classification["image_name"],
-            pipeline="information_extraction",
-            label=f"extract_{classification['document_type'].lower()}",
-        ):
-            _extract_one(collected, processor, bank_adapter, classification, verbose)
-        logger.info(
-            "[%d/%d] %s: %s (%.1fs)",
-            done,
-            total,
-            classification["image_name"],
-            classification["document_type"],
-            time.time() - started,
-        )
+        _read_batch(collected, processor, batch)
+        done += len(batch)
     return collected.records
 
 
-def _is_statement(classification: dict[str, Any]) -> bool:
-    return classification["document_type"].upper() == "BANK_STATEMENT"
+def _record(classification: dict[str, Any], **rest: Any) -> dict[str, Any]:
+    return {
+        "image_name": classification["image_name"],
+        "image_path": classification["image_path"],
+        "document_type": classification["document_type"],
+        **rest,
+    }
 
 
-def _extract_one(
-    writer: RecordSink,
-    processor: Any,
-    bank_adapter: Any,
-    classification: dict[str, Any],
-    verbose: bool,
-) -> None:
-    """Read one page in a call of its own. A page that cannot be read is recorded with its error."""
-    started = time.time()
-    try:
-        if _is_statement(classification) and bank_adapter is not None:
-            _extract_bank_with_adapter(
-                writer,
-                bank_adapter,
-                classification["image_path"],
-                classification["image_name"],
-                classification["document_type"],
-            )
-        else:
-            _extract_standard(
-                writer,
-                processor,
-                classification["image_path"],
-                classification["image_name"],
-                classification["document_type"],
-                classification,
-                verbose,
-            )
-    except Exception as err:  # noqa: BLE001 - recorded, not raised: one page must not end the run
-        logger.error("Error extracting %s: %s", classification["image_name"], err)
-        writer.write(
-            {
-                "image_name": classification["image_name"],
-                "image_path": classification["image_path"],
-                "document_type": classification["document_type"],
-                "raw_response": "",
-                "processing_time": time.time() - started,
-                "prompt_used": "error",
-                "error": str(err),
-            }
-        )
-
-
-def _extract_bank_with_adapter(
-    writer: RecordSink,
-    bank_adapter,
-    image_path: str,
-    image_name: str,
-    doc_type: str,
-) -> None:
-    """Extract bank statement via UnifiedBankExtractor, write raw responses."""
-    start = time.time()
-
-    schema_fields, metadata = bank_adapter.extract_bank_statement(image_path)
-
-    img_time = time.time() - start
-
-    # Serialize structured fields into flat FIELD: value text that the
-    # standard hybrid parser already handles.  This keeps the stage contract
-    # clean: extract produces a parseable raw_response, clean parses it.
-    from common.unified_bank_extractor import serialise_bank_response
-
-    raw_response_str = serialise_bank_response(schema_fields, metadata)
-
-    strategy = metadata.get("strategy_used", "unknown")
-
-    writer.write(
-        {
-            "image_name": image_name,
-            "image_path": image_path,
-            "document_type": doc_type,
-            "raw_response": raw_response_str,
-            "processing_time": img_time,
-            "prompt_used": f"unified_bank_{strategy}",
-            "error": None,
-        }
+def _prompt_name(document_type: str) -> str:
+    """What a record says its page was read with. A statement keeps the name it had when it had its own way."""
+    return (
+        "unified_bank_single_pass" if document_type.upper() == "BANK_STATEMENT" else document_type.lower()
     )
 
 
-# Types that cannot share an engine call unless the run can batch them.
-UNBATCHABLE_TYPES = {"BANK_STATEMENT"}
+def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]]) -> None:
+    """Read a group of pages of one document type in one engine call, and write a record for each.
 
-
-def _unbatchable_types(bank_adapter: Any) -> set[str]:
-    """The document types that must each be their own engine call in this run.
-
-    A bank statement is one independent call, so several can be submitted together and run
-    concurrently. That needs the adapter and a backend with a batched call; otherwise they stay
-    unbatched.
+    A group that fails is read again one page at a time, so a single bad page costs its group only the
+    shared call. A page that fails on its own is recorded with its error, so that it never ends the run.
     """
-    if bank_adapter is not None and bank_adapter.can_batch:
-        return UNBATCHABLE_TYPES - {"BANK_STATEMENT"}
-    return set(UNBATCHABLE_TYPES)
+    from common import prompt_trace
 
-
-def _extract_bank_single_pass_batch(
-    writer: RecordSink,
-    bank_adapter: Any,
-    batch: list[dict[str, Any]],
-) -> None:
-    """Read a batch of bank statements single pass in one engine call.
-
-    Writes the record _extract_bank_with_adapter writes for each statement,
-    so batched and unbatched runs are indistinguishable in the output file. A
-    batch that raises is retried one statement at a time, and a statement that
-    still fails is recorded as an error.
-    """
-    from common.unified_bank_extractor import serialise_bank_response
-
+    kind = batch[0]["document_type"]
     started = time.time()
     try:
-        results = bank_adapter.extract_bank_statements_single_pass([c["image_path"] for c in batch])
-    except Exception as err:  # noqa: BLE001 - one batch must not end the run
-        logger.warning(
-            "Batch of %d BANK_STATEMENT failed (%s); retrying one at a time",
-            len(batch),
-            err,
+        if len(batch) == 1:
+            # Names the page in the trace of what was sent to the model, when that trace is switched on.
+            with prompt_trace.trace_context(
+                image_name=batch[0]["image_name"],
+                pipeline="information_extraction",
+                label=f"extract_{kind.lower()}",
+            ):
+                replies = processor.read_pages([batch[0]["image_path"]], kind)
+        else:
+            replies = processor.read_pages([c["image_path"] for c in batch], kind)
+        if len(replies) != len(batch):
+            raise ValueError(
+                f"backend returned {len(replies)} replies for {len(batch)} pages; "
+                f"matching by position is unsafe"
+            )
+    except Exception as err:  # noqa: BLE001 - one group, or one page, must not end the run
+        if len(batch) > 1:
+            logger.warning("Batch of %d %s failed (%s); retrying one at a time", len(batch), kind, err)
+            for classification in batch:
+                _read_batch(writer, processor, [classification])
+            return
+        logger.error("Error extracting %s: %s", batch[0]["image_name"], err)
+        writer.write(
+            _record(
+                batch[0],
+                raw_response="",
+                processing_time=time.time() - started,
+                prompt_used="error",
+                error=str(err),
+            )
         )
-        for classification in batch:
-            _extract_one(writer, None, bank_adapter, classification, verbose=False)
         return
 
-    # Inside a batch the requests overlap, so per-image timing is not
-    # separable; charge each an equal share of the call's wall clock.
+    # Inside a shared call the requests overlap, so each page is charged an equal share of its time.
     share = (time.time() - started) / len(batch)
-    for classification, (schema_fields, metadata) in zip(batch, results, strict=True):
+    for classification, reply in zip(batch, replies, strict=True):
         writer.write(
-            {
-                "image_name": classification["image_name"],
-                "image_path": classification["image_path"],
-                "document_type": classification["document_type"],
-                "raw_response": serialise_bank_response(schema_fields, metadata),
-                "processing_time": share,
-                "prompt_used": f"unified_bank_{metadata.get('strategy_used', 'unknown')}",
-                "error": None,
-            }
+            _record(
+                classification,
+                raw_response=reply,
+                processing_time=share,
+                prompt_used=_prompt_name(kind),
+                error=None,
+            )
         )
 
 
 def _plan_batches(
     classifications: list[dict[str, Any]],
     config_path: Path | None,
-    unbatchable: set[str],
 ) -> list[list[dict[str, Any]]]:
     """Group classifications into engine-call batches.
 
@@ -531,7 +414,7 @@ def _plan_batches(
     batches = plan_extraction_batches(
         classifications,
         batch_sizes=batch_sizes,
-        unbatchable=unbatchable,
+        unbatchable=set(),
     )
     logger.info(
         "Extraction batching: %d documents in %d calls (sizes: %s)",
@@ -540,87 +423,6 @@ def _plan_batches(
         batch_sizes,
     )
     return batches
-
-
-def _extract_standard_batch(
-    writer: RecordSink,
-    processor,
-    batch: list[dict[str, Any]],
-    verbose: bool,
-) -> None:
-    """Extract a batch of standard documents in one engine call.
-
-    Writes the same record shape as ``_extract_standard`` — RAW responses,
-    which the clean stage parses. The two paths must stay
-    indistinguishable in the output file, or resume and re-cleaning break.
-
-    A batch that raises is retried one document at a time, so an
-    out-of-memory on a large batch costs only the document that genuinely
-    fails rather than every document that shared it.
-    """
-    started = time.time()
-    image_paths = [c["image_path"] for c in batch]
-
-    try:
-        results = processor.extract_batch(image_paths, batch, verbose=verbose)
-        if len(results) != len(batch):
-            raise ValueError(
-                f"backend returned {len(results)} results for {len(batch)} images; "
-                f"matching by position is unsafe"
-            )
-    except Exception as err:  # noqa: BLE001 - one batch must not end the run
-        logger.warning(
-            "Batch of %d %s failed (%s) — retrying one at a time",
-            len(batch),
-            batch[0]["document_type"],
-            err,
-        )
-        for classification in batch:
-            _extract_one(writer, processor, None, classification, verbose)
-        return
-
-    # Inside a batch the requests overlap, so per-image timing is not
-    # separable; charge each an equal share of the call's wall clock.
-    share = (time.time() - started) / len(batch)
-    for classification, result in zip(batch, results, strict=True):
-        writer.write(
-            {
-                "image_name": classification["image_name"],
-                "image_path": classification["image_path"],
-                "document_type": classification["document_type"],
-                "raw_response": result.get("raw_response", ""),
-                "processing_time": share,
-                "prompt_used": classification["document_type"].lower(),
-                "error": None,
-            }
-        )
-
-
-def _extract_standard(
-    writer: RecordSink,
-    processor,
-    image_path: str,
-    image_name: str,
-    doc_type: str,
-    classification: dict[str, Any],
-    verbose: bool,
-) -> None:
-    """Read one page on its own, as a group of one, and write the reply."""
-    start = time.time()
-    result = processor.extract_batch([image_path], [classification], verbose=verbose)[0]
-    img_time = time.time() - start
-
-    writer.write(
-        {
-            "image_name": image_name,
-            "image_path": image_path,
-            "document_type": doc_type,
-            "raw_response": result.get("raw_response", ""),
-            "processing_time": img_time,
-            "prompt_used": doc_type.lower(),
-            "error": None,
-        }
-    )
 
 
 @app.command()

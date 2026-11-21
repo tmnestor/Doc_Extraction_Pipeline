@@ -162,25 +162,9 @@ class ExtractionCleaner:
 
         return cleaned_value
 
-    def _is_monetary_field(self, field_name: str) -> bool:
-        """Check if field is monetary type."""
-        return any(pattern in field_name.upper() for pattern in self.monetary_patterns)
-
     def _is_list_field(self, field_name: str) -> bool:
         """Check if field is list type."""
         return any(pattern in field_name.upper() for pattern in self.list_patterns)
-
-    def _is_date_field(self, field_name: str) -> bool:
-        """Check if field is date type."""
-        return any(pattern in field_name.upper() for pattern in self.date_patterns)
-
-    def _is_id_field(self, field_name: str) -> bool:
-        """Check if field is ID/number type."""
-        return any(pattern in field_name.upper() for pattern in self.id_patterns)
-
-    def _is_address_field(self, field_name: str) -> bool:
-        """Check if field is address type."""
-        return any(pattern in field_name.upper() for pattern in self.address_patterns)
 
     def _get_field_type(self, field_name: str) -> str:
         """
@@ -706,65 +690,6 @@ class ExtractionCleaner:
             return float(cleaned) if cleaned else None
         except ValueError:
             return None
-
-    def get_cleaning_stats(
-        self, original_dict: dict[str, Any], cleaned_dict: dict[str, str]
-    ) -> dict[str, Any]:
-        """
-        Generate statistics about cleaning operations.
-
-        Args:
-            original_dict (dict[str, Any]): Original extracted values
-            cleaned_dict (dict[str, str]): Cleaned extracted values
-
-        Returns:
-            dict[str, Any]: Cleaning statistics
-        """
-        stats: dict[str, Any] = {
-            "total_fields": len(original_dict),
-            "fields_cleaned": 0,
-            "fields_unchanged": 0,
-            "fields_normalized": [],
-            "cleaning_operations": [],
-        }
-
-        for field_name in original_dict:
-            original = str(original_dict[field_name]).strip()
-            cleaned = cleaned_dict.get(field_name, "NOT_FOUND")
-
-            if original != cleaned:
-                stats["fields_cleaned"] += 1
-                stats["fields_normalized"].append(field_name)
-                stats["cleaning_operations"].append(
-                    {
-                        "field": field_name,
-                        "original": original,
-                        "cleaned": cleaned,
-                        "operation": self._identify_cleaning_operation(field_name, original, cleaned),
-                    }
-                )
-            else:
-                stats["fields_unchanged"] += 1
-
-        return stats
-
-    def _identify_cleaning_operation(self, field_name: str, original: str, cleaned: str) -> str:
-        """Identify what cleaning operation was performed using pattern matching."""
-        match (original, cleaned):
-            case (orig, clean) if orig == clean:
-                return "none"
-            case (orig, clean) if "each" in orig.lower() and "each" not in clean.lower():
-                return "price_suffix_removal"
-            case (orig, clean) if len(orig.split()) != len(clean.split()):
-                return "whitespace_normalization"
-            case (orig, clean) if "$" in orig and "$" in clean and orig != clean:
-                return "currency_formatting"
-            case (orig, clean) if "," in orig and "|" in clean:
-                return "list_formatting"
-            case (orig, clean) if "P:" in orig and "P:" not in clean:
-                return "address_contact_removal"
-            case _:
-                return "general_cleaning"
 
 
 # Convenience functions for direct use

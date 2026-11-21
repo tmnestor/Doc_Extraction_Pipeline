@@ -139,25 +139,6 @@ class ResponseHandler:
 
         return self._validator.validate(cleaned)
 
-    def handle_batch(
-        self,
-        raw_responses: list[str],
-        field_lists: list[list[str]],
-    ) -> list[dict[str, str]]:
-        """Handle multiple responses (one per image in a batch).
-
-        Raises:
-            ValueError: If ``len(raw_responses) != len(field_lists)``.
-        """
-        if len(raw_responses) != len(field_lists):
-            msg = f"raw_responses/field_lists length mismatch: {len(raw_responses)} vs {len(field_lists)}"
-            raise ValueError(msg)
-
-        return [
-            self.handle(response, fields)
-            for response, fields in zip(raw_responses, field_lists, strict=True)
-        ]
-
 
 # ---------------------------------------------------------------------------
 # Default adapters wrapping existing implementations

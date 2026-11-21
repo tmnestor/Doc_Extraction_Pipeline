@@ -6,15 +6,9 @@ Each has one method: ``parse(raw_response, context) -> dict``.
 """
 
 import re
-from typing import Any, Protocol
+from typing import Any
 
 from common.extraction_types import WorkflowState
-
-
-class TurnParser(Protocol):
-    """Protocol for parsing a single model turn's output."""
-
-    def parse(self, raw_response: str, context: WorkflowState) -> dict[str, Any]: ...
 
 
 class ParseError(Exception):

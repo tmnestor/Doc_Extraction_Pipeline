@@ -35,12 +35,6 @@ def enable(path: str | Path) -> None:
     _sink_path = p
 
 
-def disable() -> None:
-    """Disable tracing (subsequent ``record()`` calls are no-ops)."""
-    global _sink_path
-    _sink_path = None
-
-
 def is_enabled() -> bool:
     return _sink_path is not None
 

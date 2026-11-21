@@ -113,20 +113,6 @@ class PromptCatalog:
 
     # -- Entry point 2: Discovery / introspection -----------------------------
 
-    def list_keys(self, namespace: str) -> list[str]:
-        """List available prompt keys for a namespace.
-
-        Returns:
-            Sorted list of available keys, or ``[]`` if file not found.
-        """
-        try:
-            filename = self._resolve_filename(namespace)
-            path = self._dir / filename
-            data = self._load_yaml(path)
-            return sorted(data.get("prompts", {}).keys())
-        except (FileNotFoundError, ValueError):
-            return []
-
     # -- Entry point 3: Detection config (structured data) --------------------
 
     def get_detection_config(self) -> dict[str, Any]:
@@ -292,16 +278,6 @@ class PromptCatalog:
             )
 
     # -- Auxiliary: column patterns (bank-specific structured data) ------------
-
-    def get_column_patterns(self) -> dict[str, Any]:
-        """Load bank column patterns from ``bank_column_patterns.yaml``.
-
-        Returns:
-            The ``patterns`` dict mapping column types to keyword lists.
-        """
-        path = self._dir / "bank_column_patterns.yaml"
-        data = self._load_yaml(path)
-        return data.get("patterns", {})
 
     # -- Auxiliary: extraction routing ----
 

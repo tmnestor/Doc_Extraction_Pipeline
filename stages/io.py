@@ -98,18 +98,6 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def count_jsonl(path: Path) -> int:
-    """Count records in a JSONL file without loading them all into memory."""
-    if not path.exists():
-        return 0
-    count = 0
-    with path.open() as f:
-        for line in f:
-            if line.strip():
-                count += 1
-    return count
-
-
 def read_completed_images(path: Path) -> set[str]:
     """Read image names from a partial JSONL output for resumption.
 

@@ -228,10 +228,6 @@ class DocumentOrchestrator:
                 print(f"Failed to load {document_type} prompt, falling back to universal")
             return catalog.get_prompt(self._model_type_key, "universal")
 
-    def get_supported_document_types(self) -> list[str]:
-        """Get list of supported document types from prompt YAML."""
-        return PromptCatalog().list_keys(self._model_type_key)
-
     # -- Document type parsing -------------------------------------------------
 
     def _parse_document_type_response(self, response: str, detection_config: dict) -> str:
@@ -719,70 +715,6 @@ class DocumentOrchestrator:
 
     # -- Several pages in one engine call --
 
-    def detect_batch(self, image_paths: list[str], verbose: bool = False) -> list[dict]:
-        """Batch document detection via backend.generate_batch().
-
-        Called by DocumentPipeline only when supports_batch is True.
-        No isinstance check here -- the pipeline handles routing.
-        """
-        if not image_paths:
-            return []
-
-        # Load detection config
-        detection_path = Path(self.prompt_config["detection_file"])
-        detection_key = self.prompt_config["detection_key"]
-
-        with detection_path.open("r") as f:
-            detection_config = yaml.safe_load(f)
-
-        detection_prompt = detection_config["prompts"][detection_key]["prompt"]
-        max_tokens = self.app_config.get_token_budget("classify")
-
-        if verbose:
-            sys.stdout.write(f"Batch detecting {len(image_paths)} images\n")
-            sys.stdout.flush()
-
-        images = [self.load_document_image(p) for p in image_paths]
-        prompts = [detection_prompt] * len(image_paths)
-        params = GenerationParams(max_tokens=max_tokens)
-
-        backend = self._backend
-        if not isinstance(backend, BatchInference):
-            # A bare assert here failed with an EMPTY message, so a caller's
-            # fallback logged "Batch of 4 RECEIPT failed ()" and every batch
-            # silently degraded to per-image with no clue why.
-            raise TypeError(
-                f"What: backend {type(backend).__name__} does not implement "
-                f"generate_batch, so batched inference cannot run.\n"
-                f"Where: models/orchestrator.py.\n"
-                f"Expected: a backend satisfying the BatchInference protocol "
-                f"(models/backend.py).\n"
-                f"How to fix: implement generate_batch on that backend, or set "
-                f"every pipeline.batching.* size to 1 so the stage stays on the "
-                f"per-image path."
-            )
-        responses = backend.generate_batch(images, prompts, params)
-
-        results = []
-        for i, response in enumerate(responses):
-            document_type = self._parse_document_type_response(response, detection_config)
-            if verbose:
-                sys.stdout.write(
-                    f"  [{i + 1}/{len(image_paths)}] {Path(image_paths[i]).name}: {document_type}\n"
-                )
-                sys.stdout.flush()
-
-            results.append(
-                {
-                    "document_type": document_type,
-                    "confidence": 1.0,
-                    "raw_response": response,
-                    "prompt_used": "batch_detection",
-                }
-            )
-
-        return results
-
     def extract_batch(
         self,
         image_paths: list[str],
@@ -902,11 +834,3 @@ class DocumentOrchestrator:
         return catalog.get_prompt(self._model_type_key, extraction_key)
 
     # -- Model info ------------------------------------------------------------
-
-    def get_model_info(self) -> dict:
-        """Return model metadata for reporting."""
-        return {
-            "model_type": self._model_type_key,
-            "model_path": getattr(self._backend, "model_path", "unknown"),
-            "batch_size": self.batch_size,
-        }

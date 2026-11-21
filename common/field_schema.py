@@ -287,19 +287,6 @@ class FieldSchema:
         """
         return self._alias_map.get(raw_type.lower(), raw_type.lower())
 
-    def eval_doc_type_class(self, raw_type: str) -> str:
-        """Return the evaluation equivalence class for a document type.
-
-        Chains: resolve alias -> map to equivalence class.
-        ``"invoice"`` and ``"receipt"`` both return ``"invoice_receipt"``.
-        Types with no explicit equivalence class return their canonical form.
-
-        Use this when comparing predicted vs ground-truth DOCUMENT_TYPE for
-        accuracy scoring.
-        """
-        canonical = self.resolve_doc_type(raw_type)
-        return _EVAL_EQUIVALENCE.get(canonical, canonical)
-
     def get_extraction_fields(self, document_type: str) -> list[str]:
         """Per-doc-type field list with validation-only fields excluded.
 

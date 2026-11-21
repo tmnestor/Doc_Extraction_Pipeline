@@ -37,14 +37,6 @@ class NodeGenParams:
 
 
 @dataclass
-class GenerateResult:
-    """Response from a single model call."""
-
-    text: str
-    logprobs: list[dict[str, float]] | None = None
-
-
-@dataclass
 class NodeResult:
     """Result of executing a single graph node."""
 
@@ -104,66 +96,3 @@ class WorkflowState:
     def has(self, node_key: str) -> bool:
         """Check whether a node has produced a result."""
         return node_key in self.node_results
-
-
-@dataclass
-class WorkflowTrace:
-    """Observability record for full graph execution."""
-
-    nodes_visited: list[str] = field(default_factory=list)
-    edges_taken: list[tuple[str, str, str]] = field(default_factory=list)  # (from_node, edge, to_node)
-    retries: dict[str, int] = field(default_factory=dict)
-    total_model_calls: int = 0
-    total_elapsed: float = 0.0
-
-
-@dataclass
-class ExtractionSession:
-    """Complete graph execution for one image (or image pair)."""
-
-    image_path: str
-    image_name: str
-    document_type: str
-    node_results: list[NodeResult]
-    final_fields: dict[str, str]
-    strategy: str  # last extraction node key
-    trace: WorkflowTrace
-    input_images: dict[str, str] | None = None  # cross-image only
-
-    @property
-    def raw_response(self) -> str:
-        """Flat FIELD: value string -- same contract as existing pipeline."""
-        return "\n".join(f"{k}: {v}" for k, v in self.final_fields.items())
-
-    def to_record(self) -> dict[str, Any]:
-        """Serialize for raw_extractions.jsonl."""
-        record: dict[str, Any] = {
-            "image_name": self.image_name,
-            "image_path": self.image_path,
-            "document_type": self.document_type,
-            "raw_response": self.raw_response,
-            "extracted_data": dict(self.final_fields),
-            "nodes": [
-                {
-                    "key": n.key,
-                    "image_ref": n.image_ref,
-                    "raw_response": n.raw_response,
-                    "elapsed": n.elapsed,
-                    "attempt": n.attempt,
-                    "edge_taken": n.edge_taken,
-                }
-                for n in self.node_results
-            ],
-            "trace": {
-                "nodes_visited": self.trace.nodes_visited,
-                "edges_taken": self.trace.edges_taken,
-                "retries": self.trace.retries,
-                "total_model_calls": self.trace.total_model_calls,
-            },
-            "strategy": self.strategy,
-            "processing_time": sum(n.elapsed for n in self.node_results),
-            "error": None,
-        }
-        if self.input_images:
-            record["input_images"] = self.input_images
-        return record

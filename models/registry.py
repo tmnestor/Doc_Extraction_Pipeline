@@ -70,12 +70,6 @@ def list_models() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def is_vllm_model(model_type: str) -> bool:
-    """Check if a registered model uses the vLLM backend."""
-    reg = _REGISTRY.get(model_type)
-    return reg is not None and reg.is_vllm
-
-
 def supports_data_parallel(model_type: str) -> bool:
     """Check whether *model_type* can run one independent engine per GPU.
 
@@ -85,12 +79,6 @@ def supports_data_parallel(model_type: str) -> bool:
     """
     reg = _REGISTRY.get(model_type)
     return reg.supports_data_parallel if reg else True
-
-
-def _get_requires_sharding(model_type: str) -> bool:
-    """Check if a registered model requires cross-GPU sharding."""
-    reg = _REGISTRY.get(model_type)
-    return reg.requires_sharding if reg else False
 
 
 # ============================================================================

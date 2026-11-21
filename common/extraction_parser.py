@@ -9,7 +9,6 @@ model output formats including markdown, plain text, and edge cases.
 import re
 from pathlib import Path
 
-import pandas as pd
 from dateutil import parser as date_parser  # type: ignore[import-untyped]
 
 try:
@@ -694,46 +693,6 @@ def parse_extraction_response(
                 extracted_data[field_name] = _normalize_date(extracted_data[field_name])
 
     return extracted_data
-
-
-def create_extraction_dataframe(results: list[dict]) -> tuple:
-    """
-    Create structured DataFrames from extraction results.
-
-    Args:
-        results (list): List of extraction result dictionaries
-
-    Returns:
-        tuple: (main_df, metadata_df) - Main extraction data and metadata
-    """
-    if not results:
-        return pd.DataFrame(), pd.DataFrame()
-
-    # Main extraction DataFrame
-    rows = []
-    metadata_rows = []
-
-    for result in results:
-        # Main data row
-        row = {"image_name": result["image_name"]}
-        row.update(result["extracted_data"])
-        rows.append(row)
-
-        # Metadata row
-        if "response_completeness" in result or "content_coverage" in result:
-            metadata_row = {
-                "image_name": result["image_name"],
-                "response_completeness": result.get("response_completeness", 0),
-                "content_coverage": result.get("content_coverage", 0),
-                "extracted_fields_count": result.get("extracted_fields_count", 0),
-                "processing_time": result.get("processing_time", 0),
-            }
-            metadata_rows.append(metadata_row)
-
-    main_df = pd.DataFrame(rows)
-    metadata_df = pd.DataFrame(metadata_rows)
-
-    return main_df, metadata_df
 
 
 def discover_images(directory_path: str) -> list[str]:

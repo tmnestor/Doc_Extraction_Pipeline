@@ -45,11 +45,10 @@ class FakeBackend:
         self.fail_always = fail_always
         self.served = 0
 
-    def chat(self, images, prompts, max_tokens, *, text_first=False) -> list[str]:
+    def chat(self, images, prompts, max_tokens) -> list[str]:
         if self.fail_always or (self.fail_groups and len(images) > 1):
             raise RuntimeError("no reply")
-        form = "text first" if text_first else "the model's own"
-        self.calls.append({"form": form, "prompts": prompts, "max_tokens": max_tokens, "n": len(images)})
+        self.calls.append({"prompts": prompts, "max_tokens": max_tokens, "n": len(images)})
         replies = [reply(self.served + i + 1) for i in range(len(images))]
         self.served += len(images)
         return replies
@@ -105,9 +104,7 @@ def test_statements_are_one_call_with_the_statement_prompt_and_its_fixed_budget(
     replies = orchestrator(backend).read_pages([str(p) for p in pages], "BANK_STATEMENT")
 
     schema_prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
-    assert backend.calls == [
-        {"form": "the model's own", "prompts": [schema_prompt] * 3, "max_tokens": 4096, "n": 3}
-    ]
+    assert backend.calls == [{"prompts": [schema_prompt] * 3, "max_tokens": 4096, "n": 3}]
     assert replies == [reply(1), reply(2), reply(3)]
 
 
@@ -117,9 +114,7 @@ def test_other_types_are_one_call_with_the_prompt_of_their_name_and_a_budget_by_
     replies = orchestrator(backend).read_pages([str(p) for p in pages], "RECEIPT")
 
     receipt_prompt = PromptCatalog().get_prompt(MODEL, "receipt")
-    assert backend.calls == [
-        {"form": "text first", "prompts": [receipt_prompt] * 3, "max_tokens": 500 + 3 * 50, "n": 3}
-    ]
+    assert backend.calls == [{"prompts": [receipt_prompt] * 3, "max_tokens": 500 + 3 * 50, "n": 3}]
     assert len(replies) == 3
 
 
@@ -129,7 +124,6 @@ def test_a_page_on_its_own_is_asked_as_a_group_of_one_is(pages):
     orchestrator(alone).read_pages([str(pages[0])], "BANK_STATEMENT")
     orchestrator(together).read_pages([str(p) for p in pages], "BANK_STATEMENT")
 
-    assert alone.calls[0]["form"] == together.calls[0]["form"]
     assert alone.calls[0]["prompts"] == together.calls[0]["prompts"][:1]
     assert alone.calls[0]["max_tokens"] == together.calls[0]["max_tokens"]
 
@@ -193,14 +187,14 @@ def test_a_page_alone_is_sent_as_a_page_in_a_group_is(no_vllm):
     assert two["sampling_params"] == one["sampling_params"] == {"max_tokens": 77, "temperature": 0}
 
 
-def test_the_text_first_form_puts_the_text_first_and_passes_no_template_arguments(no_vllm):
+def test_every_request_has_the_one_form(no_vllm):
     engine = FakeEngine()
 
-    gemma_like_backend(engine).chat([Image.new("RGB", (8, 8), "white")], ["read this"], 77, text_first=True)
+    gemma_like_backend(engine).chat([Image.new("RGB", (8, 8), "white")], ["read this"], 77)
 
     call = engine.calls[0]
-    assert [part["type"] for part in call["messages"][0][0]["content"]] == ["text", "image_pil"]
-    assert "chat_template_kwargs" not in call
+    assert [part["type"] for part in call["messages"][0][0]["content"]] == ["image_pil", "text"]
+    assert call["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_a_prompt_for_each_image_is_required():

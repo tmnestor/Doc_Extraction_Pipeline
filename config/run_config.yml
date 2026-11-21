@@ -339,10 +339,9 @@ pipeline:
       dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
       # Extraction GT generated from the per-type YAMLs in
       # Synthetic_Doc_Generation/ground_truth, by that repository's own script.
-      # JSONL, not CSV — load_ground_truth() dispatches on the suffix
-      # (common/evaluation_metrics.py) and the evaluator runs in _jsonl_mode,
-      # scoring exactly the fields each GT record carries. The set also ships a
-      # ground_truth.csv; keep the JSONL, which is what _jsonl_mode expects.
+      # JSONL, not CSV: load_answer_key() in common/scoring.py goes by the suffix, and a
+      # JSONL answer is scored on exactly the fields it carries. The set also ships a
+      # ground_truth.csv; keep the JSONL.
       #
       # MUST be swapped together with input.dir above. Each set ships its own GT
       # copy, and the clean and degraded copies of one dated pair hold the SAME

@@ -54,7 +54,7 @@ class FieldSchema:
 
     Provides three access patterns, ranked by frequency:
 
-    1. Typed field categories (evaluation_metrics.py -- 7 call sites):
+    1. Typed field categories (common/scoring.py):
        ``fields.monetary_fields``, ``fields.boolean_fields``, etc.
 
     2. Per-doc-type field lists (orchestrator.py):
@@ -68,7 +68,7 @@ class FieldSchema:
     extraction_fields: tuple[str, ...]
     field_count: int
 
-    # -- Typed categories (what evaluation_metrics cares about) --
+    # -- Typed categories (what the scorer reads) --
     monetary_fields: frozenset[str]
     date_fields: frozenset[str]
     list_fields: frozenset[str]

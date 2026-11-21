@@ -21,8 +21,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from common.batch_types import ExtractionOutput
-from common.extraction_evaluator import ExtractionEvaluator
+from common import scoring
 from common.field_schema import get_field_schema
 
 from .io import read_jsonl, write_jsonl
@@ -41,8 +40,8 @@ def run(
     """Evaluate cleaned extractions against ground truth.
 
     For each record in cleaned_extractions.jsonl:
-      1. Construct an ExtractionOutput from the cleaned data
-      2. Run ExtractionEvaluator.evaluate()
+      1. Find the page's answer in the key
+      2. Score its fields (common.scoring.score_page)
       3. Write per-image evaluation results to evaluation_results.jsonl
 
     Args:
@@ -69,17 +68,11 @@ def run(
         cleaned_extractions_path,
     )
 
-    # Set up evaluator
-    schema = get_field_schema()
-    field_definitions = schema.get_all_doc_type_fields()
-
-    evaluator = ExtractionEvaluator(
-        ground_truth_csv=str(ground_truth_csv),
-        field_definitions=field_definitions,
+    answers = scoring.load_answer_key(Path(ground_truth_csv))
+    # A CSV key has every type's columns in every row, so the fields to score come from the schema.
+    fields_of_type = (
+        None if Path(ground_truth_csv).suffix == ".jsonl" else get_field_schema().get_all_doc_type_fields()
     )
-
-    if not evaluator.has_ground_truth:
-        logger.warning("No ground truth loaded -- evaluation will be empty")
 
     # Evaluate each record
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -101,17 +94,16 @@ def run(
             )
             continue
 
-        # Reconstruct ExtractionOutput for the evaluator
-        extraction = ExtractionOutput(
-            image_path=record.get("image_path", ""),
-            image_name=image_name,
-            document_type=record["document_type"],
-            extracted_data=record.get("extracted_data", {}),
-            processing_time=0,
-            prompt_used="staged_pipeline",
-        )
-
-        evaluation = evaluator.evaluate(extraction)
+        answer = scoring.find_answer(answers, record.get("image_path", ""))
+        if answer:
+            evaluation = scoring.score_page(
+                dict(record.get("extracted_data", {})),
+                answer,
+                record["document_type"],
+                fields_of_type=fields_of_type,
+            )
+        else:
+            evaluation = {"error": f"No ground truth for {image_name}", "overall_accuracy": 0}
 
         eval_results.append(
             {

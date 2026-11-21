@@ -21,7 +21,8 @@ All amounts below are invented. Never put evaluation-set values in a test.
 
 import pytest
 
-from common.evaluation_metrics import _list_item_matches, calculate_field_accuracy_f1
+from common.scoring import list_item_matches as _list_item_matches
+from common.scoring import score_field as calculate_field_accuracy_f1
 
 MONETARY_LIST = "LINE_ITEM_PRICES"  # declared under field_types.monetary
 BANK_AMOUNTS = "TRANSACTION_AMOUNTS_PAID"  # a transaction_list field

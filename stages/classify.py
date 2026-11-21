@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 
+from common.extraction_batching import read_classify_batch_size
+
 from .io import append_jsonl, read_completed_images, write_jsonl
 
 logger = logging.getLogger(__name__)
@@ -51,8 +53,8 @@ def run(
     Returns:
         Path to the written classifications.jsonl.
     """
-    from common.app_config import AppConfig
-    from common.pipeline_config import discover_images
+    from common.settings import Settings
+    from stages.io import discover_images
     from common.pipeline_ops import open_processor
 
     cli_args: dict[str, Any] = {
@@ -62,8 +64,8 @@ def run(
     if model_type is not None:
         cli_args["model_type"] = model_type
 
-    app_cfg = AppConfig.load(cli_args, config_path=config_path).for_stage("classify")
-    config = app_cfg.pipeline
+    app_cfg = Settings.load(cli_args, config_path=config_path).for_stage("classify")
+    config = app_cfg
     # Discover images
     # Both filters are config-driven and MUST be passed: calling with the
     # directory alone silently ignored max_images and document_types, so a
@@ -161,23 +163,13 @@ def classify_pages(processor: Any, images: list[Path], app_config: Any) -> list[
     records = _classify_images(
         processor,
         [str(image) for image in images],
-        _classify_batch_size(app_config.config_path),
-        app_config.pipeline.verbose,
+        read_classify_batch_size(app_config.raw, config_path=app_config.config_path),
+        app_config.verbose,
     )
     share = (time.time() - started) / len(records) if records else 0.0
     for record in records:
         record["processing_time"] = share
     return records
-
-
-def _classify_batch_size(config_path: Path | None) -> int:
-    """Pages per classify engine call, from pipeline.batching.classify."""
-    from common.extraction_batching import read_classify_batch_size
-    from common.pipeline_config import load_yaml_config
-
-    resolved = config_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
-    _, raw_config = load_yaml_config(resolved)
-    return read_classify_batch_size(raw_config, config_path=resolved)
 
 
 def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:

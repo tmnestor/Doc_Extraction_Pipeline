@@ -18,7 +18,7 @@ from typing import Any
 
 STAGE_OVERRIDES_KEY = "stage_overrides"
 
-# Stages that load their engine through AppConfig.for_stage(). A stage listed
+# Stages that load their engine through Settings.for_stage(). A stage listed
 # in the YAML but not here would read as configured while doing nothing.
 STAGES: tuple[str, ...] = ("classify",)
 

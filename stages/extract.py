@@ -92,7 +92,7 @@ def run(
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    from common.app_config import AppConfig
+    from common.settings import Settings
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
     from common.pipeline_ops import open_processor
 
@@ -124,8 +124,8 @@ def run(
     if model_type is not None:
         cli_args["model_type"] = model_type
 
-    app_cfg = AppConfig.load(cli_args, config_path=config_path)
-    config = app_cfg.pipeline
+    app_cfg = Settings.load(cli_args, config_path=config_path)
+    config = app_cfg
     # -- Phase 4: filter out skip-labels before extraction -----------------------
     classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
     if skipped:
@@ -256,7 +256,7 @@ def extract_pages(
     """
     collected = _Collected(sink)
     done, total = 0, len(classified)
-    for batch in _plan_batches(classified, app_config.config_path):
+    for batch in _plan_batches(classified, app_config):
         # A dense statement can take a while, so say what is in flight before it starts.
         logger.info(
             "[%d/%d] reading %d %s...", done + len(batch), total, len(batch), batch[0]["document_type"]
@@ -340,26 +340,12 @@ def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]])
         )
 
 
-def _plan_batches(
-    classifications: list[dict[str, Any]],
-    config_path: Path | None,
-) -> list[list[dict[str, Any]]]:
-    """Group classifications into engine-call batches.
-
-    Falls back to one document per batch if the batching config cannot be
-    read — the pre-batching behaviour, which is always safe.
-    """
+def _plan_batches(classifications: list[dict[str, Any]], app_config: Any) -> list[list[dict[str, Any]]]:
+    """Group the pages into engine calls, by the sizes in ``pipeline.batching``."""
     from common.extraction_batching import plan_extraction_batches, read_batch_sizes
-    from common.pipeline_config import load_yaml_config
 
-    resolved = config_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
-    _, raw_config = load_yaml_config(resolved)
-    batch_sizes = read_batch_sizes(raw_config, config_path=resolved)
-
-    batches = plan_extraction_batches(
-        classifications,
-        batch_sizes=batch_sizes,
-    )
+    batch_sizes = read_batch_sizes(app_config.raw, config_path=app_config.config_path)
+    batches = plan_extraction_batches(classifications, batch_sizes=batch_sizes)
     logger.info(
         "Extraction batching: %d documents in %d calls (sizes: %s)",
         len(classifications),

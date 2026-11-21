@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from common.app_config import AppConfig
+from common.settings import Settings
 from stages.classify import classify_pages
 from stages.extract import extract_pages
 from stages.sroie import read_sroie
@@ -28,7 +28,7 @@ def _on_card(
     gpu_id: int,
     config_path: str | None,
     cli_overrides: dict[str, Any],
-    read: Callable[[Any, AppConfig], list[dict[str, Any]]],
+    read: Callable[[Any, Settings], list[dict[str, Any]]],
     *,
     stage: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -53,7 +53,7 @@ def _on_card(
     from common.pipeline_ops import open_processor
 
     # This process sees one card only.
-    app_config = AppConfig.load(
+    app_config = Settings.load(
         {**cli_overrides, "num_gpus": 1}, config_path=Path(config_path) if config_path else None
     )
     if stage is not None:

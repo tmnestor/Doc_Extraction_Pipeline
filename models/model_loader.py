@@ -59,24 +59,24 @@ class VllmSpec:
 
 
 def _resolve_vllm_overrides(app_config: Any | None, model_type: str) -> dict[str, Any]:
-    """Resolve per-model vLLM engine tuning from the runtime AppConfig.
+    """Resolve per-model vLLM engine tuning from the runtime Settings.
 
     The YAML is the single source of truth — there is no spec-level or Python
-    fallback, so an AppConfig is mandatory for vLLM loads.
+    fallback, so an Settings is mandatory for vLLM loads.
 
     Raises:
         ValueError: If *app_config* is None, with a four-element diagnostic.
     """
     if app_config is None:
         raise ValueError(
-            f"vLLM model load requires an AppConfig, but none was provided for "
+            f"vLLM model load requires an Settings, but none was provided for "
             f"model_type={model_type!r}.\n"
             "  What:  load_model() was called without app_config= for a vLLM backend; "
             "per-model engine tuning has no Python fallback.\n"
             "  Where: the caller of common.pipeline_ops.load_model (a stage, worker, or "
             "benchmark script), plus the `vllm:` section of config/run_config.yml.\n"
-            "  Example: load_model(config, app_config=app_cfg)  # app_cfg = AppConfig.load(...)\n"
-            "  Fix:   thread the AppConfig already in scope into load_model; scripts that "
+            "  Example: load_model(config, app_config=app_cfg)  # app_cfg = Settings.load(...)\n"
+            "  Fix:   thread the Settings already in scope into load_model; scripts that "
             "call registration.loader() directly must pass loader(cfg, app_config=app_cfg)."
         ) from None
     return app_config.get_vllm_config(model_type)
@@ -127,7 +127,7 @@ def build_vllm_loader(spec: VllmSpec):
 
                 # All engine tuning comes from app_config (YAML single source of
                 # truth). No spec-level fallback — a vLLM model MUST be loaded
-                # with an AppConfig. Keys are required, not optional, per the
+                # with an Settings. Keys are required, not optional, per the
                 # "every config key is required" rule.
                 vllm_overrides = _resolve_vllm_overrides(app_config, spec.model_type)
 
@@ -265,7 +265,7 @@ _VLLM_SPECS: dict[str, VllmSpec] = {}
 def register_vllm_model(spec: VllmSpec) -> None:
     """Register a vLLM model with the registry.
 
-    Per-model engine tuning is resolved from the runtime AppConfig at load
+    Per-model engine tuning is resolved from the runtime Settings at load
     time (see ``build_vllm_loader``), so no config is captured at registration.
 
     Args:

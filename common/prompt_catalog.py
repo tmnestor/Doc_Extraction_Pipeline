@@ -120,7 +120,7 @@ class PromptCatalog:
 
         Provides ``type_mappings`` and ``fallback_keywords`` for document type
         normalization.  Runtime settings (``fallback_type``, token budgets)
-        live in ``run_config.yml`` and are accessed via ``AppConfig``.
+        live in ``run_config.yml`` and are accessed via ``Settings``.
 
         Returns:
             Parsed dict from ``document_type_detection.yaml``.

@@ -14,13 +14,12 @@ from pathlib import Path
 from queue import Empty
 from typing import Any
 
-from common.app_config import AppConfig
-from common.pipeline_config import PipelineConfig
+from common.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_gpu_count(config: PipelineConfig) -> int:
+def resolve_gpu_count(config: Settings) -> int:
     """Resolve effective GPU count for vLLM DP.
 
     Priority: data_parallel_size > num_gpus > auto-detect.
@@ -37,7 +36,7 @@ def resolve_gpu_count(config: PipelineConfig) -> int:
         return 1
 
 
-def resolve_dp_gpus(config: PipelineConfig, model_type: str) -> int | None:
+def resolve_dp_gpus(config: Settings, model_type: str) -> int | None:
     """Resolve the DP rank count, or None when the DP fast path must not run.
 
     ``None`` means "use the single-engine path", for one of two reasons: only one
@@ -113,7 +112,7 @@ def run_dp(
     images: list[Path],
     worker_fn: str,
     worker_kwargs: dict[str, Any],
-    app_config: AppConfig,
+    app_config: Settings,
 ) -> list[dict[str, Any]]:
     """Launch N workers, collect merged results in original image order.
 

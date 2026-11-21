@@ -118,3 +118,56 @@ def read_completed_images(path: Path) -> set[str]:
                 except json.JSONDecodeError:
                     pass  # Skip corrupted trailing line from crash
     return completed
+
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp"}
+
+
+def discover_images(
+    data_dir: Path,
+    document_types: list[str] | None = None,
+    max_images: int | None = None,
+) -> list[Path]:
+    """Discover images in a data directory, applying the configured selection.
+
+    Both filters live HERE and not at the call sites. Until 21 September 2026 the stages
+    called this with the folder alone and so ignored them: asking for 12 images processed
+    all 165 while the YAML read as applied. Keeping the selection inside the discovery
+    function means a caller cannot omit it.
+
+    Args:
+        data_dir: Directory to scan for images.
+        document_types: Keep only images whose filename contains one of these
+            (case-insensitive). ``None`` keeps every type.
+        max_images: Keep at most this many, applied AFTER sorting and type
+            filtering so the subset is deterministic and representative.
+            ``None`` means no limit.
+
+    Returns:
+        Images sorted by lowercase filename, filtered and truncated as requested.
+    """
+    images: list[Path] = []
+
+    for ext in IMAGE_EXTENSIONS:
+        images.extend(data_dir.glob(f"*{ext}"))
+        images.extend(data_dir.glob(f"*{ext.upper()}"))
+
+    # Sort by filename for reproducibility
+    images = sorted(images, key=lambda p: p.name.lower())
+
+    # Filter by document type if specified (based on filename patterns)
+    if document_types:
+        filtered = []
+        type_patterns = [t.lower() for t in document_types]
+        for img in images:
+            name_lower = img.name.lower()
+            if any(pattern in name_lower for pattern in type_patterns):
+                filtered.append(img)
+        images = filtered
+
+    # Truncate LAST: a limit applied before the type filter would eat images the
+    # filter was going to discard, and silently return fewer than requested.
+    if max_images is not None:
+        images = images[:max_images]
+
+    return images

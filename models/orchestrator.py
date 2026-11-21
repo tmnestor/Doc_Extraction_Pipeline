@@ -21,7 +21,7 @@ from common.prompt_catalog import PromptCatalog
 from models.backend import BatchInference, GenerationParams, ModelBackend
 
 if TYPE_CHECKING:
-    from common.app_config import AppConfig
+    from common.settings import Settings
 
 
 class DocumentOrchestrator:
@@ -49,7 +49,7 @@ class DocumentOrchestrator:
         verbose: bool = False,
         device: str = "cuda",
         model_type_key: str,
-        app_config: AppConfig,
+        app_config: Settings,
     ) -> None:
         self._backend = backend
         # debug → Tier C (dev-noise: PARSING DEBUG, prompt/response dumps, tracebacks).
@@ -60,7 +60,7 @@ class DocumentOrchestrator:
         self._model_type_key = model_type_key
 
         # Validate app_config
-        self.app_config: AppConfig = app_config
+        self.app_config: Settings = app_config
 
         # Field configuration
         self.field_list = field_list
@@ -104,7 +104,7 @@ class DocumentOrchestrator:
     # -- Generation config -----------------------------------------------------
 
     def _configure_generation(self) -> None:
-        """Load generation hyper-parameters from AppConfig."""
+        """Load generation hyper-parameters from Settings."""
         self.gen_config: dict[str, Any] = self.app_config.get_generation_config(self._model_type_key)
 
         self.fallback_max_tokens = max(

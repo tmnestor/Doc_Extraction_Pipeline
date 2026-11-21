@@ -233,10 +233,11 @@ def run(
         common.photo_split.PhotoSplitConfigError: The photo split settings are missing or malformed.
     """
     from common.photo_split import photo_split_config_from
-    from common.pipeline_config import discover_images, load_yaml_config
+    from common.settings import read_settings_file
+    from stages.io import discover_images
 
     resolved_config = config_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
-    _, raw_config = load_yaml_config(resolved_config)
+    raw_config = read_settings_file(resolved_config)
     split_config = photo_split_config_from(raw_config, config_path=resolved_config)
 
     # Every image in the directory is examined. The selection the later stages apply (document types, a
@@ -272,14 +273,14 @@ def run(
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
         return images_dir
 
-    from common.app_config import AppConfig
+    from common.settings import Settings
     from common.pipeline_ops import open_processor
 
     cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_dir)}
     if model_type is not None:
         cli_args["model_type"] = model_type
-    app_cfg = AppConfig.load(cli_args, config_path=config_path)
-    config = app_cfg.pipeline
+    app_cfg = Settings.load(cli_args, config_path=config_path)
+    config = app_cfg
 
     with open_processor(app_cfg) as processor:
         start = time.time()

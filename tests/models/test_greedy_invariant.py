@@ -13,7 +13,7 @@ import inspect
 import pytest
 import yaml
 
-from common.app_config import _build_generation_registry
+from common.settings import _build_generation_registry
 from models.backends import vllm_backend
 
 MODELS_NORMALISED = ("gemma4-31b", "gemma4-12b-unified")

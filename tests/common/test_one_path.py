@@ -25,7 +25,7 @@ sys.path.insert(0, str(HERE.parent / "reference"))
 from model_inputs import InProcessContext, test_config  # noqa: E402
 
 from common import vllm_dp, vllm_dp_workers  # noqa: E402
-from common.app_config import AppConfig  # noqa: E402
+from common.settings import Settings  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.extract import extract_pages  # noqa: E402
 
@@ -113,7 +113,7 @@ class Bench:
         """What the stage's reading gives for these pages, without the times, which are measurements."""
         self.processor.calls.clear()
         if engines == 1:
-            app_config = AppConfig.load({**self.overrides, "num_gpus": 1}, config_path=self.config_path)
+            app_config = Settings.load({**self.overrides, "num_gpus": 1}, config_path=self.config_path)
             if stage == "classify":
                 found = classify_pages(self.processor, pages, app_config.for_stage("classify"))
             else:
@@ -127,7 +127,7 @@ class Bench:
                 images=pages,
                 worker_fn=f"common.vllm_dp_workers.{stage}_worker",
                 worker_kwargs=kwargs,
-                app_config=AppConfig.load(dict(self.overrides), config_path=self.config_path),
+                app_config=Settings.load(dict(self.overrides), config_path=self.config_path),
             )
         return [{k: v for k, v in record.items() if k not in MEASUREMENTS} for record in found]
 
@@ -194,7 +194,7 @@ def test_each_engine_groups_its_pages_as_one_engine_would(bench: Bench, stage: s
 
 def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: Bench) -> None:
     pages = bench.pages(2)
-    app_config = AppConfig.load({**bench.overrides, "num_gpus": 1}, config_path=bench.config_path)
+    app_config = Settings.load({**bench.overrides, "num_gpus": 1}, config_path=bench.config_path)
 
     one = classify_pages(bench.processor, pages, app_config.for_stage("classify"))
     two = vllm_dp.run_dp(

@@ -88,7 +88,7 @@ def record(
 
 
 def effective_trace_path(config: Any) -> str | None:
-    """Resolve the trace path for a ``PipelineConfig``-like object, or None.
+    """Resolve the trace path for a ``Settings``-like object, or None.
 
     Returns None when ``trace_raw_prompts`` is false. When enabled, uses
     ``trace_path`` if set, else ``<output_dir>/raw_prompt_trace.jsonl``.

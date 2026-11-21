@@ -11,7 +11,7 @@ from typing import Any
 from rich.console import Console
 
 from common.field_schema import get_field_schema
-from common.pipeline_config import PipelineConfig
+from common.settings import Settings
 from common.prompt_catalog import PromptCatalog
 from models.registry import get_model
 
@@ -56,7 +56,7 @@ def load_pipeline_configs(
     return prompt_config, universal_fields, field_definitions
 
 
-def load_model(config: PipelineConfig, *, app_config: Any | None = None):
+def load_model(config: Settings, *, app_config: Any | None = None):
     """Context manager for loading and cleaning up model resources.
 
     Delegates to the registered loader for config.model_type, forwarding
@@ -82,7 +82,7 @@ def open_processor(app_config: Any) -> Iterator[Any]:
     Yields:
         The document processor.
     """
-    config = app_config.pipeline
+    config = app_config
     prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
     logger.info("Loading model: %s", config.model_type)
     with load_model(config, app_config=app_config) as (model, tokenizer):
@@ -100,7 +100,7 @@ def open_processor(app_config: Any) -> Iterator[Any]:
 def create_processor(
     model,
     tokenizer,
-    config: PipelineConfig,
+    config: Settings,
     prompt_config: dict[str, Any],
     universal_fields: list[str],
     field_definitions: dict[str, list[str]],

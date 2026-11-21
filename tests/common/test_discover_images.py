@@ -1,7 +1,7 @@
 """`max_images` and `document_types` must be applied by the stages.
 
 Both keys are required in `pipeline.information_extraction.input` and are loaded
-into PipelineConfig, but until 2026-09-21 the stages did not honour them:
+into Settings, but until 2026-09-21 the stages did not honour them:
 ``stages/classify.py`` and ``stages/extract.py`` called ``discover_images``
 with the directory alone. Asking for 12 images silently processed all 165: the config read as
 applied while doing nothing, which is the exact silent-no-op the fail-fast rule
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from common.pipeline_config import discover_images
+from stages.io import discover_images
 
 
 @pytest.fixture

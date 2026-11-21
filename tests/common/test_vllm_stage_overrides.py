@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from common.app_config import AppConfig
+from common.settings import Settings
 from common.vllm_stage_overrides import (
     STAGES,
     StageOverrideConfigError,
@@ -168,9 +168,9 @@ def test_a_malformed_block_fails_with_a_diagnostic(change, fragments):
 # --- the config loader ----------------------------------------------------------
 
 
-def app_config(vllm_config: dict) -> AppConfig:
-    """An AppConfig holding only the vLLM settings, without reading the pipeline config."""
-    config = object.__new__(AppConfig)
+def app_config(vllm_config: dict) -> Settings:
+    """An Settings holding only the vLLM settings, without reading the pipeline config."""
+    config = object.__new__(Settings)
     config._vllm_config = vllm_config
     config._stage = None
     return config

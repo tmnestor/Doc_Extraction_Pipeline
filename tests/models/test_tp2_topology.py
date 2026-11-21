@@ -7,7 +7,7 @@ a count for it, ``run_dp`` starts two whole engines and runs out of memory at lo
 
 import pytest
 
-from common.pipeline_config import PipelineConfig
+from common.settings import Settings
 from common.vllm_dp import resolve_dp_gpus
 from models.registry import get_model
 
@@ -15,14 +15,12 @@ GEMMA = "gemma4-31b-w4a16-vllm"
 
 
 @pytest.fixture
-def two_gpu_config(tmp_path) -> PipelineConfig:
-    """A config reporting two GPUs. Paths are required but unused by the gate."""
-    return PipelineConfig(
-        data_dir=tmp_path,
-        output_dir=tmp_path,
-        num_gpus=2,
-        data_parallel_size=None,
-    )
+def two_gpu_config() -> Settings:
+    """Settings that report two cards. Nothing else is read by the choice of arrangement."""
+    settings = object.__new__(Settings)
+    settings.num_gpus = 2
+    settings.data_parallel_size = None
+    return settings
 
 
 def test_two_gpus_still_take_the_single_engine_path(two_gpu_config):

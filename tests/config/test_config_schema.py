@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from common.config_schema import KNOWN_KEYS, check_known_keys, is_known, leaf_paths
-from common.pipeline_config import load_yaml_config
+from common.settings import read_settings_file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
@@ -65,7 +65,7 @@ def test_an_unknown_key_stops_the_run_with_a_full_diagnostic(tmp_path: Path) -> 
     path = config_with(tmp_path, lambda raw: raw["pipeline"].update(trust={"enabled": False}))
 
     with pytest.raises(ValueError) as raised:
-        load_yaml_config(path)
+        read_settings_file(path)
 
     message = str(raised.value)
     assert "pipeline.trust.enabled" in message and str(path.resolve()) in message
@@ -92,14 +92,14 @@ def test_a_setting_from_before_the_refactor_is_refused(tmp_path: Path, removed: 
         block[key] = value
 
     with pytest.raises(ValueError) as raised:
-        load_yaml_config(config_with(tmp_path, put_back))
+        read_settings_file(config_with(tmp_path, put_back))
 
     assert ".".join((*section, key)) in str(raised.value)
 
 
 def test_generation_settings_are_never_supplied_by_the_code() -> None:
     """Before 21 November 2026 a file without them ran on values written in Python for a removed model."""
-    from common.app_config import _build_generation_registry
+    from common.settings import _build_generation_registry
 
     raw = shipped()
     del raw["inference"]["generation"]["defaults"]
@@ -116,7 +116,7 @@ def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -
     path = config_with(tmp_path, lambda raw: raw["pipeline"]["batching"].update(reciept=10))
 
     with pytest.raises(ValueError) as raised:
-        load_yaml_config(path)
+        read_settings_file(path)
 
     message = str(raised.value)
     assert "pipeline.batching.reciept" in message

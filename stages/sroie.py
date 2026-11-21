@@ -62,7 +62,7 @@ def run(
         SroieConfigError: If the pipeline.sroie block is missing a key.
         SroieDatasetError: If the split on disk is unusable.
     """
-    from common.app_config import AppConfig
+    from common.settings import Settings
     from common.pipeline_ops import open_processor
     from common.vllm_dp import resolve_dp_gpus, run_dp
 
@@ -70,8 +70,8 @@ def run(
     if model_type:
         cli_args["model_type"] = model_type
 
-    app_cfg = AppConfig.load(cli_args, config_path=config_path)
-    config = app_cfg.pipeline
+    app_cfg = Settings.load(cli_args, config_path=config_path)
+    config = app_cfg
     settings = _settings(app_cfg.config_path)
 
     records = load_sroie_split(settings.data_dir)
@@ -119,10 +119,10 @@ def run(
 
 def _settings(config_path: Path | None) -> SroieSettings:
     """The pipeline.sroie block of the run's settings file."""
-    from common.pipeline_config import load_yaml_config
+    from common.settings import read_settings_file
 
     resolved = config_path or Path(__file__).parent.parent / "config" / "run_config.yml"
-    _, raw_config = load_yaml_config(resolved)
+    raw_config = read_settings_file(resolved)
     return SroieSettings.from_raw(raw_config, config_path=resolved)
 
 

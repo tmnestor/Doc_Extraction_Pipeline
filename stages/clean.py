@@ -1,7 +1,7 @@
 # ruff: noqa: B008 - typer.Option in defaults is the standard Typer pattern
 """Stage 3: Parse and clean raw model responses (CPU).
 
-Reads raw_extractions.jsonl, runs ResponseHandler.handle() on each raw
+Reads raw_extractions.jsonl, parses and cleans each raw
 response to produce structured field dicts, and writes cleaned_extractions.jsonl.
 
 No GPU needed -- this stage runs on CPU nodes.
@@ -19,7 +19,7 @@ from typing import Any
 import typer
 
 from common.field_schema import get_field_schema
-from common.response_handler import create_response_handler
+from common.reply_fields import fields_from_reply
 
 from .io import read_jsonl, write_jsonl
 
@@ -30,20 +30,17 @@ app = typer.Typer()
 def run(
     raw_extractions_path: Path,
     output_path: Path,
-    *,
-    debug: bool = False,
 ) -> Path:
     """Parse, clean, and validate raw model responses.
 
     For each record in raw_extractions.jsonl:
       1. Look up the expected fields for the document type
-      2. Run ResponseHandler.handle(raw_response, expected_fields)
+      2. Parse and clean the reply (common.reply_fields.fields_from_reply)
       3. Write the cleaned field dict to cleaned_extractions.jsonl
 
     Args:
         raw_extractions_path: Path to raw_extractions.jsonl from Stage 2.
         output_path: Path to write cleaned_extractions.jsonl.
-        debug: Enable debug logging in response handler.
 
     Returns:
         Path to the written cleaned_extractions.jsonl.
@@ -56,9 +53,7 @@ def run(
 
     logger.info("Read %d raw extractions from %s", len(raw_records), raw_extractions_path)
 
-    # Set up response handler (CPU-only, no model)
     schema = get_field_schema()
-    handler = create_response_handler(schema=schema, debug=debug)
 
     # Build field lookup: doc_type -> list of expected fields
     all_fields = schema.get_all_doc_type_fields()
@@ -101,7 +96,7 @@ def run(
             logger.warning("No field definitions for doc_type '%s' -- using empty list", doc_type)
 
         # Parse + clean + validate
-        extracted_data = handler.handle(raw_response, expected_fields)
+        extracted_data = fields_from_reply(raw_response, expected_fields)
 
         found_count = sum(1 for v in extracted_data.values() if v != "NOT_FOUND")
 
@@ -157,7 +152,7 @@ def main(
         level=logging.DEBUG if debug else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
-    run(input_path, output, debug=debug)
+    run(input_path, output)
 
 
 if __name__ == "__main__":

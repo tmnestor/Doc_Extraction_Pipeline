@@ -60,7 +60,7 @@ class FieldSchema:
     2. Per-doc-type field lists (orchestrator.py):
        ``fields.get_extraction_fields("bank_statement")``
 
-    3. Raw universal field list (extraction_parser.py):
+    3. Raw universal field list (common/reply_fields.py):
        ``fields.extraction_fields``
     """
 

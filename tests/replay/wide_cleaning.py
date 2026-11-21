@@ -77,6 +77,57 @@ def spoilt(reply: str) -> Iterator[tuple[str, str]]:
     yield "empty", ""
     yield "only_not_found", "NOT_FOUND"
     yield "prose", "I am unable to read this document clearly."
+    # Aimed at the parser's second pass, which runs when the first finds under half the fields.
+    few = pairs[:2]
+    yield "few_fields", "\n".join(f"{name}: {value}" for name, value in few)
+    yield "bold_value_below", "\n".join(f"**{name}:**\n{value}" for name, value in pairs)
+    yield "bold_value_below_gaps", "\n\n".join(f"**{name}:**\n\n{value}" for name, value in pairs)
+    yield "bold_spaced_names", "\n".join(f"**{name.replace('_', ' ')}:** {value}" for name, value in pairs)
+    yield "bold_spaced_below", "\n".join(f"**{name.replace('_', ' ')}:**\n{value}" for name, value in pairs)
+    yield (
+        "bold_bullets_below",
+        "\n".join(
+            f"**{name}:**\n" + "\n".join(f"* {item.strip()}" for item in value.split("|"))
+            for name, value in pairs
+        ),
+    )
+    yield (
+        "bullets_below",
+        "\n".join(
+            f"{name}:\n" + "\n".join(f"- {item.strip()}" for item in value.split("|"))
+            for name, value in pairs
+        ),
+    )
+    yield (
+        "stars_below",
+        "\n".join(
+            f"{name}:\n\n" + "\n".join(f"* {item.strip()}" for item in value.split("|"))
+            for name, value in pairs
+        ),
+    )
+    yield "key_prefix", "\n".join(f"KEY: {name}: {value}" for name, value in pairs)
+    yield "key_prefix_few", "\n".join(f"KEY {name}: {value}" for name, value in few)
+    yield "singular_names", reply.replace("LINE_ITEM_DESCRIPTIONS:", "LINE_ITEM_DESCRIPTION:")
+    yield "wide_spaces_for_bars", reply.replace(" | ", "   ")
+    yield "missing_words", reply.replace("NOT_FOUND", "N/A").replace("$", "AUD ")
+    yield "each_and_times", reply.replace(" | ", " each | ").replace("QUANTITIES: ", "QUANTITIES: x")
+    yield (
+        "phone_in_address",
+        "\n".join(
+            f"{name}: {value} - P: (03) 9555 0142" if "ADDRESS" in name else f"{name}: {value}"
+            for name, value in pairs
+        ),
+    )
+    yield (
+        "spaced_numbers",
+        "\n".join(
+            f"{name}: ABN {' '.join(value[i : i + 3] for i in range(0, len(value), 3))}"
+            if "ABN" in name
+            else f"{name}: {value}"
+            for name, value in pairs
+        ),
+    )
+    yield "long_dates", reply.replace("/2025", " 2025").replace("/2024", " 2024")
 
 
 def cases() -> list[dict[str, Any]]:

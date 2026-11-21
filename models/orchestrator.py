@@ -8,10 +8,7 @@ Satisfies the DocumentProcessor protocol from models/protocol.py.
 
 from __future__ import annotations
 
-import gc
 import sys
-import time
-import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,7 +18,6 @@ from PIL import Image
 from common.field_schema import get_field_schema
 from common.pipeline_config import strip_structure_suffixes
 from common.prompt_catalog import PromptCatalog
-from common.response_handler import create_response_handler
 from models.backend import BatchInference, GenerationParams, ModelBackend
 
 if TYPE_CHECKING:
@@ -32,7 +28,7 @@ class DocumentOrchestrator:
     """Unified document extraction orchestrator.
 
     Owns all shared logic: detection, classification, prompt resolution,
-    extraction, parsing, cleaning, OOM recovery, and batch routing.
+    and extraction. The replies are parsed later, by the clean stage.
 
     The backend (ModelBackend) provides only raw generate() / generate_batch().
 
@@ -55,7 +51,6 @@ class DocumentOrchestrator:
         batch_size: int | None = None,
         model_type_key: str,
         app_config: AppConfig,
-        has_oom_recovery: bool = True,
     ) -> None:
         self._backend = backend
         # debug → Tier C (dev-noise: PARSING DEBUG, prompt/response dumps, tracebacks).
@@ -64,7 +59,6 @@ class DocumentOrchestrator:
         self._verbose = verbose
         self.device = device
         self._model_type_key = model_type_key
-        self._has_oom_recovery = has_oom_recovery
 
         # Validate app_config
         self.app_config: AppConfig = app_config
@@ -96,9 +90,7 @@ class DocumentOrchestrator:
             )
         self._prompt_yaml = Path(next(iter(extraction_files.values()))).name
 
-        # Response handler: parse -> clean -> validate pipeline
         schema = get_field_schema()
-        self._response_handler = create_response_handler(schema=schema, debug=debug)
 
         # Document-specific field lists
         self.document_field_lists: dict[str, list[str]] = (
@@ -212,22 +204,6 @@ class DocumentOrchestrator:
 
     # -- Prompt loading --------------------------------------------------------
 
-    def get_extraction_prompt(self, document_type: str | None = None) -> str:
-        """Get extraction prompt for *document_type* via PromptCatalog."""
-        if document_type is None:
-            document_type = "universal"
-
-        if self.debug:
-            print(f"Loading {document_type} prompt")
-
-        catalog = PromptCatalog()
-        try:
-            return catalog.get_prompt(self._model_type_key, document_type)
-        except KeyError:
-            if self.debug:
-                print(f"Failed to load {document_type} prompt, falling back to universal")
-            return catalog.get_prompt(self._model_type_key, "universal")
-
     # -- Document type parsing -------------------------------------------------
 
     def _parse_document_type_response(self, response: str, detection_config: dict) -> str:
@@ -266,33 +242,7 @@ class DocumentOrchestrator:
 
     # -- Bank structure classification -----------------------------------------
 
-    def _classify_bank_structure(self, image_path: str, verbose: bool = False) -> str:
-        """Classify bank statement structure using vision model.
-
-        Returns:
-            Structure-specific prompt key (e.g. 'bank_statement_flat')
-        """
-        from common.vision_bank_statement_classifier import (
-            classify_bank_statement_structure_vision,
-        )
-
-        if verbose:
-            print("Running vision-based structure classification for bank statement")
-
-        structure_type = classify_bank_statement_structure_vision(
-            image_path,
-            model=self,
-            processor=None,
-            verbose=verbose,
-        )
-
-        if verbose:
-            print(f"Bank statement structure: {structure_type}")
-            print(f"Using prompt key: bank_statement_{structure_type}")
-
-        return f"bank_statement_{structure_type}"
-
-    # -- Core generate (delegates to backend with OOM recovery) ----------------
+    # -- Engine calls ----------------------------------------------------------
 
     def generate(
         self,
@@ -301,17 +251,14 @@ class DocumentOrchestrator:
         max_tokens: int = 1024,
         extra: dict | None = None,
     ) -> str:
-        """Run model inference, with optional OOM recovery.
-
-        This is the Protocol-required generate() method.
+        """One request to the engine.
 
         Args:
             extra: Optional dict passed through to GenerationParams.extra
         """
-        params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
-        if self._has_oom_recovery:
-            return self._resilient_generate(image, prompt, params)
-        return self._backend.generate(image, prompt, params)
+        return self._backend.generate(
+            image, prompt, GenerationParams(max_tokens=max_tokens, extra=extra or {})
+        )
 
     @property
     def supports_generate_many(self) -> bool:
@@ -329,8 +276,7 @@ class DocumentOrchestrator:
 
         The batched counterpart of generate(): the backend builds each request
         as it would for a single call, and submits them together so the engine
-        can run them concurrently. There is no out-of-memory retry here; a
-        caller that needs one falls back to generate() per image.
+        can run them concurrently.
 
         Args:
             images: One PIL image per request.
@@ -364,11 +310,8 @@ class DocumentOrchestrator:
     ) -> list[str]:
         """Run one batched inference over several images.
 
-        Deliberately WITHOUT the OOM-recovery wrapper that ``generate``
-        uses: halving the token budget would silently change what a batch
-        measured, and the caller is better placed to react — the SROIE
-        runner retries a failed batch one image at a time, so only the
-        image that genuinely fails is lost.
+        A failure is the caller's to handle: the SROIE runner retries a failed
+        batch one image at a time, so only the image that genuinely fails is lost.
 
         Args:
             images: One PIL image per request.
@@ -398,33 +341,6 @@ class DocumentOrchestrator:
         """Proxy the backend's cumulative prefix-cache hit summary."""
         return self._backend.cache_hit_summary()
 
-    def _resilient_generate(self, image: Image.Image, prompt: str, params: GenerationParams) -> str:
-        """Generate with OOM recovery (halve tokens and retry).
-
-        Cleanup happens OUTSIDE the except block -- see MEMORY.md for why.
-        """
-        import torch
-
-        oom = False
-        try:
-            return self._backend.generate(image, prompt, params)
-        except torch.cuda.OutOfMemoryError:
-            oom = True
-
-        assert oom  # noqa: S101 -- always True; satisfies mypy reachability
-        gc.collect()
-        torch.cuda.empty_cache()
-        if self.debug:
-            print(f"OOM at {params.max_tokens} tokens, retrying at {params.max_tokens // 2}")
-        retry_params = GenerationParams(
-            max_tokens=params.max_tokens // 2,
-            do_sample=params.do_sample,
-            temperature=params.temperature,
-            top_p=params.top_p,
-            extra=params.extra,
-        )
-        return self._backend.generate(image, prompt, retry_params)
-
     # -- Detection pipeline ----------------------------------------------------
 
     def _detection_inputs(self) -> tuple[str, dict, str, int]:
@@ -440,11 +356,7 @@ class DocumentOrchestrator:
         return detection_prompt, detection_config, detection_key, max_tokens
 
     def _detection_result(self, response: str, detection_config: dict, detection_key: str) -> dict:
-        """Turn one detection reply into a classification result.
-
-        Shared by the single and the batched detection call, so a page is
-        classified by the same rules whichever way its reply was obtained.
-        """
+        """Turn one detection reply into a classification result."""
         # Try enriched parsing (COLUMNS/PAID/ROWS) first, then legacy keywords
         from common.classification_parser import ClassificationParser
 
@@ -468,18 +380,15 @@ class DocumentOrchestrator:
     def detect_many(self, image_paths: list[str], verbose: bool = False) -> list[dict]:
         """Detect the document type of several pages in one engine call.
 
-        The batched counterpart of detect_and_classify_document(): the same
-        prompt and token budget for every page, each request built as the
-        single call builds it (generate_many), each reply parsed by the same
-        rules. Unlike the single call it does not catch a failure: the caller
-        decides whether to retry one page at a time.
+        The same prompt and token budget for every page. A failure is not caught:
+        the caller decides whether to retry one page at a time.
 
         Args:
             image_paths: Pages to classify.
             verbose: Print each page's detected type.
 
         Returns:
-            One result per page, in input order, in the single call's shape.
+            One result per page, in input order.
         """
         if not image_paths:
             return []
@@ -496,39 +405,16 @@ class DocumentOrchestrator:
         return results
 
     def detect_and_classify_document(self, image_path: str, verbose: bool = False) -> dict:
-        """Detect document type by running the detection prompt through generate()."""
+        """Detect the document type of one page: a call of one, with a failure recorded, not raised.
+
+        A page that cannot be classified is given the fallback type and carries the error, so that
+        one page does not end the run.
+        """
         try:
-            detection_prompt, detection_config, detection_key, max_tokens = self._detection_inputs()
-
-            if verbose:
-                sys.stdout.write(f"CONFIG DEBUG - detection_key='{detection_key}'\n")
-                sys.stdout.write(f"Using document detection prompt: {detection_key}\n")
-                sys.stdout.write(f"Prompt: {detection_prompt[:100]}...\n")
-                sys.stdout.flush()
-
-            image = self.load_document_image(image_path)
-            response = self.generate(image, detection_prompt, max_tokens)
-
-            if verbose:
-                sys.stdout.write(f"Model response: {response}\n")
-                sys.stdout.flush()
-
-            result = self._detection_result(response, detection_config, detection_key)
-
-            if verbose:
-                sys.stdout.write(f"Detected document type: {result['document_type']}\n")
-                sys.stdout.flush()
-
-            return result
-
-        except Exception as e:
+            return self.detect_many([image_path], verbose=verbose)[0]
+        except Exception as e:  # noqa: BLE001 - recorded on the page, not raised
             sys.stdout.write(f"DETECTION ERROR: {e}\n")
             sys.stdout.flush()
-            if self.debug:
-                sys.stdout.write("DETECTION ERROR TRACEBACK:\n")
-                sys.stdout.flush()
-                traceback.print_exc()
-
             return {
                 "document_type": self._fallback_type,
                 "confidence": 0.1,
@@ -539,179 +425,7 @@ class DocumentOrchestrator:
 
     # -- Extraction pipeline ---------------------------------------------------
 
-    def process_document_aware(
-        self, image_path: str, classification_info: dict, verbose: bool = False
-    ) -> dict:
-        """Process document using document-specific extraction."""
-        try:
-            document_type = classification_info["document_type"].lower()
-
-            if verbose:
-                print(f"Processing {document_type.upper()} document")
-
-            # For bank statements, use vision-based structure classification
-            if document_type == "bank_statement":
-                try:
-                    document_type = self._classify_bank_structure(image_path, verbose)
-                except Exception as e:
-                    if verbose:
-                        print(f"Vision classification failed: {e}")
-                        print("Falling back to bank_statement_flat prompt")
-                    document_type = "bank_statement_flat"
-
-            # Resolve extraction prompt
-            doc_type_upper = strip_structure_suffixes(document_type).upper()
-            extraction_files = self.prompt_config["extraction_files"]
-            if doc_type_upper not in extraction_files:
-                raise ValueError(
-                    f"No extraction file configured for '{doc_type_upper}'. "
-                    f"Available: {list(extraction_files.keys())}. "
-                    f"Add it to prompt_config['extraction_files']."
-                )
-            extraction_file = extraction_files[doc_type_upper]
-
-            # Derive extraction key
-            extraction_keys = self.prompt_config.get("extraction_keys", {})
-            if doc_type_upper in extraction_keys:
-                extraction_key = extraction_keys[doc_type_upper]
-            else:
-                extraction_key = document_type
-
-            # For bank statements: append structure suffix if missing
-            if document_type.startswith("bank_statement") and doc_type_upper == "BANK_STATEMENT":
-                if "_flat" not in extraction_key and "_date_grouped" not in extraction_key:
-                    if "_flat" in document_type:
-                        extraction_key = f"{extraction_key}_flat"
-                    elif "_date_grouped" in document_type:
-                        extraction_key = f"{extraction_key}_date_grouped"
-
-            catalog = PromptCatalog()
-            extraction_prompt = catalog.get_prompt(self._model_type_key, extraction_key)
-
-            if verbose:
-                print(f"Using {document_type} prompt: {len(extraction_prompt)} characters")
-
-            # Resolve document-specific field list
-            doc_type_fields = dict(self.document_field_lists)
-            if "bank_statement" in doc_type_fields:
-                doc_type_fields["bank_statement_flat"] = doc_type_fields["bank_statement"]
-                doc_type_fields["bank_statement_date_grouped"] = doc_type_fields["bank_statement"]
-
-            doc_field_list = doc_type_fields.get(
-                document_type, doc_type_fields.get("invoice", self.field_list)
-            )
-
-            # Calculate document-specific max tokens
-            base_doc_type = strip_structure_suffixes(document_type)
-            doc_specific_tokens = self._calculate_max_tokens(len(doc_field_list), base_doc_type)
-
-            # Process with document-specific settings
-            result = self.process_single_image(
-                image_path,
-                custom_prompt=extraction_prompt,
-                custom_max_tokens=doc_specific_tokens,
-                field_list=doc_field_list,
-            )
-
-            if verbose:
-                extracted_data = result.get("extracted_data", {})
-                found_fields = sum(1 for v in extracted_data.values() if v != "NOT_FOUND")
-                print(f"Extracted {found_fields}/{len(extracted_data)} fields")
-
-            return result
-
-        except Exception as e:
-            if verbose:
-                print(f"Error in document-aware processing: {e}")
-            return self.process_single_image(image_path)
-
     # -- Single image processing -----------------------------------------------
-
-    def process_single_image(
-        self,
-        image_path: str,
-        custom_prompt: str | None = None,
-        custom_max_tokens: int | None = None,
-        field_list: list[str] | None = None,
-        extra: dict | None = None,
-    ) -> dict[str, Any]:
-        """Process one document image end-to-end.
-
-        Args:
-            extra: Optional dict passed through to GenerationParams.extra
-        """
-        active_fields = field_list or self.field_list
-        active_count = len(active_fields)
-        start_time = time.time()
-        image_name = Path(image_path).name
-
-        try:
-            if self._has_oom_recovery:
-                from common.gpu_memory import release_memory
-
-                release_memory(threshold_gb=1.0, device=self.device)
-
-            image = self.load_document_image(image_path)
-
-            prompt = custom_prompt or self.get_extraction_prompt()
-            max_tokens = custom_max_tokens or self._calculate_max_tokens(active_count, "universal")
-
-            if self.debug:
-                sys.stdout.write(f"Processing {image_name} ({active_count} fields)\n")
-                sys.stdout.write(f"Prompt: {len(prompt)} chars, max_tokens: {max_tokens}\n")
-                sys.stdout.flush()
-
-            raw_response = self.generate(image, prompt, max_tokens, extra=extra)
-
-            processing_time = time.time() - start_time
-
-            if self.debug:
-                sys.stdout.write(f"Response ({len(raw_response)} chars):\n")
-                sys.stdout.write("=" * 80 + "\n")
-                sys.stdout.write(raw_response + "\n")
-                sys.stdout.write("=" * 80 + "\n")
-                sys.stdout.flush()
-
-            extracted_data = self._response_handler.handle(raw_response, active_fields)
-
-            found = sum(1 for v in extracted_data.values() if v != "NOT_FOUND")
-
-            if self.debug:
-                print(f"Extracted {found}/{active_count} fields")
-
-            del image
-            if self._has_oom_recovery:
-                import torch
-
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-            return {
-                "image_name": image_name,
-                "extracted_data": extracted_data,
-                "raw_response": raw_response,
-                "processing_time": processing_time,
-                "response_completeness": found / max(active_count, 1),
-                "content_coverage": found / max(active_count, 1),
-                "extracted_fields_count": found,
-                "field_count": active_count,
-            }
-
-        except Exception as e:
-            processing_time = time.time() - start_time
-            if self.debug:
-                print(f"Error processing {image_name}: {e}")
-                traceback.print_exc()
-            return {
-                "image_name": image_name,
-                "extracted_data": {f: "NOT_FOUND" for f in active_fields},
-                "raw_response": f"Error: {e}",
-                "processing_time": processing_time,
-                "response_completeness": 0.0,
-                "content_coverage": 0.0,
-                "extracted_fields_count": 0,
-                "field_count": active_count,
-            }
 
     # -- Several pages in one engine call --
 
@@ -723,7 +437,8 @@ class DocumentOrchestrator:
     ) -> list[dict]:
         """Batch document extraction via backend.generate_batch().
 
-        Called by the extract stage for a group of pages of one document type.
+        Called by the extract stage for a group of pages of one document type, and for a page
+        on its own as a group of one, so that a page is asked the same way however it is grouped.
         """
         if not image_paths:
             return []
@@ -731,7 +446,6 @@ class DocumentOrchestrator:
         # Build per-image prompts and field lists
         images = []
         prompts = []
-        field_lists_per_image = []
         max_tokens_needed = 0
 
         for image_path, classification_info in zip(image_paths, classification_infos, strict=False):
@@ -747,7 +461,6 @@ class DocumentOrchestrator:
             doc_field_list = doc_type_fields.get(
                 document_type, doc_type_fields.get("invoice", self.field_list)
             )
-            field_lists_per_image.append(doc_field_list)
 
             # Resolve extraction prompt
             extraction_prompt = self._resolve_extraction_prompt(document_type)
@@ -777,44 +490,11 @@ class DocumentOrchestrator:
             )
         responses = backend.generate_batch(images, prompts, params)
 
-        # Parse responses and clean extracted data
-        results = []
-        for i, response in enumerate(responses):
-            doc_field_list = field_lists_per_image[i]
-            document_type = classification_infos[i]["document_type"]
-
-            extracted_data = self._response_handler.handle(response, doc_field_list)
-
-            extracted_fields_count = sum(1 for v in extracted_data.values() if v != "NOT_FOUND")
-            document_field_count = len(doc_field_list)
-
-            if verbose:
-                sys.stdout.write(
-                    f"  [{i + 1}/{len(image_paths)}] "
-                    f"{Path(image_paths[i]).name}: "
-                    f"{extracted_fields_count}/{document_field_count} fields\n"
-                )
-                sys.stdout.flush()
-
-            results.append(
-                {
-                    "image_name": Path(image_paths[i]).name,
-                    "extracted_data": extracted_data,
-                    "raw_response": response,
-                    "processing_time": 0,
-                    "response_completeness": (
-                        extracted_fields_count / document_field_count if document_field_count else 0
-                    ),
-                    "content_coverage": (
-                        extracted_fields_count / document_field_count if document_field_count else 0
-                    ),
-                    "extracted_fields_count": extracted_fields_count,
-                    "field_count": document_field_count,
-                    "document_type": document_type,
-                }
-            )
-
-        return results
+        # The reply is all the extract stage keeps. The clean stage parses it.
+        return [
+            {"image_name": Path(path).name, "raw_response": response}
+            for path, response in zip(image_paths, responses, strict=True)
+        ]
 
     def _resolve_extraction_prompt(self, document_type: str) -> str:
         """Resolve extraction prompt for a document type."""

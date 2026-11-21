@@ -32,29 +32,26 @@ REPLIES = [
 
 
 class FakeBackend:
-    """Records every engine call; replays REPLIES in order for both call shapes."""
+    """Records every engine call; replays REPLIES in the order pages are served, however grouped."""
 
-    def __init__(self, fail_many: bool = False) -> None:
-        self.single_calls: list[dict] = []
+    def __init__(self, fail_shared: bool = False) -> None:
         self.many_calls: list[dict] = []
-        self.fail_many = fail_many
-
-    def generate(self, image, prompt, params) -> str:
-        self.single_calls.append({"prompt": prompt, "max_tokens": params.max_tokens})
-        return REPLIES[(len(self.single_calls) - 1) % len(REPLIES)]
+        self.fail_shared = fail_shared
+        self.served = 0
 
     def generate_many(self, images, prompts, params) -> list[str]:
-        if self.fail_many:
+        if self.fail_shared and len(images) > 1:
             raise RuntimeError("engine refused the batch")
         self.many_calls.append({"prompts": prompts, "max_tokens": params.max_tokens, "n": len(images)})
-        return [REPLIES[i % len(REPLIES)] for i in range(len(images))]
+        replies = [REPLIES[(self.served + i) % len(REPLIES)] for i in range(len(images))]
+        self.served += len(images)
+        return replies
 
 
 def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     """An orchestrator holding only what detection reads, without loading a model."""
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
-    orch._has_oom_recovery = False
     orch._fallback_type = "INVOICE"
     orch.debug = False
     orch.prompt_config = {"detection_file": str(DETECTION_FILE), "detection_key": "detection"}
@@ -81,7 +78,6 @@ def test_detect_many_is_one_call_with_the_detection_prompt_for_every_page(pages)
     results = orchestrator(backend).detect_many(pages)
 
     prompt = yaml.safe_load(DETECTION_FILE.read_text())["prompts"]["detection"]["prompt"]
-    assert backend.single_calls == []
     assert backend.many_calls == [{"prompts": [prompt] * 3, "max_tokens": 150, "n": 3}]
     assert len(results) == 3
 
@@ -96,10 +92,9 @@ def test_detect_many_gives_each_page_the_result_the_single_call_gives(pages):
     assert many == singles
     assert [r["raw_response"] for r in many] == REPLIES
     assert [r["document_type"] for r in many] == ["BANK_STATEMENT", "RECEIPT", "BANK_STATEMENT"]
-    assert one_backend.single_calls[0] == {
-        "prompt": many_backend.many_calls[0]["prompts"][0],
-        "max_tokens": many_backend.many_calls[0]["max_tokens"],
-    }
+    assert [call["n"] for call in one_backend.many_calls] == [1, 1, 1]
+    assert one_backend.many_calls[0]["prompts"] == many_backend.many_calls[0]["prompts"][:1]
+    assert one_backend.many_calls[0]["max_tokens"] == many_backend.many_calls[0]["max_tokens"]
 
 
 def test_detect_many_of_nothing_makes_no_call():
@@ -118,7 +113,6 @@ def test_pages_are_classified_in_shared_calls_of_the_configured_size(pages):
     records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=2, verbose=False)
 
     assert [call["n"] for call in backend.many_calls] == [2, 1]
-    assert backend.single_calls == []
     assert [r["image_path"] for r in records] == pages
 
 
@@ -148,36 +142,30 @@ def test_a_batch_size_of_one_keeps_one_call_a_page(pages):
 
     classify_stage._classify_images(orchestrator(backend), pages, batch_size=1, verbose=False)
 
-    assert backend.many_calls == []
-    assert len(backend.single_calls) == 3
+    assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
 
 
 def test_a_failed_shared_call_is_retried_one_page_at_a_time(pages, caplog):
-    backend = FakeBackend(fail_many=True)
+    backend = FakeBackend(fail_shared=True)
 
     with caplog.at_level("WARNING"):
         records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=3, verbose=False)
 
-    assert len(backend.single_calls) == 3
+    assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
     assert [r["document_type"] for r in records] == ["BANK_STATEMENT", "RECEIPT", "BANK_STATEMENT"]
     assert "retrying one at a time" in caplog.text
 
 
-def test_a_backend_without_a_shared_call_keeps_one_call_a_page(pages):
-    class SingleOnly:
-        def __init__(self) -> None:
-            self.calls = 0
+def test_a_page_that_fails_alone_is_given_the_fallback_type_and_carries_the_error(pages):
+    class Refuses:
+        def generate_many(self, images, prompts, params) -> list[str]:
+            raise RuntimeError("engine refused the page")
 
-        def generate(self, image, prompt, params) -> str:
-            self.calls += 1
-            return REPLIES[1]
+    result = orchestrator(Refuses()).detect_and_classify_document(pages[0])  # type: ignore[arg-type]
 
-    backend = SingleOnly()
-
-    records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=3, verbose=False)
-
-    assert backend.calls == 3
-    assert len(records) == 3
+    assert result["document_type"] == "INVOICE"
+    assert result["error"] == "engine refused the page"
+    assert result["prompt_used"] == "fallback_heuristic"
 
 
 # --- the config -----------------------------------------------------------------

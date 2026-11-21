@@ -67,12 +67,6 @@ class StandIn:
         self.calls.append(("extract", [Path(p).name for p in image_paths]))
         return [{"raw_response": f"TOTAL_AMOUNT: read from {Path(p).name}"} for p in image_paths]
 
-    def process_document_aware(
-        self, image_path: str, classification: dict[str, Any], verbose: bool = False
-    ) -> dict[str, Any]:
-        self.calls.append(("extract", [Path(image_path).name]))
-        return {"raw_response": f"TOTAL_AMOUNT: read from {Path(image_path).name}"}
-
     def generate_many(
         self, images: list[Any], prompts: list[str], max_tokens=None, extra=None
     ) -> list[str]:
@@ -227,16 +221,14 @@ def test_a_page_that_cannot_be_read_is_recorded_and_the_rest_are_read(bench: Ben
     """In a shared call that fails, each page is tried alone; one that still fails must not end the run."""
     pages = bench.pages(3, kinds=("invoice",))
 
-    def refuse(image_paths, classifications, verbose=False):
-        raise RuntimeError("engine refused the batch")
-
-    def read_alone(image_path, classification, verbose=False):
-        if "CASE001" in image_path:
+    def read(image_paths, classifications, verbose=False):
+        if len(image_paths) > 1:
+            raise RuntimeError("engine refused the batch")
+        if "CASE001" in image_paths[0]:
             raise RuntimeError("page too large")
-        return {"raw_response": "TOTAL_AMOUNT: $12.00"}
+        return [{"raw_response": "TOTAL_AMOUNT: $12.00"}]
 
-    bench.processor.extract_batch = refuse  # type: ignore[method-assign]
-    bench.processor.process_document_aware = read_alone  # type: ignore[method-assign]
+    bench.processor.extract_batch = read  # type: ignore[method-assign]
 
     records = bench.records("extract", pages, engines=1)
 

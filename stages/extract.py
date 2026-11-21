@@ -605,9 +605,9 @@ def _extract_standard(
     classification: dict[str, Any],
     verbose: bool,
 ) -> None:
-    """Extract standard document, write raw response."""
+    """Read one page on its own, as a group of one, and write the reply."""
     start = time.time()
-    result = processor.process_document_aware(image_path, classification, verbose=verbose)
+    result = processor.extract_batch([image_path], [classification], verbose=verbose)[0]
     img_time = time.time() - start
 
     writer.write(

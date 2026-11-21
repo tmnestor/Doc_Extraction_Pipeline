@@ -2,7 +2,7 @@
 
 Defines the minimal interface every model backend must implement.
 The DocumentOrchestrator (orchestrator.py) handles all shared logic
-(detection, prompt loading, parsing, cleaning, OOM recovery) and
+(detection, prompt loading, the choice of prompt and token budget) and
 delegates only raw inference to backends.
 """
 

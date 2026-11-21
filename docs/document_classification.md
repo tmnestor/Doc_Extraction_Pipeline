@@ -264,7 +264,7 @@ they resolve to the configured fallback type.
 ## Step 3 — Routing into extraction
 
 The classification result selects the **type-specific extraction prompt** and
-**field list** downstream (`process_document_aware()` in `orchestrator.py`):
+**field list** downstream (`extract_batch()` in `orchestrator.py`):
 
 ```mermaid
 flowchart LR

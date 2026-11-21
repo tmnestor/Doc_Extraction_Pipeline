@@ -239,6 +239,7 @@ def run(
                 "cli_overrides": cli_args,
                 "classifications": classifications,
             },
+            app_config=app_cfg,
         )
         # The workers hand their records back when they finish. Append when resuming, or when skipped
         # pages were written above: write_jsonl starts the file again and would drop either.

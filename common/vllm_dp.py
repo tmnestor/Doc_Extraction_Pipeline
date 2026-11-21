@@ -113,7 +113,7 @@ def run_dp(
     images: list[Path],
     worker_fn: str,
     worker_kwargs: dict[str, Any],
-    app_config: AppConfig | None = None,
+    app_config: AppConfig,
 ) -> list[dict[str, Any]]:
     """Launch N workers, collect merged results in original image order.
 
@@ -129,13 +129,13 @@ def run_dp(
         worker_fn: Dotted path to a top-level function with signature:
             (gpu_id: int, image_paths: list[str], **worker_kwargs) -> list[dict]
         worker_kwargs: Extra kwargs forwarded to worker_fn (must be picklable).
-        app_config: Optional application config. When supplied, the process
-            join timeout is read from ``app_config.get_infra("dp_join_timeout")``.
+        app_config: The run's settings. How long to wait for a finished worker's process to end
+            is ``resources.infrastructure.dp_join_timeout``.
 
     Returns:
         Merged list of result dicts in original image order.
     """
-    join_timeout = int(app_config.get_infra("dp_join_timeout")) if app_config else 60
+    join_timeout = int(app_config.get_infra("dp_join_timeout"))
     poll_interval = 10  # seconds between liveness checks
     chunks = _partition_images(images, num_gpus)
     actual_gpus = len(chunks)

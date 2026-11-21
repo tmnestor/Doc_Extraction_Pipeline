@@ -132,6 +132,7 @@ def run(
                 "config_path": str(config_path) if config_path else None,
                 "cli_overrides": cli_args,
             },
+            app_config=app_cfg,
         )
     else:
         with open_processor(app_cfg) as processor:

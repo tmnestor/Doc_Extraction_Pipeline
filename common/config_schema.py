@@ -55,12 +55,6 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "inference.vllm.models.*.mm_processor_kwargs.**",
         "inference.vllm.models.*.stage_overrides.classify.hf_overrides.**",
         "inference.vllm.models.*.stage_overrides.classify.mm_processor_kwargs.**",
-        "pipeline.batch.auto_detect",
-        "pipeline.batch.conservative_sizes.*",
-        "pipeline.batch.default_sizes.*",
-        "pipeline.batch.max_sizes.*",
-        "pipeline.batch.min_size",
-        "pipeline.batch.strategy",
         "pipeline.batching.bank_statement",
         "pipeline.batching.classify",
         "pipeline.batching.default",
@@ -151,13 +145,7 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "pipeline.token_budgets.extract_bank",
         "pipeline.token_budgets.fallback_base",
         "pipeline.token_budgets.fallback_per_field",
-        "resources.gpu_memory.high",
-        "resources.gpu_memory.low",
-        "resources.gpu_memory.medium",
-        "resources.gpu_memory.very_high",
         "resources.infrastructure.dp_join_timeout",
-        "resources.infrastructure.gpu_memory_fallback_gb",
-        "resources.infrastructure.gpu_memory_threshold_gb",
     }
 )
 

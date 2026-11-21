@@ -862,17 +862,6 @@ pipeline:
       paper_refine_outside_frac: 0.02
       paper_refine_inside_frac: 0.01
 
-  batch:
-    # Keys are NORMALISED model types (see the generation.models note above).
-    # Both models are pinned to 1. These sizes belong to an older way of batching that the
-    # stages no longer use: pages are grouped into engine calls by pipeline.batching.
-    default_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
-    max_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
-    conservative_sizes: {gemma4-31b: 1, gemma4-12b-unified: 1}
-    min_size: 1
-    strategy: balanced            # conservative | balanced | aggressive
-    auto_detect: true
-
   # Extraction ordering — controls batch submission order for prefix-cache reuse
   extraction:
     order:
@@ -883,19 +872,9 @@ pipeline:
     # Labels that skip extraction entirely (written as skipped records)
     skip_labels: []
 
-# Resources — GPU memory thresholds and infrastructure timeouts.
+# Resources
 resources:
-  # GPU memory thresholds (GB) — drive auto-batch-size selection.
-  gpu_memory:
-    low: 8                      # GB — conservative batching
-    medium: 16                  # GB — balanced batching
-    high: 24                    # GB — aggressive batching
-    very_high: 64               # GB — maximum batching
-
-  # Infrastructure settings — timeouts, memory thresholds
   infrastructure:
-    # No dp_timeout: data-parallel workers run until they finish or die (run_dp
-    # polls worker liveness instead of imposing an arbitrary wall-clock cap).
+    # A worker with an engine on a card runs until it finishes or dies; there is no time limit on
+    # the work. This is how long to wait for a finished worker's process to end.
     dp_join_timeout: 60           # seconds, process join timeout
-    gpu_memory_threshold_gb: 1.0
-    gpu_memory_fallback_gb: 24.0

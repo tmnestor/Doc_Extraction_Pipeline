@@ -127,6 +127,7 @@ class Bench:
                 images=pages,
                 worker_fn=f"common.vllm_dp_workers.{stage}_worker",
                 worker_kwargs=kwargs,
+                app_config=AppConfig.load(dict(self.overrides), config_path=self.config_path),
             )
         return [{k: v for k, v in record.items() if k not in MEASUREMENTS} for record in found]
 
@@ -201,6 +202,7 @@ def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: 
         images=pages,
         worker_fn="common.vllm_dp_workers.classify_worker",
         worker_kwargs={"config_path": str(bench.config_path), "cli_overrides": bench.overrides},
+        app_config=app_config,
     )
 
     assert all(record["processing_time"] >= 0.0 and "gpu_id" not in record for record in one)

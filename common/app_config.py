@@ -7,11 +7,9 @@ after loading.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
-from common.field_schema import FieldSchema, get_field_schema
 from common.vllm_stage_overrides import STAGES, apply_stage_overrides, validate_stage_overrides
 
 if TYPE_CHECKING:
@@ -26,76 +24,6 @@ class ConfigError(Exception):
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors
         super().__init__("; ".join(errors))
-
-
-@dataclass(frozen=True)
-class BatchSettings:
-    """The batch and card settings, read once."""
-
-    default_sizes: dict[str, int]
-    max_sizes: dict[str, int]
-    conservative_sizes: dict[str, int]
-    min_size: int = 1
-    strategy: str = "balanced"
-    auto_detect: bool = True
-    memory_safety_margin: float = 0.8
-    clear_cache_after_batch: bool = True
-    timeout_seconds: int = 300
-    fallback_enabled: bool = True
-    fallback_steps: tuple[int, ...] = (8, 4, 2, 1)
-    gpu_memory_thresholds: dict[str, int] = field(
-        default_factory=lambda: {"low": 8, "medium": 16, "high": 24, "very_high": 64}
-    )
-
-    # Schema documentation only. Runtime values come from run_config.yml.
-    _DEFAULT_SIZES: ClassVar[dict[str, int]] = {}
-    _MAX_SIZES: ClassVar[dict[str, int]] = {}
-    _CONSERVATIVE_SIZES: ClassVar[dict[str, int]] = {}
-
-    @classmethod
-    def from_raw(cls, raw_config: dict) -> BatchSettings:
-        """Build from raw YAML config (replaces apply_yaml_overrides batch/gpu sections)."""
-        default_sizes = dict(cls._DEFAULT_SIZES)
-        max_sizes = dict(cls._MAX_SIZES)
-        conservative_sizes = dict(cls._CONSERVATIVE_SIZES)
-        kwargs: dict[str, Any] = {}
-
-        batch = raw_config.get("pipeline", {}).get("batch", {})
-        if batch:
-            if "default_sizes" in batch:
-                default_sizes.update(batch["default_sizes"])
-            if "max_sizes" in batch:
-                max_sizes.update(batch["max_sizes"])
-            if "conservative_sizes" in batch:
-                conservative_sizes.update(batch["conservative_sizes"])
-            for key in (
-                "min_size",
-                "strategy",
-                "auto_detect",
-                "memory_safety_margin",
-                "clear_cache_after_batch",
-                "timeout_seconds",
-                "fallback_enabled",
-            ):
-                if key in batch:
-                    kwargs[key] = batch[key]
-            if "fallback_steps" in batch:
-                kwargs["fallback_steps"] = tuple(batch["fallback_steps"])
-
-        # GPU memory thresholds
-        thresholds = {"low": 8, "medium": 16, "high": 24, "very_high": 64}
-        resources = raw_config.get("resources", {})
-        mem_thresholds = resources.get("gpu_memory", {})
-        if mem_thresholds:
-            thresholds.update(mem_thresholds)
-        kwargs["gpu_memory_thresholds"] = thresholds
-
-        return cls(
-            default_sizes=default_sizes,
-            max_sizes=max_sizes,
-            conservative_sizes=conservative_sizes,
-            **kwargs,
-        )
 
 
 def _validate_model_override_keys(
@@ -195,8 +123,6 @@ class AppConfig:
 
     __slots__ = (
         "pipeline",
-        "batch",
-        "fields",
         "_generation_registry",
         "_token_budgets",
         "_vllm_config",
@@ -209,25 +135,9 @@ class AppConfig:
         "config_path",
     )
 
-    _DEFAULT_VLLM_CONFIG: ClassVar[dict[str, Any]] = {
-        "gpu_memory_utilization": 0.90,
-        "max_model_len": 8192,
-        "max_num_seqs": 1,
-        "limit_mm_per_prompt": 1,
-        "enable_prefix_caching": True,
-    }
-
-    _DEFAULT_INFRASTRUCTURE: ClassVar[dict[str, int | float]] = {
-        "dp_join_timeout": 60,
-        "gpu_memory_threshold_gb": 1.0,
-        "gpu_memory_fallback_gb": 24.0,
-    }
-
     def __init__(
         self,
         pipeline: "PipelineConfig",
-        batch: BatchSettings,
-        fields: FieldSchema,
         generation_registry: dict[str, dict],
         token_budgets: dict[str, int] | None = None,
         vllm_config: dict[str, dict] | None = None,
@@ -238,12 +148,10 @@ class AppConfig:
         extraction_skip_labels: list[str] | None = None,
     ) -> None:
         self.pipeline = pipeline
-        self.batch = batch
-        self.fields = fields
         self._generation_registry = generation_registry
         self._token_budgets = token_budgets or {}
         self._vllm_config = vllm_config or {}
-        self._infrastructure = {**self._DEFAULT_INFRASTRUCTURE, **(infrastructure or {})}
+        self._infrastructure = dict(infrastructure or {})
         self._classification = classification or {}
         self._extraction_order = extraction_order or []
         self._secondary_sort = secondary_sort
@@ -314,21 +222,30 @@ class AppConfig:
         if val_errors:
             raise ConfigError(val_errors)
 
-        # 6. Build BatchSettings (immutable copy of batch/gpu config)
-        batch = BatchSettings.from_raw(raw_config)
-
         # 7. Build generation registry (immutable copy with YAML overrides)
         generation_registry = _build_generation_registry(raw_config, config_file)
-
-        # 9-10. Load field schema (single YAML read) and extract min_tokens
-        fields = get_field_schema()
 
         # 11. Token budgets — YAML is the single source of truth
         yaml_budgets = raw_config.get("pipeline", {}).get("token_budgets", {})
 
         # 12. Build vLLM config (defaults + per-model overrides)
         vllm_section = raw_config.get("inference", {}).get("vllm", {})
-        vllm_defaults = vllm_section.get("defaults", dict(cls._DEFAULT_VLLM_CONFIG))
+        vllm_defaults = vllm_section.get("defaults")
+        if not isinstance(vllm_defaults, dict):
+            raise ValueError(
+                "What: the settings file has no inference.vllm.defaults block.\n"
+                f"Where: {config_file}, key inference.vllm.defaults.\n"
+                "Expected: a block such as\n"
+                "  inference:\n"
+                "    vllm:\n"
+                "      defaults:\n"
+                "        gpu_memory_utilization: 0.90\n"
+                "        max_model_len: 8192\n"
+                "        max_num_seqs: 1\n"
+                "        limit_mm_per_prompt: 1\n"
+                "        enable_prefix_caching: true\n"
+                f"How to fix: add that block to {config_file}."
+            )
         vllm_models = vllm_section.get("models", {})
 
         # A per-model key that matches no registered model is dead config: the
@@ -368,8 +285,6 @@ class AppConfig:
 
         loaded = cls(
             pipeline=pipeline,
-            batch=batch,
-            fields=fields,
             generation_registry=generation_registry,
             token_budgets=yaml_budgets,
             vllm_config=vllm_config,
@@ -383,11 +298,6 @@ class AppConfig:
         return loaded
 
     # -- Token budgets (Phase 1) -----------------------------------------------
-
-    @property
-    def token_budgets(self) -> dict[str, int]:
-        """Read-only view of all resolved token budgets."""
-        return dict(self._token_budgets)
 
     def get_token_budget(self, name: str) -> int:
         """Resolve a named token budget.
@@ -433,11 +343,10 @@ class AppConfig:
     def get_vllm_config(self, model_type: str) -> dict[str, Any]:
         """Return vLLM engine parameters for *model_type*.
 
-        Falls back to ``vllm.defaults`` (or class-level defaults) if
-        no per-model override exists. On a config made by ``for_stage``, the
-        model's overrides for that stage are applied.
+        A model without a block of its own gets ``inference.vllm.defaults``. On a config made by
+        ``for_stage``, the model's overrides for that stage are applied.
         """
-        defaults = self._vllm_config.get("__defaults__", dict(self._DEFAULT_VLLM_CONFIG))
+        defaults = self._vllm_config["__defaults__"]
         per_model = self._vllm_config.get(model_type, {})
         if per_model:
             return apply_stage_overrides({**defaults, **per_model}, self._stage)
@@ -471,7 +380,7 @@ class AppConfig:
         """Default document type when classification response can't be parsed."""
         return self._classification["fallback_type"]
 
-    # -- Generation and batch settings by model ---------------------------------
+    # -- Generation settings by model -------------------------------------------
 
     @staticmethod
     def _normalize_model_type(model_type: str) -> str:
@@ -501,35 +410,6 @@ class AppConfig:
         """
         key = self._normalize_model_type(model_type)
         return dict(self._generation_registry.get(key) or self._generation_registry["__defaults__"])
-
-    def get_batch_size_for_model(self, model_name: str, strategy: str | None = None) -> int:
-        """Get recommended batch size for a model based on strategy."""
-        strategy = strategy or self.batch.strategy
-        model_name = self._normalize_model_type(model_name)
-
-        if strategy == "conservative":
-            return self.batch.conservative_sizes.get(model_name, self.batch.min_size)
-        elif strategy == "aggressive":
-            return self.batch.max_sizes.get(model_name, self.batch.min_size)
-        else:
-            return self.batch.default_sizes.get(model_name, self.batch.min_size)
-
-    def get_auto_batch_size(self, model_name: str, available_memory_gb: float | None = None) -> int:
-        """The batch size for a model, by the memory free on the card when that is known."""
-        if not self.batch.auto_detect or available_memory_gb is None:
-            return self.get_batch_size_for_model(model_name, self.batch.strategy)
-
-        thresholds = self.batch.gpu_memory_thresholds
-        if available_memory_gb >= thresholds["very_high"]:
-            strategy = "aggressive"
-        elif available_memory_gb >= thresholds["high"]:
-            strategy = "aggressive"
-        elif available_memory_gb >= thresholds["medium"]:
-            strategy = "balanced"
-        else:
-            strategy = "conservative"
-
-        return self.get_batch_size_for_model(model_name, strategy)
 
     # -- Extraction ordering (Phase 2) -----------------------------------------
 

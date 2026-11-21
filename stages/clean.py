@@ -85,12 +85,7 @@ def run(
 
         # Resolve expected fields for this document type
         doc_type_lower = doc_type.lower()
-        expected_fields = all_fields.get(doc_type_lower)
-
-        if expected_fields is None:
-            # Try stripping structure suffixes (bank_statement_flat -> bank_statement)
-            base_type = doc_type_lower.replace("_flat", "").replace("_date_grouped", "")
-            expected_fields = all_fields.get(base_type, [])
+        expected_fields = all_fields.get(doc_type_lower, [])
 
         if not expected_fields:
             logger.warning("No field definitions for doc_type '%s' -- using empty list", doc_type)

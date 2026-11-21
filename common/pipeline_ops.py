@@ -21,29 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 def load_prompt_config(model_type: str) -> dict[str, Any]:
-    """Build prompt routing config from PromptCatalog (single source of truth).
-
-    Derives supported document types from the extraction prompt YAML keys
-    rather than maintaining a hardcoded list.
-    """
-    catalog = PromptCatalog()
-
+    """Where the classification prompt is. The model's extraction prompts are checked on the way."""
     try:
-        routing = catalog.build_extraction_routing(model_type)
+        PromptCatalog().check_extraction_prompts(model_type)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]FATAL: {e}[/red]")
         raise typer.Exit(1) from None
-
-    # Build extraction_files in the legacy shape that orchestrator expects.
-    # All extraction types map to the same YAML file.
-    registration = get_model(model_type)
-    extraction_path = str(Path(__file__).parent.parent / "prompts" / registration.prompt_file)
-    detection_path = str(Path(__file__).parent.parent / "prompts" / "document_type_detection.yaml")
-
     return {
-        "detection_file": detection_path,
+        "detection_file": str(Path(__file__).parent.parent / "prompts" / "document_type_detection.yaml"),
         "detection_key": "detection",
-        "extraction_files": {doc_type: extraction_path for doc_type in routing},
     }
 
 
@@ -78,7 +64,6 @@ def load_model(config: PipelineConfig, *, app_config: Any | None = None):
     ``app_config`` so vLLM loaders can resolve per-model engine tuning from
     ``run_config.yml`` (mirrors ``create_processor``). HF loaders ignore it.
     """
-    from models.registry import get_model
 
     registration = get_model(config.model_type)
     return registration.loader(config, app_config=app_config)
@@ -127,7 +112,6 @@ def create_processor(
 
     Delegates to the registered processor_creator for config.model_type.
     """
-    from models.registry import get_model
 
     registration = get_model(config.model_type)
     return registration.processor_creator(

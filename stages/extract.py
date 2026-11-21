@@ -415,7 +415,6 @@ def _plan_batches(
     batches = plan_extraction_batches(
         classifications,
         batch_sizes=batch_sizes,
-        unbatchable=set(),
     )
     logger.info(
         "Extraction batching: %d documents in %d calls (sizes: %s)",

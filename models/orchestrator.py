@@ -66,28 +66,13 @@ class DocumentOrchestrator:
         self.field_list = field_list
         self.field_count = len(field_list)
 
-        # Validate prompt_config
-        if not prompt_config:
-            raise ValueError(
-                "prompt_config is required -- must contain "
-                "'detection_file', 'detection_key', 'extraction_files'"
-            )
         self.prompt_config: dict[str, Any] = prompt_config
-        missing = {"detection_file", "detection_key", "extraction_files"} - set(self.prompt_config)
+        missing = {"detection_file", "detection_key"} - set(self.prompt_config)
         if missing:
             raise ValueError(f"prompt_config missing required keys: {missing}")
 
-        # Read fallback_type from centralized config (run_config.yml)
+        # The type of a page whose classification reply cannot be read.
         self._fallback_type = self.app_config.classification_fallback_type
-
-        # Resolve prompt YAML filename from extraction_files
-        extraction_files = self.prompt_config["extraction_files"]
-        if not extraction_files:
-            raise ValueError(
-                "prompt_config['extraction_files'] is empty -- "
-                "must map document types to extraction YAML paths"
-            )
-        self._prompt_yaml = Path(next(iter(extraction_files.values()))).name
 
         schema = get_field_schema()
 

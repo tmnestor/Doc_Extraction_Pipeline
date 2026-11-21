@@ -313,7 +313,7 @@ def _tidied(fields: dict[str, str]) -> dict[str, str]:
         if value == NOT_FOUND:
             continue
         if name == "DOCUMENT_TYPE":
-            settled = get_field_schema()._alias_map.get(value.lower().strip())
+            settled = get_field_schema().aliases.get(value.lower().strip())
             if settled:
                 fields[name] = settled.upper()
             continue

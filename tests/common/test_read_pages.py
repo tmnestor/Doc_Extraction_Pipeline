@@ -215,9 +215,7 @@ def test_generate_many_refuses_mismatched_lists():
 
 
 def test_statements_are_planned_into_shared_calls_like_any_type(pages):
-    batches = plan_extraction_batches(
-        classified(pages), batch_sizes={"bank_statement": 2, "default": 10}, unbatchable=set()
-    )
+    batches = plan_extraction_batches(classified(pages), batch_sizes={"bank_statement": 2, "default": 10})
 
     assert [len(batch) for batch in batches] == [2, 1]
 

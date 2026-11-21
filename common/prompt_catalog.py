@@ -277,70 +277,26 @@ class PromptCatalog:
                 "Fix: set `default: none` or a supported document type."
             )
 
-    # -- Auxiliary: column patterns (bank-specific structured data) ------------
+    def check_extraction_prompts(self, model_type: str) -> None:
+        """Check that every prompt in a model's prompt file is for a supported document type.
 
-    # -- Auxiliary: extraction routing ----
-
-    def build_extraction_routing(self, model_type: str) -> dict[str, str]:
-        """Derive the ``{DOC_TYPE: prompt_key}`` mapping for a given model.
-
-        Cross-references the model's extraction YAML keys against
-        ``field_definitions.yaml`` to determine which keys are document types,
-        strips structure suffixes, and returns the canonical mapping.
-
-        Args:
-            model_type: Registered model type string (e.g. ``"gemma4-31b-w4a16-vllm"``).
-
-        Returns:
-            Dict mapping uppercase canonical types to prompt keys.
-            e.g. ``{"INVOICE": "invoice", "RECEIPT": "receipt",
-                     "BANK_STATEMENT": "bank_statement_flat"}``
+        A prompt under a name that is no document type is never used, and usually a misspelling.
 
         Raises:
-            FileNotFoundError: If extraction YAML not found.
-            ValueError: If no document type keys found.
+            ValueError: Naming the prompts that belong to no type.
         """
         from common.field_schema import get_field_schema
-        from common.pipeline_config import (
-            load_structure_suffixes,
-            strip_structure_suffixes,
-        )
 
-        filename = self._resolve_filename(model_type)
-        path = self._dir / filename
-        data = self._load_yaml(path)
-
-        prompt_keys = set(data.get("prompts", {}).keys())
-        supported_types = set(get_field_schema().supported_document_types)
-        suffixes = load_structure_suffixes(path)
-
-        routing: dict[str, str] = {}
-        orphans: list[str] = []
-        for key in prompt_keys:
-            base_type = strip_structure_suffixes(key, suffixes)
-            if base_type in supported_types:
-                routing[base_type.upper()] = key
-            else:
-                orphans.append(key)
-
-        if orphans:
+        path = self._dir / self._resolve_filename(model_type)
+        prompts = set(self._load_yaml(path).get("prompts", {}))
+        supported = set(get_field_schema().supported_document_types)
+        strays = sorted(prompts - supported)
+        if strays or not prompts:
             raise ValueError(
-                "Orphaned extraction prompt key(s) do not map to any supported "
-                f"document type: {sorted(orphans)}.\n"
-                f"Where: {path.absolute()} (under the 'prompts:' section).\n"
-                "Each prompt key (after stripping structure suffixes "
-                f"{list(suffixes)}) must equal a supported_document_types entry in "
-                "config/field_definitions.yaml.\n"
-                f"Allowed types: {sorted(supported_types)}.\n"
-                "Fix: rename the key to its canonical type (e.g. 'travel_expense' "
-                "-> 'travel'), or add the new type to supported_document_types."
+                f"What: {'prompt(s) for no supported document type: ' + ', '.join(strays) if strays else 'no prompts'}.\n"
+                f"Where: {path.absolute()}, under the prompts: section.\n"
+                f"Expected: a prompt for each of some of: {', '.join(sorted(supported))} "
+                f"(supported_document_types in config/field_definitions.yaml).\n"
+                f"How to fix: rename each prompt to the document type it is for, or add the new type to "
+                f"supported_document_types."
             )
-
-        if not routing:
-            raise ValueError(
-                f"No document type prompts found in {filename}. "
-                f"Expected keys like 'invoice', 'receipt', etc. in prompts section. "
-                f"Found keys: {sorted(prompt_keys)}"
-            )
-
-        return routing

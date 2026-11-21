@@ -236,7 +236,7 @@ def _dates_match(read: str, truth: str) -> bool:
 
 def _money_matches(read: str, truth: str) -> bool:
     """Whether two amounts are the same number, within the tolerance the field settings give."""
-    tolerance = get_field_schema().get_threshold("monetary_tolerance", 0.01)
+    tolerance = get_field_schema().get_threshold("monetary_tolerance")
     try:
         read_number = float(re.sub(r"[^\d.-]", "", read))
         true_number = float(re.sub(r"[^\d.-]", "", truth))
@@ -282,7 +282,7 @@ def _text_similarity(read: str, truth: str) -> float:
 
 def _words_match(read: str, truth: str) -> bool:
     """Whether two texts share enough of their words (the share the field settings give)."""
-    threshold = get_field_schema().get_threshold("fuzzy_text_match", 0.75)
+    threshold = get_field_schema().get_threshold("fuzzy_text_match")
     read_words, true_words = set(read.lower().strip().split()), set(truth.lower().strip().split())
     if not read_words or not true_words:
         return read.lower().strip() == truth.lower().strip()
@@ -306,7 +306,7 @@ def _statement_item_matches(read: str, truth: str, field_name: str) -> bool:
     if "BALANCE" in field_name:
         return _money_matches(read, truth)
     read, truth = read.strip(), truth.strip()
-    threshold = get_field_schema().get_threshold("transaction_text_similarity", 0.90)
+    threshold = get_field_schema().get_threshold("transaction_text_similarity")
     return _text_similarity(read, truth) >= threshold or _words_match(read, truth)
 
 

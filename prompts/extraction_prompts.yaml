@@ -293,9 +293,3 @@ prompts:
 # Configuration
 settings:
   temperature: 0.0
-  # Layout variant suffixes — prompt keys like bank_statement_flat have their
-  # suffix stripped to find the base document type (BANK_STATEMENT).
-  # Add new suffixes here when creating layout variants for any document type.
-  structure_suffixes:
-    - "_flat"
-    - "_date_grouped"

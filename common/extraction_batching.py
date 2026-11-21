@@ -15,9 +15,7 @@ works rather than from taste:
   bank header cache depends on a bank's statements arriving together.
   Batching consecutive runs preserves that order exactly.
 
-The caller names in unbatchable any type that cannot share a call in this run.
-A bank statement is one independent call and can be batched whenever the backend
-has a batched call to make it with.
+Every document type can share a call, a bank statement included.
 """
 
 from pathlib import Path
@@ -126,7 +124,6 @@ def plan_extraction_batches(
     classifications: list[dict[str, Any]],
     *,
     batch_sizes: dict[str, int],
-    unbatchable: set[str],
 ) -> list[list[dict[str, Any]]]:
     """Group classified documents into engine-call batches.
 
@@ -135,7 +132,6 @@ def plan_extraction_batches(
             order. Each carries ``document_type``.
         batch_sizes: Documents per call, keyed by lowercase document type,
             with a ``default`` entry for unlisted types.
-        unbatchable: Uppercase document types that must never share a call.
 
     Returns:
         Batches in input order, each holding one document type. Flattening
@@ -148,13 +144,6 @@ def plan_extraction_batches(
 
     for record in classifications:
         doc_type = record["document_type"]
-
-        if doc_type.upper() in unbatchable:
-            if current:
-                batches.append(current)
-                current, current_type = [], None
-            batches.append([record])
-            continue
 
         limit = batch_sizes.get(doc_type.lower(), batch_sizes["default"])
 

@@ -18,6 +18,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from .field_schema import get_field_schema
 
 logger = logging.getLogger(__name__)
@@ -66,8 +68,6 @@ def _load_jsonl(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def _load_csv(path: Path) -> dict[str, dict[str, Any]]:
-    import pandas as pd
-
     try:
         # Every cell as text, or pandas turns the text "False" into the boolean False.
         table = pd.read_csv(path, dtype=str)

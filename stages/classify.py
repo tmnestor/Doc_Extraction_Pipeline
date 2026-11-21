@@ -204,7 +204,7 @@ def _classify_images(
         One classification record per page, in input order.
     """
     total = len(image_paths)
-    share = batch_size > 1 and getattr(processor, "supports_generate_many", False)
+    share = batch_size > 1
     step = batch_size if share else 1
     if share:
         logger.info(

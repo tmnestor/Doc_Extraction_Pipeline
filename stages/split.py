@@ -195,17 +195,11 @@ def apply_reply(
 def _ask(processor: Any, photographs: list[Path], config: Any) -> list[str]:
     """Put the photo split prompt to the model for each photograph, replies in the same order."""
     replies: list[str] = []
-    share = getattr(processor, "supports_generate_many", False)
-    step = config.batch_size if share else 1
+    step = config.batch_size
     for start in range(0, len(photographs), step):
         batch = photographs[start : start + step]
         images = [processor.load_document_image(str(p)) for p in batch]
-        if share:
-            replies.extend(
-                processor.generate_many(images, [config.prompt] * len(images), config.max_tokens)
-            )
-        else:
-            replies.extend(processor.generate(image, config.prompt, config.max_tokens) for image in images)
+        replies.extend(processor.ask(images, [config.prompt] * len(images), config.max_tokens))
         logger.info("Asked about %d/%d photographs", min(start + step, len(photographs)), len(photographs))
     return replies
 

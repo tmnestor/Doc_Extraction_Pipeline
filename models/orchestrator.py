@@ -1,9 +1,9 @@
-"""DocumentOrchestrator — unified document extraction pipeline.
+"""The document processor: what the stages ask the model, and with which prompt and budget.
 
-Replaces BaseDocumentProcessor + SimpleDocumentProcessor with a single
-class that uses composition (has-a ModelBackend) instead of inheritance.
-
-Satisfies the DocumentProcessor protocol from models/protocol.py.
+It knows the classification prompt, the prompt and completion budget of each document type, and how a
+classification reply becomes a document type. It makes every request through one function, ``ask``,
+which hands the engine call to the backend. The replies of an extraction are kept as written and parsed
+later, by the clean stage.
 """
 
 from __future__ import annotations
@@ -18,29 +18,18 @@ from PIL import Image
 from common import classification
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
-from models.backend import BatchInference, GenerationParams, ModelBackend
+from models.backends.vllm_backend import VllmBackend
 
 if TYPE_CHECKING:
     from common.settings import Settings
 
 
 class DocumentOrchestrator:
-    """Unified document extraction orchestrator.
-
-    Owns all shared logic: detection, classification, prompt resolution,
-    and extraction. The replies are parsed later, by the clean stage.
-
-    The backend (ModelBackend) provides only raw generate() / generate_batch().
-
-    Attributes:
-        model: Underlying model object (delegates to backend).
-        tokenizer: Tokenizer / processor (delegates to backend).
-        batch_size: Current batch size for inference.
-    """
+    """Asks the model about pages, for the stages."""
 
     def __init__(
         self,
-        backend: ModelBackend,
+        backend: VllmBackend,
         *,
         field_list: list[str],
         prompt_config: dict[str, Any],
@@ -88,18 +77,6 @@ class DocumentOrchestrator:
             print(
                 f"DocumentOrchestrator initialized: {self.field_count} fields, model_type={model_type_key}"
             )
-
-    # -- Protocol-required attributes ------------------------------------------
-
-    @property
-    def model(self) -> Any:
-        """Underlying model object (for DocumentProcessor protocol)."""
-        return self._backend.model
-
-    @property
-    def tokenizer(self) -> Any:
-        """Tokenizer / processor (for DocumentProcessor protocol)."""
-        return self._backend.processor
 
     # -- Generation config -----------------------------------------------------
 
@@ -162,98 +139,29 @@ class DocumentOrchestrator:
 
     # -- Bank structure classification -----------------------------------------
 
-    # -- Engine calls ----------------------------------------------------------
+    # -- The engine ------------------------------------------------------------
 
-    def generate(
-        self,
-        image: Image.Image,
-        prompt: str,
-        max_tokens: int = 1024,
-        extra: dict | None = None,
-    ) -> str:
-        """One request to the engine.
-
-        Args:
-            extra: Optional dict passed through to GenerationParams.extra
-        """
-        return self._backend.generate(
-            image, prompt, GenerationParams(max_tokens=max_tokens, extra=extra or {})
-        )
-
-    @property
-    def supports_generate_many(self) -> bool:
-        """Whether the backend can run several generate() calls as one engine call."""
-        return callable(getattr(self._backend, "generate_many", None))
-
-    def generate_many(
+    def ask(
         self,
         images: list[Image.Image],
         prompts: list[str],
-        max_tokens: int = 1024,
-        extra: dict | None = None,
+        max_tokens: int,
+        *,
+        text_first: bool = False,
     ) -> list[str]:
-        """Run several generate() calls as one engine call, replies in input order.
+        """Put a prompt to the model for each image, all in one engine call; replies in the same order.
 
-        The batched counterpart of generate(): the backend builds each request
-        as it would for a single call, and submits them together so the engine
-        can run them concurrently.
+        Every request the pipeline makes goes through here. A failure is not caught: the caller decides
+        whether to try the images again one at a time.
 
         Args:
-            images: One PIL image per request.
-            prompts: One prompt per image, same order and length.
-            max_tokens: Completion budget of every request.
-            extra: Optional dict passed through to GenerationParams.extra.
-
-        Raises:
-            TypeError: If the backend has no generate_many.
+            images: One image a request.
+            prompts: The prompt of each request.
+            max_tokens: The completion budget of every request.
+            text_first: The form receipts, invoices and the SROIE benchmark have been read with. See
+                ``VllmBackend.chat``.
         """
-        if not self.supports_generate_many:
-            raise TypeError(
-                f"What: backend {type(self._backend).__name__} does not implement "
-                f"generate_many, so independent calls cannot share an engine call.\n"
-                f"Where: models/orchestrator.py.\n"
-                f"Expected: a backend with generate_many(images, prompts, params), "
-                f"as models/backends/vllm_backend.py has.\n"
-                f"How to fix: implement generate_many on that backend, or set "
-                f"pipeline.batching.bank_statement to 1 so each statement is its "
-                f"own call."
-            )
-        params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
-        return self._backend.generate_many(images, prompts, params)  # type: ignore[attr-defined]
-
-    def generate_batch(
-        self,
-        images: list[Image.Image],
-        prompts: list[str],
-        max_tokens: int = 1024,
-        extra: dict | None = None,
-    ) -> list[str]:
-        """Run one batched inference over several images.
-
-        A failure is the caller's to handle: the SROIE runner retries a failed
-        batch one image at a time, so only the image that genuinely fails is lost.
-
-        Args:
-            images: One PIL image per request.
-            prompts: One prompt per image, same order and length.
-            max_tokens: Generation budget, shared by every request.
-            extra: Passed through to GenerationParams.extra.
-
-        Returns:
-            Raw response strings, in submission order.
-        """
-        if not isinstance(self._backend, BatchInference):
-            raise TypeError(
-                f"What: backend {type(self._backend).__name__} does not implement "
-                f"generate_batch, so it cannot run batched inference.\n"
-                f"Where: models/orchestrator.py generate_batch().\n"
-                f"Expected: a backend satisfying the BatchInference protocol "
-                f"(models/backend.py).\n"
-                f"How to fix: implement generate_batch on that backend."
-            )
-
-        params = GenerationParams(max_tokens=max_tokens, extra=extra or {})
-        return self._backend.generate_batch(images, prompts, params)
+        return self._backend.chat(images, prompts, max_tokens, text_first=text_first)
 
     def cache_hit_summary(self) -> dict:
         """Proxy the backend's cumulative prefix-cache hit summary."""
@@ -295,7 +203,7 @@ class DocumentOrchestrator:
 
         detection_prompt, detection_key, max_tokens = self._detection_inputs()
         images = [self.load_document_image(p) for p in image_paths]
-        responses = self.generate_many(images, [detection_prompt] * len(images), max_tokens)
+        responses = self.ask(images, [detection_prompt] * len(images), max_tokens)
 
         results = [self._detection_result(r, detection_key) for r in responses]
         if verbose:
@@ -353,13 +261,14 @@ class DocumentOrchestrator:
             statements = [Image.open(path).convert("RGB") for path in image_paths]
             prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
             budget = self.app_config.get_token_budget("extract_bank")
-            return self.generate_many(statements, [prompt] * len(statements), budget)
+            return self.ask(statements, [prompt] * len(statements), budget)
 
         pages = [self.load_document_image(path) for path in image_paths]
         fields = self.document_field_lists.get(
             kind, self.document_field_lists.get("invoice", self.field_list)
         )
         prompt = PromptCatalog().get_prompt(self._model_type_key, kind)
-        return self.generate_batch(pages, [prompt] * len(pages), self._calculate_max_tokens(len(fields)))
+        budget = self._calculate_max_tokens(len(fields))
+        return self.ask(pages, [prompt] * len(pages), budget, text_first=True)
 
     # -- Model info ------------------------------------------------------------

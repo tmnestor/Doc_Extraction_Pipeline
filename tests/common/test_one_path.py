@@ -48,8 +48,6 @@ def statement_reply(name: str) -> str:
 class StandIn:
     """Stands in for the document processor: answers from the file name and notes every call made."""
 
-    supports_generate_many = True
-
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
 

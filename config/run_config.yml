@@ -448,7 +448,7 @@ pipeline:
   # throughput ~3x lower than it needed to be.
   #
   # ONE BATCH HOLDS ONE DOCUMENT TYPE. An engine call carries a single
-  # GenerationParams, so every image in it shares a completion budget, and each
+  # completion budget, so every image in it shares a completion budget, and each
   # type has its own prompt. The classify stage runs first, so the type is known
   # before batching.
   #

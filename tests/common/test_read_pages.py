@@ -17,7 +17,6 @@ from PIL import Image
 
 from common.extraction_batching import plan_extraction_batches, read_batch_sizes
 from common.prompt_catalog import PromptCatalog
-from models.backend import GenerationParams
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
 from stages import extract as extract_stage
@@ -46,21 +45,14 @@ class FakeBackend:
         self.fail_always = fail_always
         self.served = 0
 
-    def _answer(self, form: str, images, prompts, params) -> list[str]:
+    def chat(self, images, prompts, max_tokens, *, text_first=False) -> list[str]:
         if self.fail_always or (self.fail_groups and len(images) > 1):
             raise RuntimeError("no reply")
-        self.calls.append(
-            {"form": form, "prompts": prompts, "max_tokens": params.max_tokens, "n": len(images)}
-        )
+        form = "text first" if text_first else "the model's own"
+        self.calls.append({"form": form, "prompts": prompts, "max_tokens": max_tokens, "n": len(images)})
         replies = [reply(self.served + i + 1) for i in range(len(images))]
         self.served += len(images)
         return replies
-
-    def generate_many(self, images, prompts, params) -> list[str]:
-        return self._answer("many", images, prompts, params)
-
-    def generate_batch(self, images, prompts, params) -> list[str]:
-        return self._answer("batch", images, prompts, params)
 
 
 def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
@@ -113,7 +105,9 @@ def test_statements_are_one_call_with_the_statement_prompt_and_its_fixed_budget(
     replies = orchestrator(backend).read_pages([str(p) for p in pages], "BANK_STATEMENT")
 
     schema_prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
-    assert backend.calls == [{"form": "many", "prompts": [schema_prompt] * 3, "max_tokens": 4096, "n": 3}]
+    assert backend.calls == [
+        {"form": "the model's own", "prompts": [schema_prompt] * 3, "max_tokens": 4096, "n": 3}
+    ]
     assert replies == [reply(1), reply(2), reply(3)]
 
 
@@ -124,7 +118,7 @@ def test_other_types_are_one_call_with_the_prompt_of_their_name_and_a_budget_by_
 
     receipt_prompt = PromptCatalog().get_prompt(MODEL, "receipt")
     assert backend.calls == [
-        {"form": "batch", "prompts": [receipt_prompt] * 3, "max_tokens": 500 + 3 * 50, "n": 3}
+        {"form": "text first", "prompts": [receipt_prompt] * 3, "max_tokens": 500 + 3 * 50, "n": 3}
     ]
     assert len(replies) == 3
 
@@ -175,35 +169,46 @@ def gemma_like_backend(engine: FakeEngine) -> VllmBackend:
     )
 
 
-def test_generate_many_builds_each_request_as_generate_does(monkeypatch):
+@pytest.fixture
+def no_vllm(monkeypatch):
     monkeypatch.setitem(
         __import__("sys").modules,
         "vllm",
         types.SimpleNamespace(SamplingParams=lambda **kwargs: kwargs),
     )
+
+
+def test_a_page_alone_is_sent_as_a_page_in_a_group_is(no_vllm):
     image = Image.new("RGB", (8, 8), "white")
-    params = GenerationParams(max_tokens=77, extra={})
-    single_engine, many_engine = FakeEngine(), FakeEngine()
+    alone, together = FakeEngine(), FakeEngine()
 
-    gemma_like_backend(single_engine).generate(image, "read this", params)
-    texts = gemma_like_backend(many_engine).generate_many(
-        [image, image], ["read this", "read this"], params
-    )
+    gemma_like_backend(alone).chat([image], ["read this"], 77)
+    texts = gemma_like_backend(together).chat([image, image], ["read this", "read this"], 77)
 
-    single, many = single_engine.calls[0], many_engine.calls[0]
+    one, two = alone.calls[0], together.calls[0]
     assert texts == ["reply 0", "reply 1"]
-    assert many["messages"] == [single["messages"], single["messages"]]
-    assert many["messages"][0][0]["content"][0]["type"] == "image_url"  # image before text
-    assert many["chat_template_kwargs"] == single["chat_template_kwargs"] == {"enable_thinking": False}
-    assert many["sampling_params"] == single["sampling_params"] == {"max_tokens": 77, "temperature": 0}
+    assert two["messages"] == [one["messages"][0], one["messages"][0]]
+    assert two["messages"][0][0]["content"][0]["type"] == "image_url"  # image before text
+    assert two["chat_template_kwargs"] == one["chat_template_kwargs"] == {"enable_thinking": False}
+    assert two["sampling_params"] == one["sampling_params"] == {"max_tokens": 77, "temperature": 0}
 
 
-def test_generate_many_refuses_mismatched_lists():
+def test_the_text_first_form_puts_the_text_first_and_passes_no_template_arguments(no_vllm):
+    engine = FakeEngine()
+
+    gemma_like_backend(engine).chat([Image.new("RGB", (8, 8), "white")], ["read this"], 77, text_first=True)
+
+    call = engine.calls[0]
+    assert [part["type"] for part in call["messages"][0][0]["content"]] == ["text", "image_url"]
+    assert "chat_template_kwargs" not in call
+
+
+def test_a_prompt_for_each_image_is_required():
     backend = gemma_like_backend(FakeEngine())
     image = Image.new("RGB", (8, 8), "white")
 
     with pytest.raises(ValueError) as caught:
-        backend.generate_many([image, image], ["only one"], GenerationParams(max_tokens=5, extra={}))
+        backend.chat([image, image], ["only one"], 5)
 
     message = str(caught.value)
     assert (

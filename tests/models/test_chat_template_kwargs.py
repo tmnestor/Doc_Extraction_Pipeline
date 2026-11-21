@@ -1,11 +1,16 @@
-"""enable_thinking=False must reach engine.chat(), or suppression is a no-op.
+"""The chat-template arguments a model is registered with must reach ``LLM.chat``.
 
-Gemma's chat template reasons by default. Unsuppressed, extraction spends its completion budget reasoning
-and STILL returns a parseable-looking response. The failure is silent, which is why it is guarded here
-rather than left to be noticed in a score.
+For Gemma 4 the argument is ``enable_thinking: False``. The model's own chat template treats a request
+without the argument as thinking off too (rendered both ways on 21 November 2026 and found the same), so
+the argument states what the default already does. It is still passed and still guarded: a template that
+thought by default would spend its completion budget reasoning and return a reply that looks parseable,
+and nothing in a score would say why.
 
 ``VllmBackend`` takes its engine as a plain argument, so this runs without a GPU.
 """
+
+import sys
+import types
 
 import pytest
 
@@ -21,19 +26,52 @@ from models.registry import list_models  # noqa: E402
 MODELS = ("gemma4-31b-w4a16-vllm", "gemma4-12b-unified-w4a16-vllm")
 
 
-@pytest.mark.parametrize("model", MODELS)
-def test_the_backend_forwards_thinking_suppression(model):
-    backend = VllmBackend(
-        engine=None,
-        model_type_key=model,
-        chat_template_kwargs={"enable_thinking": False},
+class KeepsCalls:
+    """Stands in for the engine: keeps the arguments of each chat call."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def chat(self, **arguments):
+        self.calls.append(arguments)
+        return [
+            types.SimpleNamespace(
+                outputs=[types.SimpleNamespace(text="reply", token_ids=[1])],
+                prompt_token_ids=[1],
+                num_cached_tokens=0,
+            )
+            for _ in arguments["messages"]
+        ]
+
+
+@pytest.fixture
+def blank(monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setitem(
+        sys.modules, "vllm", types.SimpleNamespace(SamplingParams=lambda **settings: settings)
     )
-    assert backend._chat_kwargs() == {"chat_template_kwargs": {"enable_thinking": False}}
+    return Image.new("RGB", (8, 8), "white")
 
 
-def test_a_backend_given_no_kwargs_sends_none():
-    backend = VllmBackend(engine=None, model_type_key=MODELS[0])
-    assert backend._chat_kwargs() == {}
+@pytest.mark.parametrize("model", MODELS)
+def test_the_backend_forwards_thinking_suppression(model, blank):
+    engine = KeepsCalls()
+    backend = VllmBackend(
+        engine=engine, model_type_key=model, chat_template_kwargs={"enable_thinking": False}
+    )
+
+    backend.chat([blank], ["read this"], 50)
+
+    assert engine.calls[0]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_a_backend_given_no_kwargs_sends_none(blank):
+    engine = KeepsCalls()
+
+    VllmBackend(engine=engine, model_type_key=MODELS[0]).chat([blank], ["read this"], 50)
+
+    assert "chat_template_kwargs" not in engine.calls[0]
 
 
 @pytest.mark.parametrize("model", MODELS)

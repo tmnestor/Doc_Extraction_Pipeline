@@ -1,7 +1,12 @@
-"""vLLM offline engine backend.
+"""The vLLM engine, as the pipeline calls it.
 
-Extracted from document_aware_vllm_processor.py.
-Uses vLLM's chat API with OpenAI-compatible message format.
+Every request the pipeline makes of the model goes through ``VllmBackend.chat``: a list of images with
+a prompt for each, sent to ``LLM.chat`` as one call so that the engine's scheduler can run up to
+``max_num_seqs`` of them at once. A page on its own is a list of one.
+
+vLLM prepares each image with the model's own Hugging Face processor and works out where the image's
+placeholder tokens go in the prompt. The order of the image and the text in a request is the order the
+model's chat template renders them in, so it is part of what the model is sent.
 """
 
 import base64
@@ -12,17 +17,12 @@ from typing import Any
 from PIL import Image
 
 from common import prompt_trace
-from models.backend import GenerationParams, ModelBackend
 
 logger = logging.getLogger(__name__)
 
 
 class VllmBackend:
-    """Backend for vLLM offline engine inference.
-
-    Implements ModelBackend protocol only (vLLM handles batching internally).
-    No OOM recovery needed -- vLLM manages memory via PagedAttention.
-    """
+    """One vLLM engine and the way requests are built for it."""
 
     def __init__(
         self,
@@ -35,81 +35,110 @@ class VllmBackend:
         trace_path: str | None = None,
         debug: bool = False,
     ) -> None:
-        self.model = engine  # vLLM LLM engine
-        self.processor = None  # vLLM handles tokenization internally
+        self.model = engine
         self._model_type_key = model_type_key
-        # Optional chat-template override (path validated at config load); None
-        # uses the model's own template. Forwarded to every engine.chat() call.
+        # A chat template to use in place of the model's own, or None for the model's own.
         self._chat_template = chat_template
-        # Per-model chat-template kwargs (e.g. {"enable_thinking": False} for a
-        # thinking-by-default template). Comes from the model's VllmSpec, so the
-        # backend never has to test model_type strings to decide.
+        # Arguments for the chat template, from the model's registration: for a template that can think,
+        # {"enable_thinking": False}.
         self._chat_template_kwargs = dict(chat_template_kwargs) if chat_template_kwargs else {}
-        # Default content order for generate() — see VllmSpec.default_image_first.
+        # Whether this model's own request form puts the image before the text.
         self._default_image_first = default_image_first
         self._debug = debug
-        # Prefix/encoder cache observability: cumulative prompt tokens served
-        # from cache vs total, summed across generate() calls. None of vLLM's
-        # internals are assumed — if RequestOutput lacks num_cached_tokens on
-        # this build, the summary reports {"available": False}.
+        # How many prompt tokens the engine served from its cache, of how many, over this backend's calls.
         self._cached_prompt_tokens = 0
         self._total_prompt_tokens = 0
         self._cache_stats_available = True
-        self._generate_calls = 0  # count of generate() calls (for ms/call timing)
-        # Raw-prompt trace: when a path is given, every generate() call is
-        # appended to that JSONL via the shared prompt_trace sink (debug only).
+        self._requests = 0
         if trace_path:
             prompt_trace.enable(trace_path)
 
-    def _chat_kwargs(self) -> dict[str, Any]:
-        """Extra kwargs for ``engine.chat()`` — thinking suppression, if configured.
-
-        Empty when the model's spec sets no ``chat_template_kwargs``.
-        """
-        if not self._chat_template_kwargs:
-            return {}
-        return {"chat_template_kwargs": dict(self._chat_template_kwargs)}
-
     @staticmethod
     def _encode_image(image: Image.Image) -> str:
-        """PNG-encode a PIL image as a base64 data URI."""
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        data_uri = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
-        buf.close()
-        return data_uri
+        """A PIL image as a PNG in a base64 data URL."""
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
 
-    def _image_parts(self, image: Image.Image) -> list[dict[str, Any]]:
-        """The content part for one image: the whole image, which the model sizes for itself."""
-        return [{"type": "image_url", "image_url": {"url": self._encode_image(image)}}]
+    def _conversation(self, image: Image.Image, prompt: str, *, image_first: bool) -> list[dict[str, Any]]:
+        """One request as a conversation of one user message."""
+        text = {"type": "text", "text": prompt}
+        picture = {"type": "image_url", "image_url": {"url": self._encode_image(image)}}
+        return [{"role": "user", "content": [picture, text] if image_first else [text, picture]}]
 
-    def _emit_trace(
+    def chat(
         self,
-        prompt: str,
-        text: str,
-        prompt_token_ids: Any,
-        completion_token_ids: Any,
-    ) -> None:
-        """Append this VLM call to the raw-prompt trace (no-op when disabled)."""
-        if not prompt_trace.is_enabled():
-            return
-        prompt_trace.record(
-            prompt=prompt,
-            response=text,
-            model=self._model_type_key,
-            prompt_tokens=len(prompt_token_ids) if prompt_token_ids else None,
-            completion_tokens=len(completion_token_ids) if completion_token_ids else None,
+        images: list[Image.Image],
+        prompts: list[str],
+        max_tokens: int,
+        *,
+        text_first: bool = False,
+    ) -> list[str]:
+        """Send one request for each image, all in one engine call, and give the replies in order.
+
+        Args:
+            images: One image a request.
+            prompts: The prompt of each request, in the same order.
+            max_tokens: The completion budget of every request.
+            text_first: The request form receipts, invoices and the SROIE benchmark have been read
+                with: the text before the image, and no chat-template arguments. False is the model's
+                own form: its own order, with the arguments its registration gives.
+
+        Raises:
+            ValueError: If there is not one prompt for each image.
+        """
+        if len(images) != len(prompts):
+            raise ValueError(
+                f"What: {len(images)} images were given with {len(prompts)} prompts.\n"
+                f"Where: models/backends/vllm_backend.py, VllmBackend.chat.\n"
+                f"Expected: one prompt for each image, in the same order.\n"
+                f"How to fix: build both lists in one loop. Replies are matched to pages by position, so a "
+                f"list that is short would score answers against the wrong pages."
+            )
+        if not images:
+            return []
+        from vllm import SamplingParams
+
+        image_first = False if text_first else self._default_image_first
+        conversations = [
+            self._conversation(image, prompt, image_first=image_first)
+            for image, prompt in zip(images, prompts, strict=True)
+        ]
+        template_arguments: dict[str, Any] = {}
+        if self._chat_template_kwargs and not text_first:
+            template_arguments["chat_template_kwargs"] = dict(self._chat_template_kwargs)
+        outputs = self.model.chat(
+            messages=conversations,
+            sampling_params=SamplingParams(max_tokens=max_tokens, temperature=0),
+            chat_template=self._chat_template,
+            use_tqdm=False,
+            **template_arguments,
         )
 
-    def _record_cache_stats(self, output: Any) -> None:
-        """Accumulate cached vs total prompt tokens from one RequestOutput.
+        replies = []
+        for output, prompt in zip(outputs, prompts, strict=True):
+            self._count_cached_tokens(output)
+            reply = output.outputs[0].text.strip()
+            if prompt_trace.is_enabled():
+                prompt_ids = getattr(output, "prompt_token_ids", None)
+                reply_ids = output.outputs[0].token_ids
+                prompt_trace.record(
+                    prompt=prompt,
+                    response=reply,
+                    model=self._model_type_key,
+                    prompt_tokens=len(prompt_ids) if prompt_ids else None,
+                    completion_tokens=len(reply_ids) if reply_ids else None,
+                )
+            replies.append(reply)
+        return replies
 
-        The summary is only meaningful when both num_cached_tokens and
-        prompt_token_ids are present, so a single missing attribute latches the
-        backend's stats to "unavailable" (vLLM's output shape is uniform within
-        a run, so the first miss implies all subsequent ones miss too).
+    def _count_cached_tokens(self, output: Any) -> None:
+        """Add one reply's cached and total prompt tokens to the running counts.
+
+        A build of vLLM whose replies lack either number gives none for the whole run, so the first
+        reply without them marks the counts as unavailable.
         """
-        self._generate_calls += 1  # count every call, even if cache stats are unavailable
+        self._requests += 1
         cached = getattr(output, "num_cached_tokens", None)
         prompt_ids = getattr(output, "prompt_token_ids", None)
         if cached is None or prompt_ids is None:
@@ -119,233 +148,14 @@ class VllmBackend:
         self._total_prompt_tokens += len(prompt_ids)
 
     def cache_hit_summary(self) -> dict[str, Any]:
-        """Cumulative prefix-cache hit summary across this backend's generates."""
+        """How much of the prompts the engine served from its cache, over this backend's calls."""
         if not self._cache_stats_available:
-            return {"available": False, "calls": self._generate_calls}
+            return {"available": False, "calls": self._requests}
         total = self._total_prompt_tokens
-        ratio = (self._cached_prompt_tokens / total) if total else 0.0
         return {
             "available": True,
-            "calls": self._generate_calls,
+            "calls": self._requests,
             "cached_prompt_tokens": self._cached_prompt_tokens,
             "total_prompt_tokens": total,
-            "hit_ratio": ratio,
+            "hit_ratio": (self._cached_prompt_tokens / total) if total else 0.0,
         }
-
-    def _build_messages(
-        self,
-        image: Image.Image,
-        prompt: str,
-        *,
-        image_first: bool = False,
-    ) -> list[dict[str, Any]]:
-        """Build OpenAI-compatible messages.
-
-        Args:
-            image: PIL image to encode.
-            prompt: Text prompt.
-            image_first: If True, place image before text in the content
-                array.  Extraction tasks use image-first for lower FP
-                rates; classification uses text-first (the default).
-
-        Returns:
-            The messages list.
-        """
-        text_part: dict[str, Any] = {"type": "text", "text": prompt}
-        image_parts = self._image_parts(image)
-        content = [*image_parts, text_part] if image_first else [text_part, *image_parts]
-
-        return [{"role": "user", "content": content}]
-
-    def generate(
-        self,
-        image: Image.Image,
-        prompt: str,
-        params: GenerationParams,
-    ) -> str:
-        """Run inference via vLLM engine.chat()."""
-        from vllm import SamplingParams
-
-        messages = self._build_messages(
-            image,
-            prompt,
-            image_first=params.extra.get("image_first", self._default_image_first),
-        )
-
-        sampling = SamplingParams(
-            max_tokens=params.max_tokens,
-            temperature=0,
-        )
-
-        outputs = self.model.chat(
-            messages=messages,
-            sampling_params=sampling,
-            chat_template=self._chat_template,
-            use_tqdm=False,
-            **self._chat_kwargs(),
-        )
-
-        self._record_cache_stats(outputs[0])
-        text = outputs[0].outputs[0].text.strip()
-        self._emit_trace(
-            prompt, text, getattr(outputs[0], "prompt_token_ids", None), outputs[0].outputs[0].token_ids
-        )
-        # Free vLLM output objects to release shared memory buffer slots.
-        del outputs, messages
-        return text
-
-    def generate_batch(
-        self,
-        images: list[Image.Image],
-        prompts: list[str],
-        params: GenerationParams,
-    ) -> list[str]:
-        """Run one batched engine.chat() over several images.
-
-        Submitting the conversations together is what lets vLLM's scheduler
-        run them concurrently — up to ``max_num_seqs``. Calling generate()
-        in a loop instead keeps exactly one sequence in flight no matter how
-        that limit is set.
-
-        Args:
-            images: One PIL image per request.
-            prompts: One prompt per image, same order and length.
-            params: Generation hyper-parameters, shared by every request.
-
-        Returns:
-            Raw response strings, in submission order.
-
-        Raises:
-            ValueError: If the image and prompt counts differ.
-        """
-        from vllm import SamplingParams
-
-        if len(images) != len(prompts):
-            raise ValueError(
-                f"What: generate_batch got {len(images)} images and {len(prompts)} "
-                f"prompts.\n"
-                f"Where: models/backends/vllm_backend.py.\n"
-                f"Expected: one prompt per image, in the same order.\n"
-                f"How to fix: build both lists from the same iteration. Do NOT "
-                f"zip-truncate — responses are matched to inputs by position, so "
-                f"a length mismatch would score answers against the wrong images."
-            )
-
-        if not images:
-            return []
-
-        conversations = [
-            self._build_messages(
-                image,
-                prompt,
-                image_first=params.extra.get("image_first", False),
-            )
-            for image, prompt in zip(images, prompts, strict=True)
-        ]
-
-        sampling = SamplingParams(max_tokens=params.max_tokens, temperature=0)
-
-        outputs = self.model.chat(
-            messages=conversations,
-            sampling_params=sampling,
-            chat_template=self._chat_template,
-            use_tqdm=False,
-        )
-
-        texts = []
-        for output, prompt in zip(outputs, prompts, strict=True):
-            self._record_cache_stats(output)
-            text = output.outputs[0].text.strip()
-            self._emit_trace(
-                prompt,
-                text,
-                getattr(output, "prompt_token_ids", None),
-                output.outputs[0].token_ids,
-            )
-            texts.append(text)
-
-        # Free vLLM output objects to release shared memory buffer slots.
-        del outputs, conversations
-        return texts
-
-    def generate_many(
-        self,
-        images: list[Image.Image],
-        prompts: list[str],
-        params: GenerationParams,
-    ) -> list[str]:
-        """Run several generate() calls as one engine call.
-
-        Each request is built exactly as generate() builds it: the same content
-        order (the model's own default unless extra["image_first"] says
-        otherwise) and the same chat-template kwargs. Only the submission
-        differs: the conversations go to the engine together, so its scheduler
-        runs up to max_num_seqs of them at once. That makes a batched run
-        the same measurement as an unbatched one, which generate_batch (text
-        before image, no chat-template kwargs) does not promise.
-
-        Args:
-            images: One PIL image per request.
-            prompts: One prompt per image, same order and length.
-            params: Generation hyper-parameters, shared by every request.
-
-        Returns:
-            Raw response strings, in submission order.
-
-        Raises:
-            ValueError: If the image and prompt counts differ.
-        """
-        if len(images) != len(prompts):
-            raise ValueError(
-                f"What: generate_many got {len(images)} images and {len(prompts)} "
-                f"prompts.\n"
-                f"Where: models/backends/vllm_backend.py.\n"
-                f"Expected: one prompt per image, in the same order.\n"
-                f"How to fix: build both lists from the same iteration. Responses "
-                f"are matched to inputs by position, so a length mismatch would "
-                f"score answers against the wrong images."
-            )
-
-        if not images:
-            return []
-
-        conversations = [
-            self._build_messages(
-                image,
-                prompt,
-                image_first=params.extra.get("image_first", self._default_image_first),
-            )
-            for image, prompt in zip(images, prompts, strict=True)
-        ]
-
-        from vllm import SamplingParams
-
-        sampling = SamplingParams(max_tokens=params.max_tokens, temperature=0)
-
-        outputs = self.model.chat(
-            messages=conversations,
-            sampling_params=sampling,
-            chat_template=self._chat_template,
-            use_tqdm=False,
-            **self._chat_kwargs(),
-        )
-
-        texts = []
-        for output, prompt in zip(outputs, prompts, strict=True):
-            self._record_cache_stats(output)
-            text = output.outputs[0].text.strip()
-            self._emit_trace(
-                prompt,
-                text,
-                getattr(output, "prompt_token_ids", None),
-                output.outputs[0].token_ids,
-            )
-            texts.append(text)
-
-        # Free vLLM output objects to release shared memory buffer slots.
-        del outputs, conversations
-        return texts
-
-
-# Verify protocol compliance at import time
-_dummy_check: type[ModelBackend] = VllmBackend  # type: ignore[assignment]

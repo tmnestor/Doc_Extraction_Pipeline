@@ -39,10 +39,10 @@ class FakeBackend:
         self.fail_shared = fail_shared
         self.served = 0
 
-    def generate_many(self, images, prompts, params) -> list[str]:
+    def chat(self, images, prompts, max_tokens, *, text_first=False) -> list[str]:
         if self.fail_shared and len(images) > 1:
             raise RuntimeError("engine refused the batch")
-        self.many_calls.append({"prompts": prompts, "max_tokens": params.max_tokens, "n": len(images)})
+        self.many_calls.append({"prompts": prompts, "max_tokens": max_tokens, "n": len(images)})
         replies = [REPLIES[(self.served + i) % len(REPLIES)] for i in range(len(images))]
         self.served += len(images)
         return replies
@@ -158,7 +158,7 @@ def test_a_failed_shared_call_is_retried_one_page_at_a_time(pages, caplog):
 
 def test_a_page_that_fails_alone_is_given_the_fallback_type_and_carries_the_error(pages):
     class Refuses:
-        def generate_many(self, images, prompts, params) -> list[str]:
+        def chat(self, images, prompts, max_tokens, *, text_first=False) -> list[str]:
             raise RuntimeError("engine refused the page")
 
     result = orchestrator(Refuses()).detect_and_classify_document(pages[0])  # type: ignore[arg-type]

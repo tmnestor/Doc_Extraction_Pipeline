@@ -7,7 +7,7 @@ one sequence in flight however ``max_num_seqs`` is set.
 Two constraints shape the grouping, and both come from how the engine call
 works rather than from taste:
 
-* **One batch, one document type.** A call carries ONE GenerationParams, so
+* **One batch, one document type.** A call carries one completion budget, so
   every image in it shares a completion budget, and each type has its own
   prompt. classify runs first, so the type is already known here.
 * **Consecutive runs only.** Classifications arrive sorted by

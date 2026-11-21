@@ -36,7 +36,6 @@ def run(
     ground_truth_csv: Path,
     output_dir: Path,
     *,
-    enable_math_enhancement: bool = False,
     inference_seconds: float | None = None,
 ) -> Path:
     """Evaluate cleaned extractions against ground truth.
@@ -50,7 +49,6 @@ def run(
         cleaned_extractions_path: Path to cleaned_extractions.jsonl from Stage 3.
         ground_truth_csv: Path to ground truth CSV.
         output_dir: Directory for evaluation output files.
-        enable_math_enhancement: Apply bank statement balance calculations.
         inference_seconds: GPU inference wall-clock seconds (extract phase
             elapsed time, set by entrypoint.sh). Used for throughput in the
             Execution Summary. Falls back to sum of per-image processing_time
@@ -78,7 +76,6 @@ def run(
     evaluator = ExtractionEvaluator(
         ground_truth_csv=str(ground_truth_csv),
         field_definitions=field_definitions,
-        enable_math_enhancement=enable_math_enhancement,
     )
 
     if not evaluator.has_ground_truth:
@@ -250,11 +247,6 @@ def main(
         ..., "--ground-truth", "-g", help="Path to ground truth CSV or JSONL"
     ),
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory for evaluation output"),
-    math_enhancement: bool = typer.Option(
-        False,
-        "--math-enhancement/--no-math-enhancement",
-        help="Enable bank balance calculations",
-    ),
     inference_seconds: float | None = typer.Option(
         None,
         "--inference-seconds",
@@ -274,7 +266,6 @@ def main(
         input_path,
         ground_truth,
         output_dir,
-        enable_math_enhancement=math_enhancement,
         inference_seconds=inference_seconds,
     )
 

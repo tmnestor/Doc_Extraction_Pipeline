@@ -6,15 +6,13 @@ bank math enhancement, debit filtering, F1 scoring, and metric aggregation.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from .batch_types import ExtractionOutput
 from .evaluation_metrics import (
     _parse_single_date,
-    calculate_correlation_aware_f1,
-    calculate_field_accuracy_with_method,
+    calculate_field_accuracy_f1,
     load_ground_truth,
 )
 from .simple_model_evaluator import SimpleModelEvaluator
@@ -61,11 +59,6 @@ def _drop_credit_rows(
     unchanged, while one that does gets them removed. Filtering only the ground
     truth would re-introduce the offset for any model that does emit
     placeholders.
-
-    This is deliberately separate from :meth:`_filter_debit_transactions`, which
-    solves the same problem from balance arithmetic and needs ``ACCOUNT_BALANCE``
-    / ``TRANSACTION_AMOUNTS_RECEIVED`` — fields the current 5-field bank prompt
-    does not request, so it can never run on this corpus.
 
     Returns a shallow copy with credit rows removed, or the original dict
     unchanged when filtering is not applicable or would not be safe.
@@ -199,8 +192,6 @@ class ExtractionEvaluator:
         ground_truth_csv: str | None,
         field_definitions: dict[str, list[str]],
         *,
-        enable_math_enhancement: bool = False,
-        evaluation_method: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Load ground truth once; configure evaluation strategy.
@@ -211,14 +202,9 @@ class ExtractionEvaluator:
             field_definitions: Map of doc_type (lowercase) -> field names
                 for evaluation filtering. Ignored in JSONL mode (GT record
                 keys are used instead).
-            enable_math_enhancement: Apply bank statement balance calculations.
-            evaluation_method: "order_aware_f1" or "correlation" / "correlation_aware_f1".
-                None = read from EVALUATION_METHOD env var, default "order_aware_f1".
             verbose: Debug logging.
         """
         self.field_definitions = field_definitions
-        self.enable_math_enhancement = enable_math_enhancement
-        self.evaluation_method = evaluation_method or os.environ.get("EVALUATION_METHOD", "order_aware_f1")
         self._verbose = verbose
         self._model_evaluator = SimpleModelEvaluator()
 
@@ -304,39 +290,10 @@ class ExtractionEvaluator:
     ) -> dict[str, Any]:
         """Evaluate extraction results against ground truth.
 
-        Handles mathematical enhancement for bank statements, field filtering,
-        F1 scoring (standard or correlation), and metric aggregation.
+        Handles field filtering, F1 scoring and metric aggregation.
         """
-        # Apply mathematical enhancement for bank statements.
-        # The calculator is idempotent: when BalanceCorrector already corrected
-        # during extraction, amounts and balance deltas already agree so
-        # the calculator makes zero corrections.
-        mathematical_analysis = None
-        if document_type.upper() == "BANK_STATEMENT" and self.enable_math_enhancement:
-            from .bank_statement_calculator import enhance_bank_statement_extraction
-
-            logger.debug("Applying mathematical enhancement for bank statement")
-
-            enhanced_result = enhance_bank_statement_extraction(extracted_data, verbose=self._verbose)
-
-            extracted_data = {k: v for k, v in enhanced_result.items() if k != "_mathematical_analysis"}
-
-            mathematical_analysis = enhanced_result.get("_mathematical_analysis", {})
-
-            logger.debug("Filtering to debit-only transactions for evaluation")
-            extracted_data = self._filter_debit_transactions(extracted_data)
-
         found_fields = [k for k, v in extracted_data.items() if v != "NOT_FOUND"]
         logger.debug("Extracted %d fields from %s", len(found_fields), image_name)
-
-        if document_type.upper() == "BANK_STATEMENT" and mathematical_analysis is not None:
-            if mathematical_analysis.get("calculation_success"):
-                logger.debug(
-                    "Mathematical analysis: %d transactions calculated",
-                    mathematical_analysis.get("transaction_count", 0),
-                )
-            else:
-                logger.debug("Mathematical analysis failed")
 
         # Filter ground truth to document-specific fields for accurate evaluation.
         # JSONL mode: each GT record carries only its type's fields -- use them
@@ -387,59 +344,39 @@ class ExtractionEvaluator:
         total_precision = 0.0
         total_recall = 0.0
 
-        if self.evaluation_method in ["correlation", "correlation_aware_f1"]:
-            correlation_result = calculate_correlation_aware_f1(
-                extracted_data,
-                filtered_ground_truth,
-                document_type,
-                debug=False,
-            )
+        for field in filtered_ground_truth:
+            extracted_val = extracted_data.get(field, "NOT_FOUND")
+            ground_val = filtered_ground_truth.get(field, "NOT_FOUND")
 
-            for field in filtered_ground_truth:
-                field_scores[field] = correlation_result
-                total_f1_score += correlation_result["f1_score"]
-                total_precision += correlation_result["precision"]
-                total_recall += correlation_result["recall"]
-        else:
-            for field in filtered_ground_truth:
-                extracted_val = extracted_data.get(field, "NOT_FOUND")
-                ground_val = filtered_ground_truth.get(field, "NOT_FOUND")
-
-                is_debug = field == "IS_GST_INCLUDED" and self._verbose
-                if is_debug:
-                    logger.debug("BEFORE EVALUATION:")
-                    logger.debug(
-                        "  extracted_val = '%s' (type: %s)",
-                        extracted_val,
-                        type(extracted_val).__name__,
-                    )
-                    logger.debug(
-                        "  ground_val = '%s' (type: %s)",
-                        ground_val,
-                        type(ground_val).__name__,
-                    )
-                    logger.debug("  Are they equal? %s", extracted_val == ground_val)
-
-                f1_metrics = calculate_field_accuracy_with_method(
+            is_debug = field == "IS_GST_INCLUDED" and self._verbose
+            if is_debug:
+                logger.debug("BEFORE EVALUATION:")
+                logger.debug(
+                    "  extracted_val = '%s' (type: %s)",
                     extracted_val,
+                    type(extracted_val).__name__,
+                )
+                logger.debug(
+                    "  ground_val = '%s' (type: %s)",
                     ground_val,
+                    type(ground_val).__name__,
+                )
+                logger.debug("  Are they equal? %s", extracted_val == ground_val)
+
+            f1_metrics = calculate_field_accuracy_f1(extracted_val, ground_val, field, is_debug)
+
+            if is_debug:
+                logger.debug("AFTER EVALUATION (%s):", field)
+                logger.debug(
+                    "  Field '%s' f1_score = %s",
                     field,
-                    method=self.evaluation_method,
-                    debug=is_debug,
+                    f1_metrics["f1_score"],
                 )
 
-                if is_debug:
-                    logger.debug("AFTER EVALUATION (%s):", field)
-                    logger.debug(
-                        "  Field '%s' f1_score = %s",
-                        field,
-                        f1_metrics["f1_score"],
-                    )
-
-                field_scores[field] = f1_metrics
-                total_f1_score += f1_metrics["f1_score"]
-                total_precision += f1_metrics["precision"]
-                total_recall += f1_metrics["recall"]
+            field_scores[field] = f1_metrics
+            total_f1_score += f1_metrics["f1_score"]
+            total_precision += f1_metrics["precision"]
+            total_recall += f1_metrics["recall"]
 
         # Calculate overall metrics from F1 scores
         num_fields = len(field_scores)
@@ -497,142 +434,3 @@ class ExtractionEvaluator:
         logger.debug("has_field_scores=True, field_count=%d", len(field_scores))
 
         return evaluation
-
-    def _filter_debit_transactions(self, extracted_data: dict) -> dict:
-        """Filter bank statement data to keep only debit transactions.
-
-        Removes credit transactions from all transaction arrays to match ground truth
-        which only contains debit transactions.
-        """
-        if extracted_data.get("DOCUMENT_TYPE") != "BANK_STATEMENT":
-            return extracted_data
-
-        try:
-            import pandas as pd
-
-            # Get transaction arrays
-            descriptions = extracted_data.get("LINE_ITEM_DESCRIPTIONS", "")
-            dates = extracted_data.get("TRANSACTION_DATES", "")
-            paid = extracted_data.get("TRANSACTION_AMOUNTS_PAID", "")
-            received = extracted_data.get("TRANSACTION_AMOUNTS_RECEIVED", "")
-            balances = extracted_data.get("ACCOUNT_BALANCE", "")
-
-            # Check for missing required fields
-            if any(field == "" or field == "NOT_FOUND" for field in [descriptions, dates, paid]):
-                logger.warning("Missing transaction data - skipping debit filtering")
-                return extracted_data
-
-            # Check if balances are all NOT_FOUND
-            balance_values = [b.strip() for b in balances.split(" | ")] if balances else []
-            all_balances_missing = all(b == "NOT_FOUND" or b == "" for b in balance_values)
-
-            if balances == "" or balances == "NOT_FOUND" or all_balances_missing:
-                logger.warning("No balance data available - skipping debit filtering")
-                return extracted_data
-
-            # Split arrays
-            desc_list = descriptions.split(" | ")
-            date_list = dates.split(" | ")
-            paid_list = paid.split(" | ")
-            balance_list = balances.split(" | ")
-            received_list = received.split(" | ") if received and received != "NOT_FOUND" else None
-
-            logger.debug(
-                "Array lengths: desc=%d, date=%d, paid=%d, balance=%d",
-                len(desc_list),
-                len(date_list),
-                len(paid_list),
-                len(balance_list),
-            )
-            if received_list:
-                logger.debug("received=%d", len(received_list))
-
-            # Verify arrays have same length
-            lengths = [
-                len(desc_list),
-                len(date_list),
-                len(paid_list),
-                len(balance_list),
-            ]
-            if len(set(lengths)) > 1:
-                # Same reasoning as the except-clause below: returning the
-                # unfiltered extraction scores it against a ground truth that
-                # HAS been filtered, so every row sits offset and the
-                # order-aware scorer marks all of them wrong -- silently.
-                msg = (
-                    f"What:  the transaction register columns have mismatched "
-                    f"lengths {dict(zip(('descriptions', 'dates', 'paid', 'balance'), lengths))}, "
-                    f"so debit filtering cannot align them.\n"
-                    f"  Where: common/extraction_evaluator.py -> "
-                    f"_filter_debit_transactions, on the TRANSACTION_* / "
-                    f"ACCOUNT_BALANCE fields of the document being scored.\n"
-                    f"  Expected: every present register column has the SAME "
-                    f"number of pipe-delimited members, e.g.\n"
-                    f"    TRANSACTION_DATES:        '02/03/2023 | 05/03/2023'\n"
-                    f"    TRANSACTION_AMOUNTS_PAID: '13.60 | NOT_FOUND'\n"
-                    f"  How to fix: correct the mismatched column in the "
-                    f"extraction or the ground truth. Scoring unfiltered data "
-                    f"against filtered ground truth would misalign every row, so "
-                    f"this raises rather than skipping the filter."
-                )
-                raise ValueError(msg)
-
-            # Create DataFrame from transaction data
-            transactions_df = pd.DataFrame(
-                {
-                    "description": desc_list,
-                    "date": date_list,
-                    "paid": paid_list,
-                    "received": received_list,
-                    "balance": balance_list,
-                }
-            )
-
-            logger.debug("Pre-filter: %d transactions", len(transactions_df))
-
-            # Filter to keep only debit transactions (where paid != 'NOT_FOUND')
-            debit_df = transactions_df[transactions_df["paid"] != "NOT_FOUND"].copy()
-
-            logger.debug(
-                "Debit transactions found: %d/%d",
-                len(debit_df),
-                len(transactions_df),
-            )
-
-            # Convert back to pipe-separated strings
-            filtered_data = extracted_data.copy()
-            filtered_data["LINE_ITEM_DESCRIPTIONS"] = " | ".join(debit_df["description"].tolist())
-            filtered_data["TRANSACTION_DATES"] = " | ".join(debit_df["date"].tolist())
-            filtered_data["TRANSACTION_AMOUNTS_PAID"] = " | ".join(debit_df["paid"].tolist())
-            filtered_data["TRANSACTION_AMOUNTS_RECEIVED"] = "NOT_FOUND"  # No credits in debit-only
-            filtered_data["ACCOUNT_BALANCE"] = " | ".join(debit_df["balance"].tolist())
-
-            logger.debug("Pandas filtered to %d debit transactions", len(debit_df))
-
-            return filtered_data
-
-        except Exception as exc:
-            # Returning the UNFILTERED extraction here scores it against a
-            # ground truth that HAS been filtered -- the two lists sit offset by
-            # the credit-row count and the order-aware scorer marks every
-            # position wrong. That is exactly the misalignment that reported
-            # bank F1 0.316 instead of 0.86, and it did so silently, so there
-            # was nothing to notice. A wrong number is worse than no number.
-            msg = (
-                f"What:  debit-transaction filtering failed for a bank statement "
-                f"({type(exc).__name__}: {exc}), so the extraction cannot be "
-                f"aligned with the ground truth.\n"
-                f"  Where: common/extraction_evaluator.py -> "
-                f"_filter_debit_transactions, on the TRANSACTION_* register of "
-                f"the document being scored.\n"
-                f"  Expected: every present TRANSACTION_* / ACCOUNT_BALANCE list "
-                f"is an index-aligned column with the SAME number of "
-                f"pipe-delimited members, e.g.\n"
-                f"    TRANSACTION_DATES:        '02/03/2023 | 05/03/2023'\n"
-                f"    TRANSACTION_AMOUNTS_PAID: '13.60 | NOT_FOUND'\n"
-                f"  How to fix: correct the mismatched register in the extraction "
-                f"or the ground truth. Scoring unfiltered data against filtered "
-                f"ground truth would silently misalign every row, so this raises "
-                f"rather than falling back."
-            )
-            raise ValueError(msg) from exc

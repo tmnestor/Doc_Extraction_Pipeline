@@ -188,7 +188,7 @@ def test_a_page_alone_is_sent_as_a_page_in_a_group_is(no_vllm):
     one, two = alone.calls[0], together.calls[0]
     assert texts == ["reply 0", "reply 1"]
     assert two["messages"] == [one["messages"][0], one["messages"][0]]
-    assert two["messages"][0][0]["content"][0]["type"] == "image_url"  # image before text
+    assert two["messages"][0][0]["content"][0]["type"] == "image_pil"  # image before text
     assert two["chat_template_kwargs"] == one["chat_template_kwargs"] == {"enable_thinking": False}
     assert two["sampling_params"] == one["sampling_params"] == {"max_tokens": 77, "temperature": 0}
 
@@ -199,7 +199,7 @@ def test_the_text_first_form_puts_the_text_first_and_passes_no_template_argument
     gemma_like_backend(engine).chat([Image.new("RGB", (8, 8), "white")], ["read this"], 77, text_first=True)
 
     call = engine.calls[0]
-    assert [part["type"] for part in call["messages"][0][0]["content"]] == ["text", "image_url"]
+    assert [part["type"] for part in call["messages"][0][0]["content"]] == ["text", "image_pil"]
     assert "chat_template_kwargs" not in call
 
 
@@ -294,3 +294,13 @@ def test_the_shipped_bank_batch_size_is_stated_and_explained():
     assert sizes["bank_statement"] >= 1
     assert "it is NOT in effect today" not in text
     assert "one independent" in text.split("batching:")[1].split("processing:")[0]
+
+
+def test_an_image_with_transparency_is_put_on_white_and_an_rgb_image_is_left_as_it_is():
+    plain = Image.new("RGB", (4, 4), (10, 20, 30))
+    clear = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
+    grey = Image.new("L", (4, 4), 128)
+
+    assert VllmBackend._as_rgb(plain) is plain
+    assert VllmBackend._as_rgb(clear).getpixel((0, 0)) == (255, 255, 255)
+    assert VllmBackend._as_rgb(grey).mode == "RGB"

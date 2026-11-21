@@ -258,7 +258,7 @@ class DocumentOrchestrator:
             return []
         kind = document_type.lower()
         if kind == "bank_statement":
-            statements = [Image.open(path).convert("RGB") for path in image_paths]
+            statements = [self.load_document_image(path) for path in image_paths]
             prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
             budget = self.app_config.get_token_budget("extract_bank")
             return self.ask(statements, [prompt] * len(statements), budget)

@@ -13,8 +13,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_bank_statement.png"
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
           ],
           [
             "user",
@@ -25,8 +25,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_receipt.png"
+            "image_pil",
+            "PAGE001_receipt.png RGB"
           ],
           [
             "user",
@@ -37,8 +37,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_invoice.png"
+            "image_pil",
+            "PAGE002_invoice.png RGB"
           ],
           [
             "user",
@@ -49,8 +49,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_bank_statement.png"
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
           ],
           [
             "user",
@@ -61,8 +61,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_receipt.png"
+            "image_pil",
+            "PAGE003_receipt.png RGB"
           ],
           [
             "user",
@@ -73,8 +73,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_invoice.png"
+            "image_pil",
+            "PAGE004_invoice.png RGB"
           ],
           [
             "user",
@@ -85,8 +85,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_bank_statement.png"
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
           ],
           [
             "user",
@@ -97,8 +97,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_receipt.png"
+            "image_pil",
+            "PAGE005_receipt.png RGB"
           ],
           [
             "user",
@@ -109,8 +109,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE006_invoice.png"
+            "image_pil",
+            "PAGE006_invoice.png RGB"
           ],
           [
             "user",
@@ -121,8 +121,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE007_bank_statement.png"
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
           ],
           [
             "user",
@@ -133,8 +133,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE007_receipt.png"
+            "image_pil",
+            "PAGE007_receipt.png RGB"
           ],
           [
             "user",
@@ -145,8 +145,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE008_invoice.png"
+            "image_pil",
+            "PAGE008_invoice.png RGB"
           ],
           [
             "user",
@@ -157,8 +157,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE009_bank_statement.png"
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
           ],
           [
             "user",
@@ -169,8 +169,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE009_receipt.png"
+            "image_pil",
+            "PAGE009_receipt.png RGB"
           ],
           [
             "user",
@@ -181,8 +181,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE010_invoice.png"
+            "image_pil",
+            "PAGE010_invoice.png RGB"
           ],
           [
             "user",
@@ -193,8 +193,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE011_bank_statement.png"
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
           ],
           [
             "user",
@@ -205,8 +205,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE011_receipt.png"
+            "image_pil",
+            "PAGE011_receipt.png RGB"
           ],
           [
             "user",
@@ -217,8 +217,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_invoice.png"
+            "image_pil",
+            "PAGE012_invoice.png RGB"
           ],
           [
             "user",
@@ -229,8 +229,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_bank_statement.png"
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
           ],
           [
             "user",
@@ -241,8 +241,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_receipt.png"
+            "image_pil",
+            "PAGE013_receipt.png RGB"
           ],
           [
             "user",
@@ -253,8 +253,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_invoice.png"
+            "image_pil",
+            "PAGE014_invoice.png RGB"
           ],
           [
             "user",
@@ -265,8 +265,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_bank_statement.png"
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
           ],
           [
             "user",
@@ -277,8 +277,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_receipt.png"
+            "image_pil",
+            "PAGE015_receipt.png RGB"
           ],
           [
             "user",
@@ -289,8 +289,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_invoice.png"
+            "image_pil",
+            "PAGE016_invoice.png RGB"
           ],
           [
             "user",
@@ -301,8 +301,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE017_bank_statement.png"
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
           ],
           [
             "user",
@@ -313,8 +313,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE017_receipt.png"
+            "image_pil",
+            "PAGE017_receipt.png RGB"
           ],
           [
             "user",
@@ -325,8 +325,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE018_invoice.png"
+            "image_pil",
+            "PAGE018_invoice.png RGB"
           ],
           [
             "user",
@@ -337,8 +337,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE019_bank_statement.png"
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
           ],
           [
             "user",
@@ -349,8 +349,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE019_receipt.png"
+            "image_pil",
+            "PAGE019_receipt.png RGB"
           ],
           [
             "user",
@@ -361,8 +361,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE020_invoice.png"
+            "image_pil",
+            "PAGE020_invoice.png RGB"
           ],
           [
             "user",
@@ -373,8 +373,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE021_bank_statement.png"
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
           ],
           [
             "user",
@@ -385,8 +385,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE021_receipt.png"
+            "image_pil",
+            "PAGE021_receipt.png RGB"
           ],
           [
             "user",
@@ -397,8 +397,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_invoice.png"
+            "image_pil",
+            "PAGE022_invoice.png RGB"
           ],
           [
             "user",
@@ -409,8 +409,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_bank_statement.png"
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
           ],
           [
             "user",
@@ -421,8 +421,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_receipt.png"
+            "image_pil",
+            "PAGE023_receipt.png RGB"
           ],
           [
             "user",
@@ -433,8 +433,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_invoice.png"
+            "image_pil",
+            "PAGE024_invoice.png RGB"
           ],
           [
             "user",
@@ -445,8 +445,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_bank_statement.png"
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
           ],
           [
             "user",
@@ -457,8 +457,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_receipt.png"
+            "image_pil",
+            "PAGE025_receipt.png RGB"
           ],
           [
             "user",
@@ -469,8 +469,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_invoice.png"
+            "image_pil",
+            "PAGE026_invoice.png RGB"
           ],
           [
             "user",
@@ -481,8 +481,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_bank_statement.png"
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
           ],
           [
             "user",
@@ -493,8 +493,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_receipt.png"
+            "image_pil",
+            "PAGE027_receipt.png RGB"
           ],
           [
             "user",
@@ -505,8 +505,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE028_invoice.png"
+            "image_pil",
+            "PAGE028_invoice.png RGB"
           ],
           [
             "user",
@@ -517,8 +517,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE029_bank_statement.png"
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
           ],
           [
             "user",
@@ -529,8 +529,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE029_receipt.png"
+            "image_pil",
+            "PAGE029_receipt.png RGB"
           ],
           [
             "user",
@@ -541,8 +541,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE030_invoice.png"
+            "image_pil",
+            "PAGE030_invoice.png RGB"
           ],
           [
             "user",
@@ -553,8 +553,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE031_bank_statement.png"
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
           ],
           [
             "user",
@@ -565,8 +565,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE031_receipt.png"
+            "image_pil",
+            "PAGE031_receipt.png RGB"
           ],
           [
             "user",
@@ -577,8 +577,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE032_invoice.png"
+            "image_pil",
+            "PAGE032_invoice.png RGB"
           ],
           [
             "user",
@@ -589,8 +589,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_bank_statement.png"
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
           ],
           [
             "user",
@@ -601,8 +601,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_receipt.png"
+            "image_pil",
+            "PAGE033_receipt.png RGB"
           ],
           [
             "user",
@@ -613,8 +613,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_invoice.png"
+            "image_pil",
+            "PAGE034_invoice.png RGB"
           ],
           [
             "user",
@@ -625,8 +625,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_bank_statement.png"
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
           ],
           [
             "user",
@@ -637,8 +637,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_receipt.png"
+            "image_pil",
+            "PAGE035_receipt.png RGB"
           ],
           [
             "user",
@@ -649,8 +649,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_invoice.png"
+            "image_pil",
+            "PAGE036_invoice.png RGB"
           ],
           [
             "user",
@@ -661,8 +661,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_bank_statement.png"
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
           ],
           [
             "user",
@@ -673,8 +673,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_receipt.png"
+            "image_pil",
+            "PAGE037_receipt.png RGB"
           ],
           [
             "user",
@@ -685,8 +685,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE038_invoice.png"
+            "image_pil",
+            "PAGE038_invoice.png RGB"
           ],
           [
             "user",
@@ -697,8 +697,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE039_bank_statement.png"
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
           ],
           [
             "user",
@@ -709,8 +709,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE039_receipt.png"
+            "image_pil",
+            "PAGE039_receipt.png RGB"
           ],
           [
             "user",
@@ -721,8 +721,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE040_invoice.png"
+            "image_pil",
+            "PAGE040_invoice.png RGB"
           ],
           [
             "user",
@@ -733,8 +733,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE041_bank_statement.png"
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
           ],
           [
             "user",
@@ -745,8 +745,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE041_receipt.png"
+            "image_pil",
+            "PAGE041_receipt.png RGB"
           ],
           [
             "user",
@@ -757,8 +757,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE042_invoice.png"
+            "image_pil",
+            "PAGE042_invoice.png RGB"
           ],
           [
             "user",
@@ -769,8 +769,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE043_bank_statement.png"
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
           ],
           [
             "user",
@@ -798,8 +798,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE043_receipt.png"
+            "image_pil",
+            "PAGE043_receipt.png RGB"
           ],
           [
             "user",
@@ -810,8 +810,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_invoice.png"
+            "image_pil",
+            "PAGE044_invoice.png RGB"
           ],
           [
             "user",
@@ -822,8 +822,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_bank_statement.png"
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
           ],
           [
             "user",
@@ -834,8 +834,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_receipt.png"
+            "image_pil",
+            "PAGE045_receipt.png RGB"
           ],
           [
             "user",
@@ -846,8 +846,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_invoice.png"
+            "image_pil",
+            "PAGE046_invoice.png RGB"
           ],
           [
             "user",
@@ -858,8 +858,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_bank_statement.png"
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
           ],
           [
             "user",
@@ -870,8 +870,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_receipt.png"
+            "image_pil",
+            "PAGE047_receipt.png RGB"
           ],
           [
             "user",
@@ -882,8 +882,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_invoice.png"
+            "image_pil",
+            "PAGE048_invoice.png RGB"
           ],
           [
             "user",
@@ -894,8 +894,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_bank_statement.png"
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
           ],
           [
             "user",
@@ -906,8 +906,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_receipt.png"
+            "image_pil",
+            "PAGE049_receipt.png RGB"
           ],
           [
             "user",
@@ -918,8 +918,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_invoice.png"
+            "image_pil",
+            "PAGE050_invoice.png RGB"
           ],
           [
             "user",
@@ -930,8 +930,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_bank_statement.png"
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
           ],
           [
             "user",
@@ -942,8 +942,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_receipt.png"
+            "image_pil",
+            "PAGE051_receipt.png RGB"
           ],
           [
             "user",
@@ -954,8 +954,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_invoice.png"
+            "image_pil",
+            "PAGE052_invoice.png RGB"
           ],
           [
             "user",
@@ -966,8 +966,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_bank_statement.png"
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
           ],
           [
             "user",
@@ -978,8 +978,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_receipt.png"
+            "image_pil",
+            "PAGE053_receipt.png RGB"
           ],
           [
             "user",
@@ -990,8 +990,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_invoice.png"
+            "image_pil",
+            "PAGE054_invoice.png RGB"
           ],
           [
             "user",
@@ -1002,8 +1002,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_bank_statement.png"
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1014,8 +1014,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_receipt.png"
+            "image_pil",
+            "PAGE055_receipt.png RGB"
           ],
           [
             "user",
@@ -1043,8 +1043,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_invoice.png"
+            "image_pil",
+            "PAGE001_invoice.png RGB"
           ],
           [
             "user",
@@ -1055,8 +1055,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_bank_statement.png"
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1067,8 +1067,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_receipt.png"
+            "image_pil",
+            "PAGE002_receipt.png RGB"
           ],
           [
             "user",
@@ -1079,8 +1079,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_invoice.png"
+            "image_pil",
+            "PAGE003_invoice.png RGB"
           ],
           [
             "user",
@@ -1091,8 +1091,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_bank_statement.png"
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1103,8 +1103,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_receipt.png"
+            "image_pil",
+            "PAGE004_receipt.png RGB"
           ],
           [
             "user",
@@ -1115,8 +1115,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_invoice.png"
+            "image_pil",
+            "PAGE005_invoice.png RGB"
           ],
           [
             "user",
@@ -1127,8 +1127,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE006_bank_statement.png"
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1139,8 +1139,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE006_receipt.png"
+            "image_pil",
+            "PAGE006_receipt.png RGB"
           ],
           [
             "user",
@@ -1151,8 +1151,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE007_invoice.png"
+            "image_pil",
+            "PAGE007_invoice.png RGB"
           ],
           [
             "user",
@@ -1163,8 +1163,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE008_bank_statement.png"
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1175,8 +1175,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE008_receipt.png"
+            "image_pil",
+            "PAGE008_receipt.png RGB"
           ],
           [
             "user",
@@ -1187,8 +1187,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE009_invoice.png"
+            "image_pil",
+            "PAGE009_invoice.png RGB"
           ],
           [
             "user",
@@ -1199,8 +1199,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE010_bank_statement.png"
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1211,8 +1211,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE010_receipt.png"
+            "image_pil",
+            "PAGE010_receipt.png RGB"
           ],
           [
             "user",
@@ -1223,8 +1223,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE011_invoice.png"
+            "image_pil",
+            "PAGE011_invoice.png RGB"
           ],
           [
             "user",
@@ -1235,8 +1235,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_bank_statement.png"
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1247,8 +1247,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_receipt.png"
+            "image_pil",
+            "PAGE012_receipt.png RGB"
           ],
           [
             "user",
@@ -1259,8 +1259,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_invoice.png"
+            "image_pil",
+            "PAGE013_invoice.png RGB"
           ],
           [
             "user",
@@ -1271,8 +1271,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_bank_statement.png"
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1283,8 +1283,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_receipt.png"
+            "image_pil",
+            "PAGE014_receipt.png RGB"
           ],
           [
             "user",
@@ -1295,8 +1295,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_invoice.png"
+            "image_pil",
+            "PAGE015_invoice.png RGB"
           ],
           [
             "user",
@@ -1307,8 +1307,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_bank_statement.png"
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1319,8 +1319,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_receipt.png"
+            "image_pil",
+            "PAGE016_receipt.png RGB"
           ],
           [
             "user",
@@ -1331,8 +1331,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE017_invoice.png"
+            "image_pil",
+            "PAGE017_invoice.png RGB"
           ],
           [
             "user",
@@ -1343,8 +1343,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE018_bank_statement.png"
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1355,8 +1355,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE018_receipt.png"
+            "image_pil",
+            "PAGE018_receipt.png RGB"
           ],
           [
             "user",
@@ -1367,8 +1367,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE019_invoice.png"
+            "image_pil",
+            "PAGE019_invoice.png RGB"
           ],
           [
             "user",
@@ -1379,8 +1379,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE020_bank_statement.png"
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1391,8 +1391,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE020_receipt.png"
+            "image_pil",
+            "PAGE020_receipt.png RGB"
           ],
           [
             "user",
@@ -1403,8 +1403,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE021_invoice.png"
+            "image_pil",
+            "PAGE021_invoice.png RGB"
           ],
           [
             "user",
@@ -1415,8 +1415,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_bank_statement.png"
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1427,8 +1427,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_receipt.png"
+            "image_pil",
+            "PAGE022_receipt.png RGB"
           ],
           [
             "user",
@@ -1439,8 +1439,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_invoice.png"
+            "image_pil",
+            "PAGE023_invoice.png RGB"
           ],
           [
             "user",
@@ -1451,8 +1451,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_bank_statement.png"
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1463,8 +1463,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_receipt.png"
+            "image_pil",
+            "PAGE024_receipt.png RGB"
           ],
           [
             "user",
@@ -1475,8 +1475,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_invoice.png"
+            "image_pil",
+            "PAGE025_invoice.png RGB"
           ],
           [
             "user",
@@ -1487,8 +1487,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_bank_statement.png"
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1499,8 +1499,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_receipt.png"
+            "image_pil",
+            "PAGE026_receipt.png RGB"
           ],
           [
             "user",
@@ -1511,8 +1511,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_invoice.png"
+            "image_pil",
+            "PAGE027_invoice.png RGB"
           ],
           [
             "user",
@@ -1523,8 +1523,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE028_bank_statement.png"
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1535,8 +1535,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE028_receipt.png"
+            "image_pil",
+            "PAGE028_receipt.png RGB"
           ],
           [
             "user",
@@ -1547,8 +1547,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE029_invoice.png"
+            "image_pil",
+            "PAGE029_invoice.png RGB"
           ],
           [
             "user",
@@ -1559,8 +1559,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE030_bank_statement.png"
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1571,8 +1571,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE030_receipt.png"
+            "image_pil",
+            "PAGE030_receipt.png RGB"
           ],
           [
             "user",
@@ -1583,8 +1583,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE031_invoice.png"
+            "image_pil",
+            "PAGE031_invoice.png RGB"
           ],
           [
             "user",
@@ -1595,8 +1595,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE032_bank_statement.png"
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1607,8 +1607,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE032_receipt.png"
+            "image_pil",
+            "PAGE032_receipt.png RGB"
           ],
           [
             "user",
@@ -1619,8 +1619,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_invoice.png"
+            "image_pil",
+            "PAGE033_invoice.png RGB"
           ],
           [
             "user",
@@ -1631,8 +1631,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_bank_statement.png"
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1643,8 +1643,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_receipt.png"
+            "image_pil",
+            "PAGE034_receipt.png RGB"
           ],
           [
             "user",
@@ -1655,8 +1655,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_invoice.png"
+            "image_pil",
+            "PAGE035_invoice.png RGB"
           ],
           [
             "user",
@@ -1667,8 +1667,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_bank_statement.png"
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1679,8 +1679,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_receipt.png"
+            "image_pil",
+            "PAGE036_receipt.png RGB"
           ],
           [
             "user",
@@ -1691,8 +1691,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_invoice.png"
+            "image_pil",
+            "PAGE037_invoice.png RGB"
           ],
           [
             "user",
@@ -1703,8 +1703,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE038_bank_statement.png"
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1715,8 +1715,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE038_receipt.png"
+            "image_pil",
+            "PAGE038_receipt.png RGB"
           ],
           [
             "user",
@@ -1727,8 +1727,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE039_invoice.png"
+            "image_pil",
+            "PAGE039_invoice.png RGB"
           ],
           [
             "user",
@@ -1739,8 +1739,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE040_bank_statement.png"
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1751,8 +1751,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE040_receipt.png"
+            "image_pil",
+            "PAGE040_receipt.png RGB"
           ],
           [
             "user",
@@ -1763,8 +1763,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE041_invoice.png"
+            "image_pil",
+            "PAGE041_invoice.png RGB"
           ],
           [
             "user",
@@ -1775,8 +1775,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE042_bank_statement.png"
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1787,8 +1787,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE042_receipt.png"
+            "image_pil",
+            "PAGE042_receipt.png RGB"
           ],
           [
             "user",
@@ -1799,8 +1799,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE043_invoice.png"
+            "image_pil",
+            "PAGE043_invoice.png RGB"
           ],
           [
             "user",
@@ -1828,8 +1828,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_bank_statement.png"
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1840,8 +1840,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_receipt.png"
+            "image_pil",
+            "PAGE044_receipt.png RGB"
           ],
           [
             "user",
@@ -1852,8 +1852,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_invoice.png"
+            "image_pil",
+            "PAGE045_invoice.png RGB"
           ],
           [
             "user",
@@ -1864,8 +1864,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_bank_statement.png"
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1876,8 +1876,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_receipt.png"
+            "image_pil",
+            "PAGE046_receipt.png RGB"
           ],
           [
             "user",
@@ -1888,8 +1888,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_invoice.png"
+            "image_pil",
+            "PAGE047_invoice.png RGB"
           ],
           [
             "user",
@@ -1900,8 +1900,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_bank_statement.png"
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1912,8 +1912,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_receipt.png"
+            "image_pil",
+            "PAGE048_receipt.png RGB"
           ],
           [
             "user",
@@ -1924,8 +1924,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_invoice.png"
+            "image_pil",
+            "PAGE049_invoice.png RGB"
           ],
           [
             "user",
@@ -1936,8 +1936,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_bank_statement.png"
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1948,8 +1948,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_receipt.png"
+            "image_pil",
+            "PAGE050_receipt.png RGB"
           ],
           [
             "user",
@@ -1960,8 +1960,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_invoice.png"
+            "image_pil",
+            "PAGE051_invoice.png RGB"
           ],
           [
             "user",
@@ -1972,8 +1972,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_bank_statement.png"
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
           ],
           [
             "user",
@@ -1984,8 +1984,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_receipt.png"
+            "image_pil",
+            "PAGE052_receipt.png RGB"
           ],
           [
             "user",
@@ -1996,8 +1996,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_invoice.png"
+            "image_pil",
+            "PAGE053_invoice.png RGB"
           ],
           [
             "user",
@@ -2008,8 +2008,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_bank_statement.png"
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2020,8 +2020,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_receipt.png"
+            "image_pil",
+            "PAGE054_receipt.png RGB"
           ],
           [
             "user",
@@ -2032,8 +2032,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_invoice.png"
+            "image_pil",
+            "PAGE055_invoice.png RGB"
           ],
           [
             "user",
@@ -2061,8 +2061,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_bank_statement.png"
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2073,8 +2073,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_bank_statement.png"
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2085,8 +2085,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_bank_statement.png"
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2097,8 +2097,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE007_bank_statement.png"
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2109,8 +2109,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE009_bank_statement.png"
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2121,8 +2121,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE011_bank_statement.png"
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2133,8 +2133,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_bank_statement.png"
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2145,8 +2145,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_bank_statement.png"
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2157,8 +2157,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE017_bank_statement.png"
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2169,8 +2169,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE019_bank_statement.png"
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2181,8 +2181,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE021_bank_statement.png"
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2193,8 +2193,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_bank_statement.png"
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2205,8 +2205,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_bank_statement.png"
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2217,8 +2217,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_bank_statement.png"
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2229,8 +2229,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE029_bank_statement.png"
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2241,8 +2241,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE031_bank_statement.png"
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2253,8 +2253,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_bank_statement.png"
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2265,8 +2265,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_bank_statement.png"
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2277,8 +2277,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_bank_statement.png"
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2289,8 +2289,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE039_bank_statement.png"
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2301,8 +2301,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE041_bank_statement.png"
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2313,8 +2313,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE043_bank_statement.png"
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2325,8 +2325,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_bank_statement.png"
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2337,8 +2337,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_bank_statement.png"
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2349,8 +2349,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_bank_statement.png"
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2361,8 +2361,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_bank_statement.png"
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2373,8 +2373,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_bank_statement.png"
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2385,8 +2385,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_bank_statement.png"
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
           ],
           [
             "user",
@@ -2416,8 +2416,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE002_invoice.png"
+            "image_pil",
+            "PAGE002_invoice.png RGB"
           ]
         ],
         [
@@ -2428,8 +2428,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE004_invoice.png"
+            "image_pil",
+            "PAGE004_invoice.png RGB"
           ]
         ],
         [
@@ -2440,8 +2440,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE006_invoice.png"
+            "image_pil",
+            "PAGE006_invoice.png RGB"
           ]
         ],
         [
@@ -2452,8 +2452,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE008_invoice.png"
+            "image_pil",
+            "PAGE008_invoice.png RGB"
           ]
         ],
         [
@@ -2464,8 +2464,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE010_invoice.png"
+            "image_pil",
+            "PAGE010_invoice.png RGB"
           ]
         ],
         [
@@ -2476,8 +2476,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE012_invoice.png"
+            "image_pil",
+            "PAGE012_invoice.png RGB"
           ]
         ],
         [
@@ -2488,8 +2488,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE014_invoice.png"
+            "image_pil",
+            "PAGE014_invoice.png RGB"
           ]
         ],
         [
@@ -2500,8 +2500,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE016_invoice.png"
+            "image_pil",
+            "PAGE016_invoice.png RGB"
           ]
         ],
         [
@@ -2512,8 +2512,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE018_invoice.png"
+            "image_pil",
+            "PAGE018_invoice.png RGB"
           ]
         ],
         [
@@ -2524,8 +2524,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE020_invoice.png"
+            "image_pil",
+            "PAGE020_invoice.png RGB"
           ]
         ]
       ],
@@ -2550,8 +2550,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE022_invoice.png"
+            "image_pil",
+            "PAGE022_invoice.png RGB"
           ]
         ],
         [
@@ -2562,8 +2562,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE024_invoice.png"
+            "image_pil",
+            "PAGE024_invoice.png RGB"
           ]
         ],
         [
@@ -2574,8 +2574,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE026_invoice.png"
+            "image_pil",
+            "PAGE026_invoice.png RGB"
           ]
         ],
         [
@@ -2586,8 +2586,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE028_invoice.png"
+            "image_pil",
+            "PAGE028_invoice.png RGB"
           ]
         ],
         [
@@ -2598,8 +2598,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE030_invoice.png"
+            "image_pil",
+            "PAGE030_invoice.png RGB"
           ]
         ],
         [
@@ -2610,8 +2610,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE032_invoice.png"
+            "image_pil",
+            "PAGE032_invoice.png RGB"
           ]
         ],
         [
@@ -2622,8 +2622,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE034_invoice.png"
+            "image_pil",
+            "PAGE034_invoice.png RGB"
           ]
         ],
         [
@@ -2634,8 +2634,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE036_invoice.png"
+            "image_pil",
+            "PAGE036_invoice.png RGB"
           ]
         ],
         [
@@ -2646,8 +2646,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE038_invoice.png"
+            "image_pil",
+            "PAGE038_invoice.png RGB"
           ]
         ],
         [
@@ -2658,8 +2658,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE040_invoice.png"
+            "image_pil",
+            "PAGE040_invoice.png RGB"
           ]
         ]
       ],
@@ -2684,8 +2684,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE042_invoice.png"
+            "image_pil",
+            "PAGE042_invoice.png RGB"
           ]
         ],
         [
@@ -2696,8 +2696,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE044_invoice.png"
+            "image_pil",
+            "PAGE044_invoice.png RGB"
           ]
         ],
         [
@@ -2708,8 +2708,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE046_invoice.png"
+            "image_pil",
+            "PAGE046_invoice.png RGB"
           ]
         ],
         [
@@ -2720,8 +2720,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE048_invoice.png"
+            "image_pil",
+            "PAGE048_invoice.png RGB"
           ]
         ],
         [
@@ -2732,8 +2732,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE050_invoice.png"
+            "image_pil",
+            "PAGE050_invoice.png RGB"
           ]
         ],
         [
@@ -2744,8 +2744,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE052_invoice.png"
+            "image_pil",
+            "PAGE052_invoice.png RGB"
           ]
         ],
         [
@@ -2756,8 +2756,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE054_invoice.png"
+            "image_pil",
+            "PAGE054_invoice.png RGB"
           ]
         ]
       ],
@@ -2782,8 +2782,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE001_receipt.png"
+            "image_pil",
+            "PAGE001_receipt.png RGB"
           ]
         ],
         [
@@ -2794,8 +2794,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE003_receipt.png"
+            "image_pil",
+            "PAGE003_receipt.png RGB"
           ]
         ],
         [
@@ -2806,8 +2806,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE005_receipt.png"
+            "image_pil",
+            "PAGE005_receipt.png RGB"
           ]
         ],
         [
@@ -2818,8 +2818,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE007_receipt.png"
+            "image_pil",
+            "PAGE007_receipt.png RGB"
           ]
         ],
         [
@@ -2830,8 +2830,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE009_receipt.png"
+            "image_pil",
+            "PAGE009_receipt.png RGB"
           ]
         ],
         [
@@ -2842,8 +2842,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE011_receipt.png"
+            "image_pil",
+            "PAGE011_receipt.png RGB"
           ]
         ],
         [
@@ -2854,8 +2854,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE013_receipt.png"
+            "image_pil",
+            "PAGE013_receipt.png RGB"
           ]
         ],
         [
@@ -2866,8 +2866,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE015_receipt.png"
+            "image_pil",
+            "PAGE015_receipt.png RGB"
           ]
         ],
         [
@@ -2878,8 +2878,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE017_receipt.png"
+            "image_pil",
+            "PAGE017_receipt.png RGB"
           ]
         ],
         [
@@ -2890,8 +2890,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE019_receipt.png"
+            "image_pil",
+            "PAGE019_receipt.png RGB"
           ]
         ]
       ],
@@ -2916,8 +2916,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE021_receipt.png"
+            "image_pil",
+            "PAGE021_receipt.png RGB"
           ]
         ],
         [
@@ -2928,8 +2928,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE023_receipt.png"
+            "image_pil",
+            "PAGE023_receipt.png RGB"
           ]
         ],
         [
@@ -2940,8 +2940,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE025_receipt.png"
+            "image_pil",
+            "PAGE025_receipt.png RGB"
           ]
         ],
         [
@@ -2952,8 +2952,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE027_receipt.png"
+            "image_pil",
+            "PAGE027_receipt.png RGB"
           ]
         ],
         [
@@ -2964,8 +2964,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE029_receipt.png"
+            "image_pil",
+            "PAGE029_receipt.png RGB"
           ]
         ],
         [
@@ -2976,8 +2976,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE031_receipt.png"
+            "image_pil",
+            "PAGE031_receipt.png RGB"
           ]
         ],
         [
@@ -2988,8 +2988,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE033_receipt.png"
+            "image_pil",
+            "PAGE033_receipt.png RGB"
           ]
         ],
         [
@@ -3000,8 +3000,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE035_receipt.png"
+            "image_pil",
+            "PAGE035_receipt.png RGB"
           ]
         ],
         [
@@ -3012,8 +3012,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE037_receipt.png"
+            "image_pil",
+            "PAGE037_receipt.png RGB"
           ]
         ],
         [
@@ -3024,8 +3024,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE039_receipt.png"
+            "image_pil",
+            "PAGE039_receipt.png RGB"
           ]
         ]
       ],
@@ -3050,8 +3050,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE041_receipt.png"
+            "image_pil",
+            "PAGE041_receipt.png RGB"
           ]
         ],
         [
@@ -3062,8 +3062,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE043_receipt.png"
+            "image_pil",
+            "PAGE043_receipt.png RGB"
           ]
         ],
         [
@@ -3074,8 +3074,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE045_receipt.png"
+            "image_pil",
+            "PAGE045_receipt.png RGB"
           ]
         ],
         [
@@ -3086,8 +3086,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE047_receipt.png"
+            "image_pil",
+            "PAGE047_receipt.png RGB"
           ]
         ],
         [
@@ -3098,8 +3098,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE049_receipt.png"
+            "image_pil",
+            "PAGE049_receipt.png RGB"
           ]
         ],
         [
@@ -3110,8 +3110,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE051_receipt.png"
+            "image_pil",
+            "PAGE051_receipt.png RGB"
           ]
         ],
         [
@@ -3122,8 +3122,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE053_receipt.png"
+            "image_pil",
+            "PAGE053_receipt.png RGB"
           ]
         ],
         [
@@ -3134,8 +3134,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE055_receipt.png"
+            "image_pil",
+            "PAGE055_receipt.png RGB"
           ]
         ]
       ],
@@ -3158,8 +3158,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_bank_statement.png"
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3170,8 +3170,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_bank_statement.png"
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3182,8 +3182,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE006_bank_statement.png"
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3194,8 +3194,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE008_bank_statement.png"
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3206,8 +3206,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE010_bank_statement.png"
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3218,8 +3218,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_bank_statement.png"
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3230,8 +3230,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_bank_statement.png"
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3242,8 +3242,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_bank_statement.png"
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3254,8 +3254,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE018_bank_statement.png"
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3266,8 +3266,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE020_bank_statement.png"
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3278,8 +3278,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_bank_statement.png"
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3290,8 +3290,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_bank_statement.png"
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3302,8 +3302,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_bank_statement.png"
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3314,8 +3314,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE028_bank_statement.png"
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3326,8 +3326,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE030_bank_statement.png"
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3338,8 +3338,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE032_bank_statement.png"
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3350,8 +3350,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_bank_statement.png"
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3362,8 +3362,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_bank_statement.png"
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3374,8 +3374,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE038_bank_statement.png"
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3386,8 +3386,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE040_bank_statement.png"
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3398,8 +3398,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE042_bank_statement.png"
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3410,8 +3410,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_bank_statement.png"
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3422,8 +3422,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_bank_statement.png"
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3434,8 +3434,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_bank_statement.png"
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3446,8 +3446,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_bank_statement.png"
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3458,8 +3458,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_bank_statement.png"
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3470,8 +3470,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_bank_statement.png"
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
           ],
           [
             "user",
@@ -3501,8 +3501,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE001_invoice.png"
+            "image_pil",
+            "PAGE001_invoice.png RGB"
           ]
         ],
         [
@@ -3513,8 +3513,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE003_invoice.png"
+            "image_pil",
+            "PAGE003_invoice.png RGB"
           ]
         ],
         [
@@ -3525,8 +3525,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE005_invoice.png"
+            "image_pil",
+            "PAGE005_invoice.png RGB"
           ]
         ],
         [
@@ -3537,8 +3537,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE007_invoice.png"
+            "image_pil",
+            "PAGE007_invoice.png RGB"
           ]
         ],
         [
@@ -3549,8 +3549,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE009_invoice.png"
+            "image_pil",
+            "PAGE009_invoice.png RGB"
           ]
         ],
         [
@@ -3561,8 +3561,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE011_invoice.png"
+            "image_pil",
+            "PAGE011_invoice.png RGB"
           ]
         ],
         [
@@ -3573,8 +3573,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE013_invoice.png"
+            "image_pil",
+            "PAGE013_invoice.png RGB"
           ]
         ],
         [
@@ -3585,8 +3585,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE015_invoice.png"
+            "image_pil",
+            "PAGE015_invoice.png RGB"
           ]
         ],
         [
@@ -3597,8 +3597,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE017_invoice.png"
+            "image_pil",
+            "PAGE017_invoice.png RGB"
           ]
         ],
         [
@@ -3609,8 +3609,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE019_invoice.png"
+            "image_pil",
+            "PAGE019_invoice.png RGB"
           ]
         ]
       ],
@@ -3635,8 +3635,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE021_invoice.png"
+            "image_pil",
+            "PAGE021_invoice.png RGB"
           ]
         ],
         [
@@ -3647,8 +3647,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE023_invoice.png"
+            "image_pil",
+            "PAGE023_invoice.png RGB"
           ]
         ],
         [
@@ -3659,8 +3659,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE025_invoice.png"
+            "image_pil",
+            "PAGE025_invoice.png RGB"
           ]
         ],
         [
@@ -3671,8 +3671,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE027_invoice.png"
+            "image_pil",
+            "PAGE027_invoice.png RGB"
           ]
         ],
         [
@@ -3683,8 +3683,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE029_invoice.png"
+            "image_pil",
+            "PAGE029_invoice.png RGB"
           ]
         ],
         [
@@ -3695,8 +3695,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE031_invoice.png"
+            "image_pil",
+            "PAGE031_invoice.png RGB"
           ]
         ],
         [
@@ -3707,8 +3707,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE033_invoice.png"
+            "image_pil",
+            "PAGE033_invoice.png RGB"
           ]
         ],
         [
@@ -3719,8 +3719,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE035_invoice.png"
+            "image_pil",
+            "PAGE035_invoice.png RGB"
           ]
         ],
         [
@@ -3731,8 +3731,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE037_invoice.png"
+            "image_pil",
+            "PAGE037_invoice.png RGB"
           ]
         ],
         [
@@ -3743,8 +3743,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE039_invoice.png"
+            "image_pil",
+            "PAGE039_invoice.png RGB"
           ]
         ]
       ],
@@ -3769,8 +3769,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE041_invoice.png"
+            "image_pil",
+            "PAGE041_invoice.png RGB"
           ]
         ],
         [
@@ -3781,8 +3781,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE043_invoice.png"
+            "image_pil",
+            "PAGE043_invoice.png RGB"
           ]
         ],
         [
@@ -3793,8 +3793,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE045_invoice.png"
+            "image_pil",
+            "PAGE045_invoice.png RGB"
           ]
         ],
         [
@@ -3805,8 +3805,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE047_invoice.png"
+            "image_pil",
+            "PAGE047_invoice.png RGB"
           ]
         ],
         [
@@ -3817,8 +3817,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE049_invoice.png"
+            "image_pil",
+            "PAGE049_invoice.png RGB"
           ]
         ],
         [
@@ -3829,8 +3829,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE051_invoice.png"
+            "image_pil",
+            "PAGE051_invoice.png RGB"
           ]
         ],
         [
@@ -3841,8 +3841,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE053_invoice.png"
+            "image_pil",
+            "PAGE053_invoice.png RGB"
           ]
         ],
         [
@@ -3853,8 +3853,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE055_invoice.png"
+            "image_pil",
+            "PAGE055_invoice.png RGB"
           ]
         ]
       ],
@@ -3879,8 +3879,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE002_receipt.png"
+            "image_pil",
+            "PAGE002_receipt.png RGB"
           ]
         ],
         [
@@ -3891,8 +3891,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE004_receipt.png"
+            "image_pil",
+            "PAGE004_receipt.png RGB"
           ]
         ],
         [
@@ -3903,8 +3903,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE006_receipt.png"
+            "image_pil",
+            "PAGE006_receipt.png RGB"
           ]
         ],
         [
@@ -3915,8 +3915,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE008_receipt.png"
+            "image_pil",
+            "PAGE008_receipt.png RGB"
           ]
         ],
         [
@@ -3927,8 +3927,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE010_receipt.png"
+            "image_pil",
+            "PAGE010_receipt.png RGB"
           ]
         ],
         [
@@ -3939,8 +3939,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE012_receipt.png"
+            "image_pil",
+            "PAGE012_receipt.png RGB"
           ]
         ],
         [
@@ -3951,8 +3951,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE014_receipt.png"
+            "image_pil",
+            "PAGE014_receipt.png RGB"
           ]
         ],
         [
@@ -3963,8 +3963,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE016_receipt.png"
+            "image_pil",
+            "PAGE016_receipt.png RGB"
           ]
         ],
         [
@@ -3975,8 +3975,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE018_receipt.png"
+            "image_pil",
+            "PAGE018_receipt.png RGB"
           ]
         ],
         [
@@ -3987,8 +3987,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE020_receipt.png"
+            "image_pil",
+            "PAGE020_receipt.png RGB"
           ]
         ]
       ],
@@ -4013,8 +4013,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE022_receipt.png"
+            "image_pil",
+            "PAGE022_receipt.png RGB"
           ]
         ],
         [
@@ -4025,8 +4025,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE024_receipt.png"
+            "image_pil",
+            "PAGE024_receipt.png RGB"
           ]
         ],
         [
@@ -4037,8 +4037,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE026_receipt.png"
+            "image_pil",
+            "PAGE026_receipt.png RGB"
           ]
         ],
         [
@@ -4049,8 +4049,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE028_receipt.png"
+            "image_pil",
+            "PAGE028_receipt.png RGB"
           ]
         ],
         [
@@ -4061,8 +4061,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE030_receipt.png"
+            "image_pil",
+            "PAGE030_receipt.png RGB"
           ]
         ],
         [
@@ -4073,8 +4073,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE032_receipt.png"
+            "image_pil",
+            "PAGE032_receipt.png RGB"
           ]
         ],
         [
@@ -4085,8 +4085,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE034_receipt.png"
+            "image_pil",
+            "PAGE034_receipt.png RGB"
           ]
         ],
         [
@@ -4097,8 +4097,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE036_receipt.png"
+            "image_pil",
+            "PAGE036_receipt.png RGB"
           ]
         ],
         [
@@ -4109,8 +4109,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE038_receipt.png"
+            "image_pil",
+            "PAGE038_receipt.png RGB"
           ]
         ],
         [
@@ -4121,8 +4121,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE040_receipt.png"
+            "image_pil",
+            "PAGE040_receipt.png RGB"
           ]
         ]
       ],
@@ -4147,8 +4147,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE042_receipt.png"
+            "image_pil",
+            "PAGE042_receipt.png RGB"
           ]
         ],
         [
@@ -4159,8 +4159,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE044_receipt.png"
+            "image_pil",
+            "PAGE044_receipt.png RGB"
           ]
         ],
         [
@@ -4171,8 +4171,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE046_receipt.png"
+            "image_pil",
+            "PAGE046_receipt.png RGB"
           ]
         ],
         [
@@ -4183,8 +4183,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE048_receipt.png"
+            "image_pil",
+            "PAGE048_receipt.png RGB"
           ]
         ],
         [
@@ -4195,8 +4195,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE050_receipt.png"
+            "image_pil",
+            "PAGE050_receipt.png RGB"
           ]
         ],
         [
@@ -4207,8 +4207,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE052_receipt.png"
+            "image_pil",
+            "PAGE052_receipt.png RGB"
           ]
         ],
         [
@@ -4219,8 +4219,8 @@
           ],
           [
             "user",
-            "image",
-            "PAGE054_receipt.png"
+            "image_pil",
+            "PAGE054_receipt.png RGB"
           ]
         ]
       ],
@@ -4243,8 +4243,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_bank_statement.png"
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4255,8 +4255,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_invoice.png"
+            "image_pil",
+            "PAGE001_invoice.png RGB"
           ],
           [
             "user",
@@ -4267,8 +4267,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE001_receipt.png"
+            "image_pil",
+            "PAGE001_receipt.png RGB"
           ],
           [
             "user",
@@ -4279,8 +4279,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_bank_statement.png"
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4291,8 +4291,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_invoice.png"
+            "image_pil",
+            "PAGE002_invoice.png RGB"
           ],
           [
             "user",
@@ -4303,8 +4303,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE002_receipt.png"
+            "image_pil",
+            "PAGE002_receipt.png RGB"
           ],
           [
             "user",
@@ -4315,8 +4315,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_bank_statement.png"
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4327,8 +4327,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_invoice.png"
+            "image_pil",
+            "PAGE003_invoice.png RGB"
           ],
           [
             "user",
@@ -4339,8 +4339,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE003_receipt.png"
+            "image_pil",
+            "PAGE003_receipt.png RGB"
           ],
           [
             "user",
@@ -4351,8 +4351,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_bank_statement.png"
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4363,8 +4363,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_invoice.png"
+            "image_pil",
+            "PAGE004_invoice.png RGB"
           ],
           [
             "user",
@@ -4375,8 +4375,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE004_receipt.png"
+            "image_pil",
+            "PAGE004_receipt.png RGB"
           ],
           [
             "user",
@@ -4387,8 +4387,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_bank_statement.png"
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4399,8 +4399,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_invoice.png"
+            "image_pil",
+            "PAGE005_invoice.png RGB"
           ],
           [
             "user",
@@ -4411,8 +4411,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE005_receipt.png"
+            "image_pil",
+            "PAGE005_receipt.png RGB"
           ],
           [
             "user",
@@ -4423,217 +4423,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE006_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 400,
-        "temperature": 0
-      },
-      "stage": "split"
-    },
-    {
-      "engine": 4,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
-        [
-          [
-            "user",
-            "image",
-            "PAGE006_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE006_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE007_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE007_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE007_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE008_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE008_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE008_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE009_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE009_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE009_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE010_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE010_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE010_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE011_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE011_invoice.png"
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4661,8 +4452,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE011_receipt.png"
+            "image_pil",
+            "PAGE006_invoice.png RGB"
           ],
           [
             "user",
@@ -4673,8 +4464,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_bank_statement.png"
+            "image_pil",
+            "PAGE006_receipt.png RGB"
           ],
           [
             "user",
@@ -4685,8 +4476,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_invoice.png"
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4697,8 +4488,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE012_receipt.png"
+            "image_pil",
+            "PAGE007_invoice.png RGB"
           ],
           [
             "user",
@@ -4709,8 +4500,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_bank_statement.png"
+            "image_pil",
+            "PAGE007_receipt.png RGB"
           ],
           [
             "user",
@@ -4721,8 +4512,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_invoice.png"
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4733,8 +4524,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE013_receipt.png"
+            "image_pil",
+            "PAGE008_invoice.png RGB"
           ],
           [
             "user",
@@ -4745,8 +4536,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_bank_statement.png"
+            "image_pil",
+            "PAGE008_receipt.png RGB"
           ],
           [
             "user",
@@ -4757,8 +4548,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_invoice.png"
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4769,8 +4560,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE014_receipt.png"
+            "image_pil",
+            "PAGE009_invoice.png RGB"
           ],
           [
             "user",
@@ -4781,8 +4572,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_bank_statement.png"
+            "image_pil",
+            "PAGE009_receipt.png RGB"
           ],
           [
             "user",
@@ -4793,8 +4584,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_invoice.png"
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4805,8 +4596,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE015_receipt.png"
+            "image_pil",
+            "PAGE010_invoice.png RGB"
           ],
           [
             "user",
@@ -4817,8 +4608,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_bank_statement.png"
+            "image_pil",
+            "PAGE010_receipt.png RGB"
           ],
           [
             "user",
@@ -4829,8 +4620,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_invoice.png"
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
           ],
           [
             "user",
@@ -4841,217 +4632,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE016_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 400,
-        "temperature": 0
-      },
-      "stage": "split"
-    },
-    {
-      "engine": 4,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
-        [
-          [
-            "user",
-            "image",
-            "PAGE017_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE017_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE017_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE018_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE018_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE018_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE019_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE019_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE019_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE020_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE020_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE020_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE021_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE021_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE021_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE022_bank_statement.png"
+            "image_pil",
+            "PAGE011_invoice.png RGB"
           ],
           [
             "user",
@@ -5079,8 +4661,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_invoice.png"
+            "image_pil",
+            "PAGE011_receipt.png RGB"
           ],
           [
             "user",
@@ -5091,8 +4673,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE022_receipt.png"
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5103,8 +4685,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_bank_statement.png"
+            "image_pil",
+            "PAGE012_invoice.png RGB"
           ],
           [
             "user",
@@ -5115,8 +4697,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_invoice.png"
+            "image_pil",
+            "PAGE012_receipt.png RGB"
           ],
           [
             "user",
@@ -5127,8 +4709,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE023_receipt.png"
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5139,8 +4721,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_bank_statement.png"
+            "image_pil",
+            "PAGE013_invoice.png RGB"
           ],
           [
             "user",
@@ -5151,8 +4733,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_invoice.png"
+            "image_pil",
+            "PAGE013_receipt.png RGB"
           ],
           [
             "user",
@@ -5163,8 +4745,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE024_receipt.png"
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5175,8 +4757,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_bank_statement.png"
+            "image_pil",
+            "PAGE014_invoice.png RGB"
           ],
           [
             "user",
@@ -5187,8 +4769,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_invoice.png"
+            "image_pil",
+            "PAGE014_receipt.png RGB"
           ],
           [
             "user",
@@ -5199,8 +4781,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE025_receipt.png"
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5211,8 +4793,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_bank_statement.png"
+            "image_pil",
+            "PAGE015_invoice.png RGB"
           ],
           [
             "user",
@@ -5223,8 +4805,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_invoice.png"
+            "image_pil",
+            "PAGE015_receipt.png RGB"
           ],
           [
             "user",
@@ -5235,8 +4817,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE026_receipt.png"
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5247,8 +4829,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_bank_statement.png"
+            "image_pil",
+            "PAGE016_invoice.png RGB"
           ],
           [
             "user",
@@ -5259,217 +4841,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE027_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 400,
-        "temperature": 0
-      },
-      "stage": "split"
-    },
-    {
-      "engine": 4,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
-        [
-          [
-            "user",
-            "image",
-            "PAGE027_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE028_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE028_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE028_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE029_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE029_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE029_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE030_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE030_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE030_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE031_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE031_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE031_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE032_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE032_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE032_receipt.png"
+            "image_pil",
+            "PAGE016_receipt.png RGB"
           ],
           [
             "user",
@@ -5497,8 +4870,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_bank_statement.png"
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5509,8 +4882,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_invoice.png"
+            "image_pil",
+            "PAGE017_invoice.png RGB"
           ],
           [
             "user",
@@ -5521,8 +4894,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE033_receipt.png"
+            "image_pil",
+            "PAGE017_receipt.png RGB"
           ],
           [
             "user",
@@ -5533,8 +4906,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_bank_statement.png"
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5545,8 +4918,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_invoice.png"
+            "image_pil",
+            "PAGE018_invoice.png RGB"
           ],
           [
             "user",
@@ -5557,8 +4930,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE034_receipt.png"
+            "image_pil",
+            "PAGE018_receipt.png RGB"
           ],
           [
             "user",
@@ -5569,8 +4942,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_bank_statement.png"
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5581,8 +4954,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_invoice.png"
+            "image_pil",
+            "PAGE019_invoice.png RGB"
           ],
           [
             "user",
@@ -5593,8 +4966,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE035_receipt.png"
+            "image_pil",
+            "PAGE019_receipt.png RGB"
           ],
           [
             "user",
@@ -5605,8 +4978,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_bank_statement.png"
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5617,8 +4990,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_invoice.png"
+            "image_pil",
+            "PAGE020_invoice.png RGB"
           ],
           [
             "user",
@@ -5629,8 +5002,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE036_receipt.png"
+            "image_pil",
+            "PAGE020_receipt.png RGB"
           ],
           [
             "user",
@@ -5641,8 +5014,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_bank_statement.png"
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5653,8 +5026,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_invoice.png"
+            "image_pil",
+            "PAGE021_invoice.png RGB"
           ],
           [
             "user",
@@ -5665,8 +5038,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE037_receipt.png"
+            "image_pil",
+            "PAGE021_receipt.png RGB"
           ],
           [
             "user",
@@ -5677,217 +5050,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE038_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 400,
-        "temperature": 0
-      },
-      "stage": "split"
-    },
-    {
-      "engine": 4,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
-        [
-          [
-            "user",
-            "image",
-            "PAGE038_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE038_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE039_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE039_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE039_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE040_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE040_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE040_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE041_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE041_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE041_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE042_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE042_invoice.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE042_receipt.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE043_bank_statement.png"
-          ],
-          [
-            "user",
-            "text",
-            "0b9eb06d0be9"
-          ]
-        ],
-        [
-          [
-            "user",
-            "image",
-            "PAGE043_invoice.png"
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5915,8 +5079,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE043_receipt.png"
+            "image_pil",
+            "PAGE022_invoice.png RGB"
           ],
           [
             "user",
@@ -5927,8 +5091,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_bank_statement.png"
+            "image_pil",
+            "PAGE022_receipt.png RGB"
           ],
           [
             "user",
@@ -5939,8 +5103,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_invoice.png"
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5951,8 +5115,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE044_receipt.png"
+            "image_pil",
+            "PAGE023_invoice.png RGB"
           ],
           [
             "user",
@@ -5963,8 +5127,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_bank_statement.png"
+            "image_pil",
+            "PAGE023_receipt.png RGB"
           ],
           [
             "user",
@@ -5975,8 +5139,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_invoice.png"
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
           ],
           [
             "user",
@@ -5987,8 +5151,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE045_receipt.png"
+            "image_pil",
+            "PAGE024_invoice.png RGB"
           ],
           [
             "user",
@@ -5999,8 +5163,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_bank_statement.png"
+            "image_pil",
+            "PAGE024_receipt.png RGB"
           ],
           [
             "user",
@@ -6011,8 +5175,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_invoice.png"
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6023,8 +5187,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE046_receipt.png"
+            "image_pil",
+            "PAGE025_invoice.png RGB"
           ],
           [
             "user",
@@ -6035,8 +5199,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_bank_statement.png"
+            "image_pil",
+            "PAGE025_receipt.png RGB"
           ],
           [
             "user",
@@ -6047,8 +5211,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_invoice.png"
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6059,8 +5223,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE047_receipt.png"
+            "image_pil",
+            "PAGE026_invoice.png RGB"
           ],
           [
             "user",
@@ -6071,8 +5235,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_bank_statement.png"
+            "image_pil",
+            "PAGE026_receipt.png RGB"
           ],
           [
             "user",
@@ -6083,8 +5247,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_invoice.png"
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6095,8 +5259,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE048_receipt.png"
+            "image_pil",
+            "PAGE027_invoice.png RGB"
           ],
           [
             "user",
@@ -6124,8 +5288,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_bank_statement.png"
+            "image_pil",
+            "PAGE027_receipt.png RGB"
           ],
           [
             "user",
@@ -6136,8 +5300,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_invoice.png"
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6148,8 +5312,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE049_receipt.png"
+            "image_pil",
+            "PAGE028_invoice.png RGB"
           ],
           [
             "user",
@@ -6160,8 +5324,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_bank_statement.png"
+            "image_pil",
+            "PAGE028_receipt.png RGB"
           ],
           [
             "user",
@@ -6172,8 +5336,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_invoice.png"
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6184,8 +5348,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE050_receipt.png"
+            "image_pil",
+            "PAGE029_invoice.png RGB"
           ],
           [
             "user",
@@ -6196,8 +5360,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_bank_statement.png"
+            "image_pil",
+            "PAGE029_receipt.png RGB"
           ],
           [
             "user",
@@ -6208,8 +5372,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_invoice.png"
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6220,8 +5384,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE051_receipt.png"
+            "image_pil",
+            "PAGE030_invoice.png RGB"
           ],
           [
             "user",
@@ -6232,8 +5396,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_bank_statement.png"
+            "image_pil",
+            "PAGE030_receipt.png RGB"
           ],
           [
             "user",
@@ -6244,8 +5408,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_invoice.png"
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6256,8 +5420,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE052_receipt.png"
+            "image_pil",
+            "PAGE031_invoice.png RGB"
           ],
           [
             "user",
@@ -6268,8 +5432,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_bank_statement.png"
+            "image_pil",
+            "PAGE031_receipt.png RGB"
           ],
           [
             "user",
@@ -6280,8 +5444,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_invoice.png"
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6292,8 +5456,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE053_receipt.png"
+            "image_pil",
+            "PAGE032_invoice.png RGB"
           ],
           [
             "user",
@@ -6304,8 +5468,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_bank_statement.png"
+            "image_pil",
+            "PAGE032_receipt.png RGB"
           ],
           [
             "user",
@@ -6333,8 +5497,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_invoice.png"
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6345,8 +5509,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE054_receipt.png"
+            "image_pil",
+            "PAGE033_invoice.png RGB"
           ],
           [
             "user",
@@ -6357,8 +5521,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_bank_statement.png"
+            "image_pil",
+            "PAGE033_receipt.png RGB"
           ],
           [
             "user",
@@ -6369,8 +5533,8 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_invoice.png"
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
           ],
           [
             "user",
@@ -6381,8 +5545,844 @@
         [
           [
             "user",
-            "image",
-            "PAGE055_receipt.png"
+            "image_pil",
+            "PAGE034_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE034_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE035_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE035_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE036_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE036_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE037_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE037_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 4,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE038_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE038_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE039_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE039_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE040_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE040_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE041_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE041_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE042_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE042_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE043_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 4,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE043_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE044_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE044_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE045_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE045_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE046_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE046_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE047_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE047_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE048_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE048_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 4,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE049_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE049_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE050_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE050_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE051_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE051_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE052_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE052_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE053_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE053_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 4,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE054_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE054_receipt.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE055_invoice.png RGB"
+          ],
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ]
+        ],
+        [
+          [
+            "user",
+            "image_pil",
+            "PAGE055_receipt.png RGB"
           ],
           [
             "user",
@@ -6412,8 +6412,8 @@
           ],
           [
             "user",
-            "image",
-            "image 100x150"
+            "image_pil",
+            "image 100x150 RGB"
           ]
         ],
         [
@@ -6424,8 +6424,8 @@
           ],
           [
             "user",
-            "image",
-            "image 102x150"
+            "image_pil",
+            "image 102x150 RGB"
           ]
         ],
         [
@@ -6436,8 +6436,8 @@
           ],
           [
             "user",
-            "image",
-            "image 104x150"
+            "image_pil",
+            "image 104x150 RGB"
           ]
         ],
         [
@@ -6448,8 +6448,8 @@
           ],
           [
             "user",
-            "image",
-            "image 106x150"
+            "image_pil",
+            "image 106x150 RGB"
           ]
         ],
         [
@@ -6460,8 +6460,8 @@
           ],
           [
             "user",
-            "image",
-            "image 108x150"
+            "image_pil",
+            "image 108x150 RGB"
           ]
         ],
         [
@@ -6472,8 +6472,8 @@
           ],
           [
             "user",
-            "image",
-            "image 110x150"
+            "image_pil",
+            "image 110x150 RGB"
           ]
         ]
       ],
@@ -6498,8 +6498,8 @@
           ],
           [
             "user",
-            "image",
-            "image 101x150"
+            "image_pil",
+            "image 101x150 RGB"
           ]
         ],
         [
@@ -6510,8 +6510,8 @@
           ],
           [
             "user",
-            "image",
-            "image 103x150"
+            "image_pil",
+            "image 103x150 RGB"
           ]
         ],
         [
@@ -6522,8 +6522,8 @@
           ],
           [
             "user",
-            "image",
-            "image 105x150"
+            "image_pil",
+            "image 105x150 RGB"
           ]
         ],
         [
@@ -6534,8 +6534,8 @@
           ],
           [
             "user",
-            "image",
-            "image 107x150"
+            "image_pil",
+            "image 107x150 RGB"
           ]
         ],
         [
@@ -6546,8 +6546,8 @@
           ],
           [
             "user",
-            "image",
-            "image 109x150"
+            "image_pil",
+            "image 109x150 RGB"
           ]
         ],
         [
@@ -6558,8 +6558,8 @@
           ],
           [
             "user",
-            "image",
-            "image 111x150"
+            "image_pil",
+            "image 111x150 RGB"
           ]
         ]
       ],

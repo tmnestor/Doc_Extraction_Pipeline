@@ -4,13 +4,12 @@ Every request the pipeline makes of the model goes through ``VllmBackend.chat``:
 a prompt for each, sent to ``LLM.chat`` as one call so that the engine's scheduler can run up to
 ``max_num_seqs`` of them at once. A page on its own is a list of one.
 
-vLLM prepares each image with the model's own Hugging Face processor and works out where the image's
-placeholder tokens go in the prompt. The order of the image and the text in a request is the order the
+An image is handed over as a PIL image (the ``image_pil`` content part), not encoded into a URL for
+vLLM to decode again. vLLM prepares it with the model's own Hugging Face processor and works out where
+the image's placeholder tokens go in the prompt. The order of the image and the text in a request is the order the
 model's chat template renders them in, so it is part of what the model is sent.
 """
 
-import base64
-import io
 import logging
 from typing import Any
 
@@ -54,16 +53,25 @@ class VllmBackend:
             prompt_trace.enable(trace_path)
 
     @staticmethod
-    def _encode_image(image: Image.Image) -> str:
-        """A PIL image as a PNG in a base64 data URL."""
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+    def _as_rgb(image: Image.Image) -> Image.Image:
+        """The image in RGB, which is what the model's processor works on.
+
+        An RGB image is returned as it is. One with transparency is put on a white background first, as
+        vLLM does with an image it loads itself: dropping the transparency alone would leave whatever
+        colour lay under it, often black.
+        """
+        if image.mode == "RGB":
+            return image
+        if image.mode in ("RGBA", "LA") or "transparency" in image.info:
+            layered = image.convert("RGBA")
+            background = Image.new("RGBA", layered.size, (255, 255, 255, 255))
+            return Image.alpha_composite(background, layered).convert("RGB")
+        return image.convert("RGB")
 
     def _conversation(self, image: Image.Image, prompt: str, *, image_first: bool) -> list[dict[str, Any]]:
         """One request as a conversation of one user message."""
         text = {"type": "text", "text": prompt}
-        picture = {"type": "image_url", "image_url": {"url": self._encode_image(image)}}
+        picture = {"type": "image_pil", "image_pil": self._as_rgb(image)}
         return [{"role": "user", "content": [picture, text] if image_first else [text, picture]}]
 
     def chat(

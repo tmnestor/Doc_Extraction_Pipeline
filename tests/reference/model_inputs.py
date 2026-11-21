@@ -96,15 +96,22 @@ def write_sroie_split(folder: Path) -> None:
         (folder / "entities" / f"R{number:03d}.txt").write_text(json.dumps(answer))
 
 
-def page_of(data_uri: str) -> tuple[str, str]:
-    """The name and kind of the page an encoded image holds, read back from its size."""
-    encoded = data_uri.split(",", 1)[1]
-    width, height = Image.open(io.BytesIO(base64.b64decode(encoded))).size
+def page_of(image: Image.Image) -> tuple[str, str]:
+    """The name and kind of the page an image holds, read back from its size."""
+    width, height = image.size
     index, kind = width - BASE_WIDTH, height - BASE_HEIGHT
     names = page_names()
     if 0 <= index < len(names) and 0 <= kind < len(KINDS):
         return names[index], KINDS[kind]
     return f"image {width}x{height}", "receipt"
+
+
+def image_of(part: dict[str, Any]) -> Image.Image:
+    """The image a content part holds, whichever way the part gives it."""
+    if part["type"] == "image_pil":
+        return part["image_pil"]
+    encoded = part["image_url"]["url"].split(",", 1)[1]
+    return Image.open(io.BytesIO(base64.b64decode(encoded)))
 
 
 class Recorder:
@@ -157,8 +164,9 @@ def stand_in_vllm(recorder: Recorder, model_folder: Path) -> types.ModuleType:
                         if part["type"] == "text":
                             parts.append([message["role"], "text", recorder.prompt_key(part["text"])])
                         else:
-                            name, kind = page_of(part["image_url"]["url"])
-                            parts.append([message["role"], "image", name])
+                            name, kind = page_of(image_of(part))
+                            # How the image is given is part of what the engine is sent.
+                            parts.append([message["role"], part["type"], f"{name} {image_of(part).mode}"])
                 requests.append(parts)
                 replies.append(self.reply(kind))
             recorder.calls.append(

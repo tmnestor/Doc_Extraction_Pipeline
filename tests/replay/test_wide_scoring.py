@@ -30,4 +30,8 @@ def test_every_recorded_case_scores_as_it_did() -> None:
         if new != old
     ]
     assert differing == []
+    # The two lists of field names follow the scores now, and are not what the record holds.
+    for page in [*now["whole"], *recorded["whole"]]:
+        page["result"].pop("missing_fields", None)
+        page["result"].pop("incorrect_fields", None)
     assert now["whole"] == recorded["whole"]

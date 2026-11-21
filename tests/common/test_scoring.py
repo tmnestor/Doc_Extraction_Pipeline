@@ -81,3 +81,32 @@ def test_a_genuine_mismatch_still_scores_below_one():
     result = calculate_field_accuracy_f1(extracted, truth, MONETARY_LIST)
     assert result["f1_score"] < 1.0
     assert result["fn"] == 1
+
+
+def test_the_lists_of_missing_and_incorrect_fields_follow_the_scores() -> None:
+    from common.scoring import score_page
+
+    answer = {
+        "filename": "page.png",
+        "DOCUMENT_TYPE": "RECEIPT",
+        "SUPPLIER_NAME": "Harbour Lane Stationers",
+        "TOTAL_AMOUNT": "$48.20",
+        "INVOICE_DATE": "03/02/2025",
+        "GST_AMOUNT": "NOT_FOUND",
+    }
+    read = {
+        "DOCUMENT_TYPE": "RECEIPT",
+        "SUPPLIER_NAME": "Harbour Lane Stationers",
+        "TOTAL_AMOUNT": "$84.20",
+        "INVOICE_DATE": "NOT_FOUND",
+        "GST_AMOUNT": "$4.38",
+    }
+
+    result = score_page(read, answer, "RECEIPT")
+
+    assert result["missing_fields"] == ["INVOICE_DATE"]
+    assert result["incorrect_fields"] == ["TOTAL_AMOUNT", "GST_AMOUNT"]
+    assert result["correct_fields"] == 2
+    assert result["total_fields"] == 2 + 1 + 2
+    for field in result["missing_fields"] + result["incorrect_fields"]:
+        assert result["field_scores"][field]["f1_score"] < 1.0

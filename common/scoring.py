@@ -490,6 +490,11 @@ def _in_date_order(data: dict[str, Any], document_type: str) -> dict[str, Any]:
     return _keep_rows(data, order, of=len(order))
 
 
+def _is_absent(value: Any) -> bool:
+    """Whether a value is nothing: empty, or the ``NOT_FOUND`` mark."""
+    return not value or str(value).strip().upper() == NOT_FOUND or not str(value).strip()
+
+
 def _mean(values: list[float]) -> float:
     """The mean, added up one value at a time.
 
@@ -549,7 +554,16 @@ def score_page(
     recall = _mean([score["recall"] for score in field_scores.values()])
     median_f1 = _median([score["f1_score"] for score in field_scores.values()])
     perfect = sum(1 for score in field_scores.values() if score["f1_score"] == 1.0)
-    missing, incorrect = _plainly_missing_or_wrong(read, truth)
+    # A field is missing when it has an answer and nothing was read for it, and incorrect when it
+    # was read and scores less than 1. With the perfect fields, the three make up every field scored.
+    missing = [
+        field
+        for field, score in field_scores.items()
+        if _is_absent(read.get(field)) and not _is_absent(truth[field])
+    ]
+    incorrect = [
+        field for field, score in field_scores.items() if score["f1_score"] < 1.0 and field not in missing
+    ]
 
     return {
         "overall_accuracy": mean_f1,
@@ -572,79 +586,3 @@ def score_page(
             "document_type_threshold": 0.8,
         },
     }
-
-
-# ---------------------------------------------------------------------------------------------------
-# The plain lists of missing and wrong fields
-#
-# These two lists in a page's record come from an older, looser comparison than the scores above:
-# money to the nearest dollar, text by shared characters. They are kept as they were so that the
-# record does not change. A field can score 1.0 above and be listed here, and the reverse.
-# ---------------------------------------------------------------------------------------------------
-
-
-def _plainly_missing_or_wrong(read: dict[str, Any], truth: dict[str, Any]) -> tuple[list[str], list[str]]:
-    schema = get_field_schema()
-    missing: list[str] = []
-    incorrect: list[str] = []
-    for field in {name for name in truth if schema.is_evaluation_field(name)}:
-        true_value = str(truth.get(field, "")).strip()
-        read_value = str(read.get(field, "")).strip()
-        if not true_value:
-            continue
-        if not read_value:
-            missing.append(field)
-        elif not _plainly_matches(read_value, true_value):
-            incorrect.append(field)
-    return missing, incorrect
-
-
-def _plainly_matches(read: str, truth: str) -> bool:
-    read, truth = read.lower().strip().strip('"'), truth.lower().strip().strip('"')
-    if read == truth:
-        return True
-    schema = get_field_schema()
-    if schema.resolve_doc_type(read) == schema.resolve_doc_type(truth):
-        return True
-    if "|" in read or "|" in truth:
-        if "not_found" in read or "not_found" in truth:
-            return "not_found" in read and "not_found" in truth
-        read_items, true_items = _items(read), _items(truth)
-        return len(read_items) == len(true_items) and all(
-            _plain_item_matches(a, b) for a, b in zip(read_items, true_items, strict=True)
-        )
-    if _looks_like_money(truth) or _looks_like_money(read):
-        return _same_dollars(read, truth)
-    if _looks_like_identifier(truth) or _looks_like_identifier(read):
-        return re.sub(r"\D", "", read) == re.sub(r"\D", "", truth)
-    return _shares_characters(read, truth)
-
-
-def _plain_item_matches(read: str, truth: str) -> bool:
-    if _looks_like_money(read) or _looks_like_money(truth):
-        return _same_dollars(read, truth)
-    return read.lower().strip() == truth.lower().strip() or _shares_characters(read, truth)
-
-
-def _looks_like_money(value: str) -> bool:
-    return any(char in value for char in "$£€.,") and any(char.isdigit() for char in value)
-
-
-def _same_dollars(read: str, truth: str) -> bool:
-    try:
-        return round(float(re.sub(r"[^\d.]", "", read))) == round(float(re.sub(r"[^\d.]", "", truth)))
-    except (ValueError, TypeError):
-        return False
-
-
-def _looks_like_identifier(value: str) -> bool:
-    digits = sum(char.isdigit() for char in value)
-    return digits >= 8 and digits / len(value.replace(" ", "")) > 0.7
-
-
-def _shares_characters(read: str, truth: str) -> bool:
-    if len(truth) <= 3:
-        return read == truth
-    if not read or not truth:
-        return False
-    return sum(1 for char in read if char in truth) / max(len(read), len(truth)) >= 0.85

@@ -28,11 +28,12 @@ RUNS: dict[str, Path] = {
     "output_gemma12b_w4a16_all165_batched_20261120": CLEAN_PAGES_KEY,
     "output_gemma31b_crumpled_split_step_20261120": CRUMPLED_KEY,
 }
-ORDER_FREE = ("incorrect_fields",)
-"""Lists whose order is not fixed from one run to the next, though their contents are.
+NOT_COMPARED = ("missing_fields", "incorrect_fields")
+"""Two lists in a page's record that are no longer what the reference holds.
 
-The evaluator gathers these by walking a set of field names, and Python does not promise a set's order
-across processes. Everything else in the output, every score included, is compared exactly.
+When the reference was written they came from an older, looser comparison than the scores. From
+21 November 2026 they follow the scores (see `tests/common/test_scoring.py`). Everything else in the
+output, every score included, is compared exactly.
 """
 
 
@@ -52,9 +53,8 @@ def comparable(path: Path) -> list[dict[str, Any]]:
     """A stage's output file as records, for comparing one replay with another."""
     records = [json.loads(line) for line in path.read_text().splitlines()]
     for record in records:
-        for name in ORDER_FREE:
-            if name in record:
-                record[name] = sorted(record[name])
+        for name in NOT_COMPARED:
+            record.pop(name, None)
     return records
 
 

@@ -199,20 +199,16 @@ class AppConfig:
         errors: list[str] = []
         if not merged_preview.get("data_dir"):
             errors.append(
-                "--data-dir is required (via CLI, or pipeline.information_extraction.input.dir "
-                "in config/run_config.yml)"
+                "The folder of pages is not set: give image_dir in the job's environment, or "
+                "pipeline.information_extraction.input.dir in config/run_config.yml"
             )
         if not merged_preview.get("output_dir"):
             errors.append(
-                "--output-dir is required (via CLI, or pipeline.information_extraction.output.dir "
-                "in config/run_config.yml)"
+                "The output folder is not set: give output in the job's environment, or "
+                "pipeline.information_extraction.output.dir in config/run_config.yml"
             )
         if errors:
             raise ConfigError(errors)
-
-        # 3b. Extract vLLM-specific CLI overrides before PipelineConfig merge
-        #     (PipelineConfig doesn't know about max_num_seqs)
-        cli_max_num_seqs = cli_args.pop("max_num_seqs", None)
 
         # 4. Merge with precedence: CLI > YAML > defaults
         pipeline = merge_configs(cli_args, yaml_config, raw_config)
@@ -262,11 +258,6 @@ class AppConfig:
         vllm_config: dict[str, dict] = {"__defaults__": dict(vllm_defaults)}
         for model_name, overrides in vllm_models.items():
             vllm_config[model_name] = {**vllm_defaults, **overrides}
-
-        # 12b. Apply CLI max_num_seqs override (beats YAML per-model and defaults)
-        if cli_max_num_seqs is not None:
-            for key in vllm_config:
-                vllm_config[key]["max_num_seqs"] = cli_max_num_seqs
 
         # 13. Build infrastructure settings
         infra_section = raw_config.get("resources", {}).get("infrastructure", {})

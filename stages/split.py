@@ -1,4 +1,3 @@
-# ruff: noqa: B008 - typer.Option in defaults is the standard Typer pattern
 """Stage 0: Split photographs of several receipts into one image per receipt (GPU).
 
 Runs before classify. Each photograph is shown to the model, which says where each receipt is. A photograph
@@ -23,8 +22,9 @@ With `pipeline.photo_split.enabled: false` every photograph is copied through an
 Every image in the directory is examined: the selection the later stages apply (document types, a limit on the
 number of images) is applied by them, to what this stage writes.
 
-Usage:
-    python -m stages.split --data-dir /data --output-dir /artifacts/split
+Started by ``python -m stages`` with ``KFP_TASK`` naming it:
+
+    KFP_TASK=split model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh
 """
 
 import logging
@@ -33,12 +33,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import typer
 
 from .io import append_jsonl, read_completed_images
 
 logger = logging.getLogger(__name__)
-app = typer.Typer()
 
 IMAGES_DIR = "images"
 RECORDS_FILE = "splits.jsonl"
@@ -315,21 +313,3 @@ def run(
         "Split %d of %d photographs; wrote %d images to %s", cut_up, len(records), written, images_dir
     )
     return images_dir
-
-
-@app.command()
-def main(
-    image_dir: Path = typer.Option(..., "--data-dir", "-d", help="Directory containing the photographs"),
-    output: Path = typer.Option(
-        ..., "--output-dir", "-o", help="Directory to write images/ and splits.jsonl"
-    ),
-    model: str | None = typer.Option(None, "--model", help="Model type"),
-    config: Path | None = typer.Option(None, "--config", help="YAML configuration file"),
-) -> None:
-    """Stage 0: Split photographs of several receipts into one image per receipt."""
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    run(image_dir, output, model_type=model, config_path=config)
-
-
-if __name__ == "__main__":
-    app()

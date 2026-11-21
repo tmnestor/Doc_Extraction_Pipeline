@@ -1,4 +1,3 @@
-# ruff: noqa: B008 - typer.Option in defaults is the standard Typer pattern
 """Stage 2: Field extraction (GPU).
 
 Reads classifications.jsonl, runs type-specific extraction on each image,
@@ -10,11 +9,9 @@ re-clean, and re-evaluate without touching the GPU.
 Supports resumption: if the output file already has partial results from a
 crashed run, skips already-processed images and appends.
 
-Usage:
-    python -m stages.extract \
-        --classifications /artifacts/classifications.jsonl \
-        --image-dir /data \
-        --output /artifacts/raw_extractions.jsonl
+Started by ``python -m stages`` with ``KFP_TASK`` naming it:
+
+    KFP_TASK=extract model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh
 """
 
 import logging
@@ -22,7 +19,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import typer
 
 from .io import (
     RecordSink,
@@ -34,7 +30,6 @@ from .io import (
 )
 
 logger = logging.getLogger(__name__)
-app = typer.Typer()
 
 
 def _record_stage_timing(
@@ -71,48 +66,12 @@ def _record_stage_timing(
         logger.warning("Could not record %s stage timing: %s", stage, err)
 
 
-def _build_cli_args(
-    image_dir: Path,
-    output_path: Path,
-    *,
-    model_type: str | None = None,
-    batch_size: int | None = None,
-    max_num_seqs: int | None = None,
-    verbose: bool | None = None,
-    debug: bool | None = None,
-) -> dict[str, Any]:
-    """Build the CLI-overrides dict for the config cascade (CLI > YAML).
-
-    Every optional key is injected only when the caller passed an explicit
-    value — None means "let YAML win" (run_config.yml pipeline.processing.*).
-    """
-    cli_args: dict[str, Any] = {
-        "data_dir": str(image_dir),
-        "output_dir": str(output_path.parent),
-    }
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-    if batch_size is not None:
-        cli_args["batch_size"] = batch_size
-    if max_num_seqs is not None:
-        cli_args["max_num_seqs"] = max_num_seqs
-    if verbose is not None:
-        cli_args["verbose"] = verbose
-    if debug is not None:
-        cli_args["debug"] = debug
-    return cli_args
-
-
 def run(
-    classifications_path: Path | None,
+    classifications_path: Path,
     image_dir: Path,
     output_path: Path,
     *,
     model_type: str | None = None,
-    batch_size: int | None = None,
-    max_num_seqs: int | None = None,
-    verbose: bool | None = None,
-    debug: bool | None = None,
     config_path: Path | None = None,
 ) -> Path:
     """Extract fields from classified images, write raw_extractions.jsonl.
@@ -128,18 +87,11 @@ def run(
         image_dir: Directory containing the original images.
         output_path: Path to write raw_extractions.jsonl.
         model_type: A registered model.
-        batch_size: Images per batch (None = auto-detect, 1 = sequential).
-        verbose: Tier B output (init/config details). None = read from YAML.
-        debug: Tier C output (dev-noise: PARSING DEBUG, prompt dumps). None = YAML.
         config_path: Optional path to run_config.yml.
 
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    if classifications_path is None:
-        msg = "--classifications is required"
-        raise typer.BadParameter(msg)
-
     from common.app_config import AppConfig
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
     from common.pipeline_ops import open_processor
@@ -168,17 +120,9 @@ def run(
         logger.info("All images already processed -- nothing to do")
         return output_path
 
-    # Build config through the standard cascade. Optional keys are injected
-    # only when the caller passed an explicit value — None means "let YAML win".
-    cli_args = _build_cli_args(
-        image_dir,
-        output_path,
-        model_type=model_type,
-        batch_size=batch_size,
-        max_num_seqs=max_num_seqs,
-        verbose=verbose,
-        debug=debug,
-    )
+    cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_path.parent)}
+    if model_type is not None:
+        cli_args["model_type"] = model_type
 
     app_cfg = AppConfig.load(cli_args, config_path=config_path)
     config = app_cfg.pipeline
@@ -423,54 +367,3 @@ def _plan_batches(
         batch_sizes,
     )
     return batches
-
-
-@app.command()
-def main(
-    classifications: Path | None = typer.Option(
-        None, "--classifications", help="Path to classifications.jsonl from Stage 1"
-    ),
-    image_dir: Path = typer.Option(..., "--data-dir", "-d", help="Directory containing images"),
-    output: Path = typer.Option(..., "--output-dir", "-o", help="Path to write raw_extractions.jsonl"),
-    model: str | None = typer.Option(None, "--model", help="Model type"),
-    batch_size: int | None = typer.Option(None, "--batch-size", help="Images per extraction batch"),
-    max_num_seqs: int | None = typer.Option(
-        None,
-        "--max-num-seqs",
-        help="Override vLLM max_num_seqs (continuous batching). Sweep: 4 → 8 → 16.",
-    ),
-    config: Path | None = typer.Option(None, "--config", help="YAML configuration file"),
-    verbose: bool | None = typer.Option(
-        None,
-        "--verbose/--no-verbose",
-        help="Tier B output (init details). Default: read YAML processing.verbose.",
-    ),
-    debug: bool | None = typer.Option(
-        None,
-        "--debug/--no-debug",
-        help="Tier C output (PARSING DEBUG, prompt dumps). Default: YAML processing.debug.",
-    ),
-) -> None:
-    """Stage 2: Extract fields from classified images (raw responses)."""
-    # Tier A (per-image progress, phase headings) is always at INFO — it's the
-    # only indication the user has that inference is progressing. Verbose/debug
-    # are independent switches for Tiers B/C inside the orchestrator.
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-    run(
-        classifications,
-        image_dir,
-        output,
-        model_type=model,
-        batch_size=batch_size,
-        max_num_seqs=max_num_seqs,
-        verbose=verbose,
-        debug=debug,
-        config_path=config,
-    )
-
-
-if __name__ == "__main__":
-    app()

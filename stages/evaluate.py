@@ -1,4 +1,3 @@
-# ruff: noqa: B008 - typer.Option in defaults is the standard Typer pattern
 """Stage 4: Evaluation against ground truth (CPU).
 
 Reads cleaned_extractions.jsonl, compares against a ground truth CSV,
@@ -6,18 +5,15 @@ computes F1 scores, and writes evaluation_results.jsonl.
 
 No GPU needed -- this stage runs on CPU nodes.
 
-Usage:
-    python -m stages.evaluate \
-        --input /artifacts/cleaned_extractions.jsonl \
-        --ground-truth /data/ground_truth.csv \
-        --output-dir /artifacts/evaluation
+Started by ``python -m stages`` with ``KFP_TASK`` naming it:
+
+    KFP_TASK=evaluate ground_truth=<answer key> output=<folder> bash entrypoint.sh
 """
 
 import logging
 from pathlib import Path
 from typing import Any
 
-import typer
 from rich.console import Console
 from rich.table import Table
 
@@ -27,7 +23,6 @@ from common.field_schema import get_field_schema
 from .io import read_jsonl, write_jsonl
 
 logger = logging.getLogger(__name__)
-app = typer.Typer()
 
 
 def run(
@@ -228,39 +223,3 @@ def _print_summary_table(
         console.print("\n[bold]Document Types:[/bold]")
         for doc_type, count in sorted(doc_types.items()):
             console.print(f"  {doc_type}: {count}")
-
-
-@app.command()
-def main(
-    input_path: Path = typer.Option(
-        ..., "--input", "-i", help="Path to cleaned_extractions.jsonl from Stage 3"
-    ),
-    ground_truth: Path = typer.Option(
-        ..., "--ground-truth", "-g", help="Path to ground truth CSV or JSONL"
-    ),
-    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory for evaluation output"),
-    inference_seconds: float | None = typer.Option(
-        None,
-        "--inference-seconds",
-        help=(
-            "GPU inference wall-clock seconds (extract phase elapsed time, "
-            "computed by entrypoint.sh). Used for throughput in the Execution "
-            "Summary. Falls back to sum of per-image processing_time."
-        ),
-    ),
-) -> None:
-    """Stage 4: Evaluate extractions against ground truth (CPU only)."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-    run(
-        input_path,
-        ground_truth,
-        output_dir,
-        inference_seconds=inference_seconds,
-    )
-
-
-if __name__ == "__main__":
-    app()

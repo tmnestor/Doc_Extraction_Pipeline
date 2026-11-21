@@ -19,7 +19,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import typer
 
 from common.sroie.config import SroieSettings
 from common.sroie.ground_truth import SroieRecord, load_sroie_split
@@ -36,7 +35,6 @@ from common.sroie.scoring import MatchPolicy, score_records
 
 logger = logging.getLogger(__name__)
 
-app = typer.Typer(add_completion=False)
 
 # run_dp resolves this by dotted string in a subprocess, so a typo here
 # would only surface minutes into a GPU run. Named as a constant so a test
@@ -264,28 +262,6 @@ def _finish(
             len(result.errors),
             ", ".join(sorted(result.errors)[:10]),
         )
-        raise typer.Exit(1) from None
+        raise SystemExit(1)
 
     return summary_path
-
-
-@app.command()
-def main(
-    model_type: str = typer.Option(None, "--model-type", help="Override bootstrap.model.type."),
-    max_images: int = typer.Option(None, "--max-images", help="Score only the first N records."),
-    config_path: Path = typer.Option(None, "--config", help="Path to run_config.yml."),
-) -> None:
-    """Run the SROIE benchmark stage."""
-    # Per-image progress is always at INFO — it is the only sign the user
-    # has that inference is advancing. A 347-image run takes ~35 minutes
-    # and writes its artefacts only at the end, so without this the stage
-    # is indistinguishable from a hang.
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-    run(model_type=model_type, max_images=max_images, config_path=config_path)
-
-
-if __name__ == "__main__":
-    app()

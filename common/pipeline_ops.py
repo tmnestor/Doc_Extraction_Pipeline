@@ -8,7 +8,6 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import typer
 from rich.console import Console
 
 from common.field_schema import get_field_schema
@@ -26,7 +25,7 @@ def load_prompt_config(model_type: str) -> dict[str, Any]:
         PromptCatalog().check_extraction_prompts(model_type)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]FATAL: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise SystemExit(1) from None
     return {
         "detection_file": str(Path(__file__).parent.parent / "prompts" / "document_type_detection.yaml"),
         "detection_key": "detection",
@@ -52,7 +51,7 @@ def load_pipeline_configs(
     if not universal_fields:
         console.print("[red]FATAL: No field definitions found in config/field_definitions.yaml[/red]")
         console.print("[yellow]Expected: document_fields section with field lists[/yellow]")
-        raise typer.Exit(1) from None
+        raise SystemExit(1) from None
 
     return prompt_config, universal_fields, field_definitions
 

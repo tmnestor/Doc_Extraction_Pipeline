@@ -1,4 +1,3 @@
-# ruff: noqa: B008 - typer.Option in defaults is the standard Typer pattern
 """Stage 3: Parse and clean raw model responses (CPU).
 
 Reads raw_extractions.jsonl, parses and cleans each raw
@@ -6,17 +5,15 @@ response to produce structured field dicts, and writes cleaned_extractions.jsonl
 
 No GPU needed -- this stage runs on CPU nodes.
 
-Usage:
-    python -m stages.clean \
-        --input /artifacts/raw_extractions.jsonl \
-        --output /artifacts/cleaned_extractions.jsonl
+Started by ``python -m stages`` with ``KFP_TASK`` naming it:
+
+    KFP_TASK=clean output=<folder> bash entrypoint.sh
 """
 
 import logging
 from pathlib import Path
 from typing import Any
 
-import typer
 
 from common.field_schema import get_field_schema
 from common.reply_fields import fields_from_reply
@@ -24,7 +21,6 @@ from common.reply_fields import fields_from_reply
 from .io import read_jsonl, write_jsonl
 
 logger = logging.getLogger(__name__)
-app = typer.Typer()
 
 
 def run(
@@ -132,23 +128,3 @@ def run(
     )
 
     return output_path
-
-
-@app.command()
-def main(
-    input_path: Path = typer.Option(
-        ..., "--input", "-i", help="Path to raw_extractions.jsonl from Stage 2"
-    ),
-    output: Path = typer.Option(..., "--output-dir", "-o", help="Path to write cleaned_extractions.jsonl"),
-    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
-) -> None:
-    """Stage 3: Parse and clean raw model responses (CPU only)."""
-    logging.basicConfig(
-        level=logging.DEBUG if debug else logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-    run(input_path, output)
-
-
-if __name__ == "__main__":
-    app()

@@ -296,7 +296,7 @@ the module by hand — the entrypoint sets the model path, tiling, and GPU env:
 
 ```bash
 KFP_TASK=classify bash entrypoint.sh
-# → python3 -m stages.classify --data-dir <images> --output-dir <CLASSIFICATIONS>
+# → python3 -m stages, which runs the classify stage
 ```
 
 **Input:** a directory of images.

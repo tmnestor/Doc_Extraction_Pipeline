@@ -4,8 +4,7 @@ Provides configuration loading, merging, and validation without
 framework dependencies (no typer, rich, or torch at module level).
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,25 +32,19 @@ class PipelineConfig:
     data_dir: Path
     output_dir: Path
     model_path: Path | None = None
-    ground_truth: Path | None = None
 
     # Processing options
     max_images: int | None = None
     document_types: list[str] | None = None
-    batch_size: int | None = None  # None = auto-detect from VRAM
 
     # Model options
     model_type: str = ""  # always given: bootstrap.model.type, or the model the task names
-    flash_attn: bool = True
     enforce_eager: bool = True  # vLLM only: True = skip CUDA graph compilation
-    dtype: str = "bfloat16"
-    max_new_tokens: int = 2000
     chat_template: str | None = None  # vLLM only: path to a chat-template override, or None
     trace_raw_prompts: bool = False  # debug: persist every VLM prompt/response to JSONL
     trace_path: str | None = None  # explicit trace JSONL path, or None for <output_dir> default
 
     # Model loading options
-    trust_remote_code: bool = True
     device_map: str = "auto"
 
     # Multi-GPU options
@@ -59,8 +52,6 @@ class PipelineConfig:
     data_parallel_size: int | None = None  # None = auto (num_gpus for vLLM, ignored for HF)
 
     # Output options
-    skip_visualizations: bool = False
-    skip_reports: bool = False
     # verbose: Tier B output (init details, batch auto-detect, generation config,
     # per-image field counts). Default False — per-image progress is emitted as
     # logger.info at the stage level regardless of this flag.
@@ -68,9 +59,6 @@ class PipelineConfig:
     # debug: Tier C output (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/
     # response dumps, error tracebacks). Strictly opt-in for developers.
     debug: bool = False
-
-    # Runtime state (set during execution)
-    timestamp: str = field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     def __post_init__(self) -> None:
         """Convert string paths to Path objects."""
@@ -80,8 +68,6 @@ class PipelineConfig:
             self.output_dir = Path(self.output_dir)
         if isinstance(self.model_path, str):
             self.model_path = Path(self.model_path)
-        if isinstance(self.ground_truth, str):
-            self.ground_truth = Path(self.ground_truth)
 
 
 # ============================================================================
@@ -216,48 +202,20 @@ def load_yaml_config(
 
     check_known_keys(raw_config, config_path=config_path.resolve())
 
-    # Fail fast on a retired top-level `io:` block. The classic information-
-    # extraction pipeline's paths moved under `pipeline.information_extraction:`
-    # (2026-06-10); a leftover top-level `io:` would otherwise be SILENTLY ignored.
-    if isinstance(raw_config, dict) and "io" in raw_config:
-        raise ValueError(
-            "What: top-level 'io:' is retired — its keys now live under "
-            "'pipeline.information_extraction:'.\n"
-            f"Where: {config_path} -> top-level 'io:' key.\n"
-            "Expected:\n"
-            "  pipeline:\n"
-            "    information_extraction:\n"
-            "      input:\n"
-            "        dir: <image dir>\n"
-            "        ground_truth: <gt file>\n"
-            "      output:\n"
-            "        dir: <output dir>\n"
-            f"How to fix: move the entire 'io:' block under "
-            "'pipeline.information_extraction:' in "
-            f"{config_path} and delete the top-level 'io:' key."
-        )
-
     # Flatten nested structure for PipelineConfig
     flat_config: dict[str, Any] = {}
     model_cfg = raw_config.get("bootstrap", {}).get("model", {})
     if model_cfg:
         _require_section_keys(
             model_cfg,
-            ["type", "path", "flash_attn", "enforce_eager", "dtype"],
+            ["type", "path", "enforce_eager"],
             "bootstrap.model",
             config_path,
         )
         flat_config["model_type"] = model_cfg.get("type")
         flat_config["model_path"] = model_cfg.get("path")
-        flat_config["flash_attn"] = model_cfg.get("flash_attn")
         flat_config["enforce_eager"] = model_cfg.get("enforce_eager")
-        flat_config["dtype"] = model_cfg.get("dtype")
-        flat_config["max_new_tokens"] = raw_config.get("inference", {}).get("max_new_tokens")
         flat_config["chat_template"] = _resolve_chat_template(model_cfg, config_path)
-
-    inference_cfg = raw_config.get("inference")
-    if inference_cfg:
-        _require_section_keys(inference_cfg, ["max_new_tokens"], "inference", config_path)
 
     # Classic information-extraction pipeline paths live under
     # pipeline.information_extraction.* (retired from top-level io.*, 2026-06-10).
@@ -271,7 +229,6 @@ def load_yaml_config(
             config_path,
         )
         flat_config["data_dir"] = input_cfg.get("dir")
-        flat_config["ground_truth"] = input_cfg.get("ground_truth")
         flat_config["max_images"] = input_cfg.get("max_images")
         flat_config["document_types"] = input_cfg.get("document_types")
 
@@ -279,23 +236,20 @@ def load_yaml_config(
     if output_cfg:
         _require_section_keys(
             output_cfg,
-            ["dir", "skip_visualizations", "skip_reports"],
+            ["dir"],
             "pipeline.information_extraction.output",
             config_path,
         )
         flat_config["output_dir"] = output_cfg.get("dir")
-        flat_config["skip_visualizations"] = output_cfg.get("skip_visualizations")
-        flat_config["skip_reports"] = output_cfg.get("skip_reports")
 
     processing_cfg = raw_config.get("pipeline", {}).get("processing", {})
     if processing_cfg:
         _require_section_keys(
             processing_cfg,
-            ["batch_size", "verbose", "debug"],
+            ["verbose", "debug"],
             "pipeline.processing",
             config_path,
         )
-        flat_config["batch_size"] = processing_cfg.get("batch_size")
         flat_config["verbose"] = processing_cfg.get("verbose")
         flat_config["debug"] = processing_cfg.get("debug")
 
@@ -305,10 +259,6 @@ def load_yaml_config(
     flat_config["num_gpus"] = gpus_cfg.get("num_gpus") if gpus_cfg else None
     flat_config["data_parallel_size"] = gpus_cfg.get("data_parallel_size") if gpus_cfg else None
 
-    # Flatten model loading options (device_map / trust_remote_code now live
-    # under bootstrap.model) into PipelineConfig fields.
-    if "trust_remote_code" in model_cfg:
-        flat_config["trust_remote_code"] = model_cfg["trust_remote_code"]
     if "device_map" in model_cfg:
         flat_config["device_map"] = str(model_cfg["device_map"])
 
@@ -492,15 +442,6 @@ def validate_config(config: PipelineConfig) -> list[str]:
     # Validate num_gpus
     if config.num_gpus < 0:
         errors.append(f"Invalid num_gpus: {config.num_gpus}. Must be >= 0 (0 = auto).")
-
-    # Validate batch_size
-    if config.batch_size is not None and config.batch_size < 1:
-        errors.append(f"Invalid batch_size: {config.batch_size}. Must be >= 1.")
-
-    # Validate dtype
-    valid_dtypes = {"bfloat16", "float16", "float32"}
-    if config.dtype not in valid_dtypes:
-        errors.append(f"Invalid dtype: {config.dtype}. Valid options: {', '.join(valid_dtypes)}")
 
     # Note: image discovery check is done by the caller after discover_images()
     # to avoid scanning the data directory twice.

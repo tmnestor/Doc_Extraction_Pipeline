@@ -16,7 +16,6 @@ bootstrap:
     # outranks default_paths whatever `type` says, which once loaded one model's weights under
     # another's name, so it is left null.
     path: null
-    flash_attn: true       # Use Flash Attention 2 (L4 / A10G are Ampere+ — always on)
     # enforce_eager: true  # vLLM: true = skip CUDA graph compilation (faster startup,
                            #        lower throughput); false = compile graphs (slower
                            #        startup, higher throughput for long runs)
@@ -26,7 +25,6 @@ bootstrap:
     # gpu_memory_utilization 0.90, but watch for OOM at engine load if the
     # soft-token budget is ever raised from 560.
     enforce_eager: false
-    dtype: bfloat16        # Torch dtype (bfloat16, float16, float32)
     # vLLM only: override the chat template used by engine.chat().
     #   none            -> use the model's own template (default)
     #   <path/to/*.jinja> -> serve with this template instead (must exist)
@@ -59,7 +57,6 @@ bootstrap:
 # Inference configuration — generation budget, sampling, vLLM engine,
 # and debug tracing. Everything that shapes how the model produces output.
 inference:
-  max_new_tokens: 3500   # Max tokens for generation (increased to avoid truncation on 30+ row statements)
 
   generation:
     defaults:
@@ -394,8 +391,6 @@ pipeline:
       # image the first completed and still report a plausible score.
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma31b_20260921  # Gemma 31B, DONE
       dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921
-      skip_visualizations: false  # Skip visualization generation
-      skip_reports: false         # Skip report generation
 
   # SROIE benchmark (KFP_TASK=sroie) — ICDAR 2019 Task 3 receipt key
   # information extraction, on a PUBLIC dataset. Separate from
@@ -534,7 +529,6 @@ pipeline:
     default: 10
 
   processing:
-    batch_size: null             # Images per batch (null = auto-detect from VRAM, 1 = sequential)
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)
 

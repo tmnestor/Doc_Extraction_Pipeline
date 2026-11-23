@@ -52,9 +52,9 @@ class VllmSpec:
     # False for models too large to hold one whole engine per GPU — the DP fast
     # path would start N independent engines and OOM.
     supports_data_parallel: bool = True
-    # Whether a request puts the image before the text. The model's chat template renders the two
-    # in the order given, so this is part of what the model is sent. Gemma 4's card recommends the
-    # image first.
+    # Default content order for generate(). Gemma 4's card recommends image
+    # before text; InternVL keeps text-first. An explicit extra["image_first"]
+    # always wins over this default.
     default_image_first: bool = False
 
 

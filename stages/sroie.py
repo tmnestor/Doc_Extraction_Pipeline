@@ -158,7 +158,9 @@ def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[
         try:
             images = [Image.open(p).convert("RGB") for p in chunk]
             try:
-                responses = processor.ask(images, [SROIE_PROMPT] * len(images), settings.max_new_tokens)
+                responses = processor.ask(
+                    images, [SROIE_PROMPT] * len(images), settings.max_new_tokens, text_first=True
+                )
             finally:
                 for image in images:
                     image.close()
@@ -176,6 +178,7 @@ def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[
                                 [image.convert("RGB")],
                                 [SROIE_PROMPT],
                                 settings.max_new_tokens,
+                                text_first=True,
                             )
                         )
                     errors.append(None)

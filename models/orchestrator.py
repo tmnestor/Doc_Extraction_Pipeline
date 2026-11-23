@@ -146,6 +146,8 @@ class DocumentOrchestrator:
         images: list[Image.Image],
         prompts: list[str],
         max_tokens: int,
+        *,
+        text_first: bool = False,
     ) -> list[str]:
         """Put a prompt to the model for each image, all in one engine call; replies in the same order.
 
@@ -156,8 +158,10 @@ class DocumentOrchestrator:
             images: One image a request.
             prompts: The prompt of each request.
             max_tokens: The completion budget of every request.
+            text_first: The form receipts, invoices and the SROIE benchmark have been read with. See
+                ``VllmBackend.chat``.
         """
-        return self._backend.chat(images, prompts, max_tokens)
+        return self._backend.chat(images, prompts, max_tokens, text_first=text_first)
 
     def cache_hit_summary(self) -> dict:
         """Proxy the backend's cumulative prefix-cache hit summary."""
@@ -236,9 +240,12 @@ class DocumentOrchestrator:
         one type, and for a page on its own as a group of one, so that a page is asked the same way
         however it is grouped.
 
-        Two things differ by document type, and they are decided here and nowhere else: a bank
-        statement has its own prompt and a fixed completion budget; every other type has the prompt of
-        its name in the model's prompt file and a budget worked out from the number of its fields.
+        Two things differ by document type, and they are decided here and nowhere else:
+
+        - A bank statement has its own prompt and a fixed completion budget, and is sent in the model's
+          own request form.
+        - Every other type has the prompt of its name in the model's prompt file and a budget worked out
+          from the number of its fields, and is sent with the text before the image.
 
         Args:
             image_paths: The pages.
@@ -262,6 +269,6 @@ class DocumentOrchestrator:
         )
         prompt = PromptCatalog().get_prompt(self._model_type_key, kind)
         budget = self._calculate_max_tokens(len(fields))
-        return self.ask(pages, [prompt] * len(pages), budget)
+        return self.ask(pages, [prompt] * len(pages), budget, text_first=True)
 
     # -- Model info ------------------------------------------------------------

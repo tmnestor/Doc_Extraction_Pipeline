@@ -2712,130 +2712,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE001_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE002_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE003_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE004_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE005_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE006_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE007_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE008_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE009_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE010_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -2849,130 +2846,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE011_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE012_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE013_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE014_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE015_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE016_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE017_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE018_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE019_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE020_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -2986,130 +2980,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE021_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE022_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE023_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE024_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE025_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE026_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE027_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE028_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE029_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE030_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -3123,130 +3114,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE031_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE032_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE033_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE034_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE035_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE036_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE037_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE038_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE039_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE040_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -3260,130 +3248,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE041_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE042_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE043_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE044_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE045_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE046_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE047_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE048_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE049_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE050_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -3397,70 +3382,67 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
           [
             "user",
             "image_pil",
             "PAGE051_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE052_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE053_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE054_invoice.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "6a0a108860f8"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE055_invoice.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "6a0a108860f8"
           ]
         ]
       ],
@@ -3474,130 +3456,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
           [
             "user",
             "image_pil",
             "PAGE001_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE002_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE003_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE004_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE005_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE006_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE007_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE008_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE009_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE010_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ]
       ],
@@ -3611,130 +3590,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
           [
             "user",
             "image_pil",
             "PAGE011_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE012_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE013_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE014_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE015_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE016_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE017_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE018_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE019_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE020_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ]
       ],
@@ -3748,130 +3724,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
           [
             "user",
             "image_pil",
             "PAGE021_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE022_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE023_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE024_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE025_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE026_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE027_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE028_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE029_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE030_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ]
       ],
@@ -3885,130 +3858,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
           [
             "user",
             "image_pil",
             "PAGE031_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE032_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE033_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE034_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE035_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE036_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE037_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE038_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE039_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE040_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ]
       ],
@@ -4022,130 +3992,127 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
           [
             "user",
             "image_pil",
             "PAGE041_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE042_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE043_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE044_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE045_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE046_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE047_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE048_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE049_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ],
         [
           [
             "user",
-            "image_pil",
-            "PAGE050_receipt.png RGB"
+            "text",
+            "e142bc42bbb4"
           ],
           [
             "user",
-            "text",
-            "e142bc42bbb4"
+            "image_pil",
+            "PAGE050_receipt.png RGB"
           ]
         ]
       ],
@@ -4159,70 +4126,67 @@
       "engine": 1,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
           [
             "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
             "image_pil",
             "PAGE051_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE052_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE053_receipt.png RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "e142bc42bbb4"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "PAGE054_receipt.png RGB"
-          ],
-          [
-            "user",
-            "text",
-            "e142bc42bbb4"
           ]
         ],
         [
           [
             "user",
-            "image_pil",
-            "PAGE055_receipt.png RGB"
+            "text",
+            "e142bc42bbb4"
           ],
           [
             "user",
-            "text",
-            "e142bc42bbb4"
+            "image_pil",
+            "PAGE055_receipt.png RGB"
           ]
         ]
       ],
@@ -6403,106 +6367,103 @@
       "engine": 3,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
           [
             "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
             "image_pil",
             "image 100x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 101x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 102x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 103x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 104x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 105x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 106x150 RGB"
-          ],
-          [
-            "user",
-            "text",
-            "4faf339e27dd"
           ]
         ],
         [
           [
             "user",
-            "image_pil",
-            "image 107x150 RGB"
+            "text",
+            "4faf339e27dd"
           ],
           [
             "user",
-            "text",
-            "4faf339e27dd"
+            "image_pil",
+            "image 107x150 RGB"
           ]
         ]
       ],
@@ -6516,58 +6477,55 @@
       "engine": 3,
       "others": {
         "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
         "use_tqdm": false
       },
       "requests": [
         [
           [
             "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
             "image_pil",
             "image 108x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 109x150 RGB"
-          ],
+          ]
+        ],
+        [
           [
             "user",
             "text",
             "4faf339e27dd"
-          ]
-        ],
-        [
+          ],
           [
             "user",
             "image_pil",
             "image 110x150 RGB"
-          ],
-          [
-            "user",
-            "text",
-            "4faf339e27dd"
           ]
         ],
         [
           [
             "user",
-            "image_pil",
-            "image 111x150 RGB"
+            "text",
+            "4faf339e27dd"
           ],
           [
             "user",
-            "text",
-            "4faf339e27dd"
+            "image_pil",
+            "image 111x150 RGB"
           ]
         ]
       ],

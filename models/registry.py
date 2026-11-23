@@ -105,8 +105,8 @@ register_vllm_model(
         model_type="gemma4-31b-w4a16-vllm",
         prompt_file="extraction_prompts.yaml",
         description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
-        # Thinking off. This model's chat template takes a request without the argument as
-        # thinking off too (rendered both ways on 21 November 2026), so this states the default.
+        # Gemma's chat template reasons by default and honours enable_thinking,
+        # so it is suppressed here rather than through a template file.
         chat_template_kwargs={"enable_thinking": False},
         # The weights exceed a single card, so one engine on each card is
         # impossible and the data-parallel path must not be taken.

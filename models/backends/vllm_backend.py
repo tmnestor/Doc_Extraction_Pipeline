@@ -7,7 +7,9 @@ a prompt for each, sent to ``LLM.chat`` as one call so that the engine's schedul
 An image is handed over as a PIL image (the ``image_pil`` content part), not encoded into a URL for
 vLLM to decode again. vLLM prepares it with the model's own Hugging Face processor and works out where
 the image's placeholder tokens go in the prompt. The order of the image and the text in a request is the order the
-model's chat template renders them in, so it is part of what the model is sent.
+model's chat template renders them in, so it is part of what the model is sent. Every request has the
+one form: the order the model's registration gives (for both Gemma 4 models the text first), with the
+chat-template arguments the registration gives.
 """
 
 import logging
@@ -79,8 +81,6 @@ class VllmBackend:
         images: list[Image.Image],
         prompts: list[str],
         max_tokens: int,
-        *,
-        text_first: bool = False,
     ) -> list[str]:
         """Send one request for each image, all in one engine call, and give the replies in order.
 
@@ -88,9 +88,6 @@ class VllmBackend:
             images: One image a request.
             prompts: The prompt of each request, in the same order.
             max_tokens: The completion budget of every request.
-            text_first: The request form receipts, invoices and the SROIE benchmark have been read
-                with: the text before the image, and no chat-template arguments. False is the model's
-                own form: its own order, with the arguments its registration gives.
 
         Raises:
             ValueError: If there is not one prompt for each image.
@@ -107,13 +104,12 @@ class VllmBackend:
             return []
         from vllm import SamplingParams
 
-        image_first = False if text_first else self._default_image_first
         conversations = [
-            self._conversation(image, prompt, image_first=image_first)
+            self._conversation(image, prompt, image_first=self._default_image_first)
             for image, prompt in zip(images, prompts, strict=True)
         ]
         template_arguments: dict[str, Any] = {}
-        if self._chat_template_kwargs and not text_first:
+        if self._chat_template_kwargs:
             template_arguments["chat_template_kwargs"] = dict(self._chat_template_kwargs)
         outputs = self.model.chat(
             messages=conversations,

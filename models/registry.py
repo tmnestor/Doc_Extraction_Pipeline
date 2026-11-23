@@ -105,14 +105,17 @@ register_vllm_model(
         model_type="gemma4-31b-w4a16-vllm",
         prompt_file="extraction_prompts.yaml",
         description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
-        # Gemma's chat template reasons by default and honours enable_thinking,
-        # so it is suppressed here rather than through a template file.
+        # Thinking off. This model's chat template takes a request without the argument as
+        # thinking off too (rendered both ways on 21 November 2026), so this states the default.
         chat_template_kwargs={"enable_thinking": False},
         # The weights exceed a single card, so one engine on each card is
         # impossible and the data-parallel path must not be taken.
         supports_data_parallel=False,
-        # The model card recommends image content before the text.
-        default_image_first=True,
+        # The text before the image, for every task. The model card's examples put the image first,
+        # but that order was measured on receipts and invoices on 24 November 2026 and cost 16% of
+        # extract time for no gain: with the text first the engine reuses its work on the prompt
+        # from one page to the next.
+        default_image_first=False,
     )
 )
 
@@ -140,6 +143,7 @@ register_vllm_model(
         description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
         chat_template_kwargs={"enable_thinking": False},
         supports_data_parallel=True,
-        default_image_first=True,
+        # The text before the image, as for the 31B and for the reason given there.
+        default_image_first=False,
     )
 )

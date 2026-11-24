@@ -91,7 +91,11 @@ def test_detect_many_gives_each_page_the_result_the_single_call_gives(pages):
 
     assert many == singles
     assert [r["raw_response"] for r in many] == REPLIES
-    assert [r["document_type"] for r in many] == ["BANK_STATEMENT", "RECEIPT", "BANK_STATEMENT"]
+    assert [r["document_type"] for r in many] == [
+        "BANK_STATEMENT",
+        "INVOICE",
+        "BANK_STATEMENT",
+    ]  # prose is given the fallback type
     assert [call["n"] for call in one_backend.many_calls] == [1, 1, 1]
     assert one_backend.many_calls[0]["prompts"] == many_backend.many_calls[0]["prompts"][:1]
     assert one_backend.many_calls[0]["max_tokens"] == many_backend.many_calls[0]["max_tokens"]
@@ -152,7 +156,11 @@ def test_a_failed_shared_call_is_retried_one_page_at_a_time(pages, caplog):
         records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=3, verbose=False)
 
     assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
-    assert [r["document_type"] for r in records] == ["BANK_STATEMENT", "RECEIPT", "BANK_STATEMENT"]
+    assert [r["document_type"] for r in records] == [
+        "BANK_STATEMENT",
+        "INVOICE",
+        "BANK_STATEMENT",
+    ]  # prose is given the fallback type
     assert "retrying one at a time" in caplog.text
 
 
@@ -189,3 +197,20 @@ def test_a_missing_or_invalid_classify_batch_size_fails_with_a_diagnostic(block)
     assert "Where:" in message and str(RUN_CONFIG) in message and "pipeline.batching" in message
     assert "Expected:" in message and "classify: 64" in message
     assert "How to fix:" in message
+
+
+def test_a_reply_that_only_names_a_type_in_words_is_given_the_fallback_type() -> None:
+    """The word-based reading belonged to an older prompt and is gone: nothing is guessed from words."""
+    from common import classification
+
+    for reply in ("This is a bank statement.", "INVOICE", "A receipt from a shop.", ""):
+        assert classification.document_type(reply, "UNIVERSAL") == "UNIVERSAL"
+
+
+def test_the_detection_file_holds_one_prompt_and_the_two_tables_the_rules_read() -> None:
+    import yaml
+
+    detection = yaml.safe_load(DETECTION_FILE.read_text())
+
+    assert list(detection) == ["prompts", "column_roles", "classification_evidence"]
+    assert list(detection["prompts"]) == ["detection"]

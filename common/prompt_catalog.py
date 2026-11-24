@@ -111,22 +111,7 @@ class PromptCatalog:
             text = text.format(**format_args)
         return text
 
-    # -- Entry point 2: Discovery / introspection -----------------------------
-
-    # -- Entry point 3: Detection config (structured data) --------------------
-
-    def get_detection_config(self) -> dict[str, Any]:
-        """Load the full detection YAML as a dict.
-
-        Provides ``type_mappings`` and ``fallback_keywords`` for document type
-        normalization.  Runtime settings (``fallback_type``, token budgets)
-        live in ``run_config.yml`` and are accessed via ``Settings``.
-
-        Returns:
-            Parsed dict from ``document_type_detection.yaml``.
-        """
-        path = self._dir / "document_type_detection.yaml"
-        return self._load_yaml(path)
+    # -- Entry point 2: the classification rules ----------------------------
 
     def get_column_roles(self) -> dict[str, list[str]]:
         """Load semantic column-role -> header-keyword lists from detection YAML.

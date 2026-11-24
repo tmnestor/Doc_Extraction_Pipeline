@@ -57,11 +57,11 @@ If you want to adapt this to a new task, the pattern to copy is
 flowchart TD
     A[Image file] --> B["detect_and_classify_document(image_path)"]
     B --> C[Load detection prompt<br/>key = 'detection']
-    C --> D["generate(image, prompt, max_tokens=150)<br/>InternVL3.5 vLLM .chat()"]
+    C --> D["ask(images, prompts, max_tokens=150)<br/>one vLLM .chat() call for a group of pages"]
     D --> E[Raw model response text]
     E --> F{classification<br/>.document_type}
-    F -->|COLUMNS label present| G[Evidence-based derivation]
-    F -->|no COLUMNS label| H[Legacy keyword fallback]
+    F -->|answers found| G[Type from the rules]
+    F -->|no answers found| H[The fallback type]
     G --> I[document_type + confidence + column_mapping]
     H --> I
     I --> J[Downstream: type-specific<br/>extraction prompt]
@@ -128,9 +128,8 @@ Why this shape:
   existing facts, the fix is to add a *new observable question* (as `TRAVEL` was
   added): never to ask the model for the final label.
 
-> The file also contains a `detection_complex` prompt that *does* ask the model
-> to name the type directly. It is kept for reference/fallback but is **not** the
-> default path.
+> There is one classification prompt, `detection`. Two older ones that asked the
+> model to name the type were removed on 24 November 2026: nothing sent them.
 
 ---
 
@@ -147,7 +146,7 @@ type heuristics:
 flowchart TD
     R[Raw response] --> S[Strip &lt;think&gt;...&lt;/think&gt; blocks]
     S --> T{COLUMNS label<br/>present?}
-    T -->|no| L[Return None →<br/>legacy keyword fallback]
+    T -->|no| L[Return None →<br/>the fallback type]
     T -->|yes| U[Extract COLUMNS / PAID / ROWS / TRAVEL]
     U --> V[Match headers → column_mapping<br/>read paid + travel flags]
     V --> W[Walk classification_evidence.rules<br/>top-down, first match wins]
@@ -195,12 +194,12 @@ prompt + parser change too: see
 [Reusing this for a new task](#reusing-this-for-a-new-task).
 
 > **`default: INVOICE`, not `none`.** A remote smoke (2026-06-20) showed
-> `default: none` deferred unmatched docs to the keyword path and sent ~21% of
+> `default: none` left unmatched docs without a type and sent ~21% of
 > the dev set to `UNIVERSAL` (extracted with the generic 33-field prompt),
 > dropping F1 mean 0.650 → 0.626. `INVOICE` restores parity and routes unmatched
 > docs to the focused invoice prompt. Because the default is a hard type (not
-> `none`), an enriched response that contains a `COLUMNS` label **never** falls
-> through to the legacy keyword path: see [Fallback path](#fallback-path).
+> `none`), a reply whose answers can be read **never** gets the fallback type:
+> see [Fallback path](#fallback-path).
 
 Design points worth stealing:
 
@@ -246,18 +245,20 @@ flag, don't try to invent columns the model can't see.
 
 ### Fallback path
 
-The legacy keyword path is now reached in **one** situation: the response does
-not contain a `COLUMNS` label at all (so `_parse_enriched` returns `None`). The
-orchestrator then falls back to keyword matching (`type_mappings` /
-`fallback_keywords` in the same YAML) and ultimately to
-`classification.fallback_type` (`UNIVERSAL`).
+A reply whose answers cannot be read in any of the three forms (labelled, by
+position, or under headings) gives the page `classification.fallback_type`
+(`UNIVERSAL`). Nothing is guessed from words in the reply.
 
-Because `classification_evidence.default` is a hard type (`INVOICE`), an enriched
-response that *does* contain a `COLUMNS` label can never defer to the keyword
-path: an unmatched-but-enriched doc resolves to `INVOICE`, not `UNIVERSAL`.
-(Setting `default: none` would re-enable that deferral; it was deliberately
-disabled: see the note above.) Unrecognised labels do **not** fail fast here:
-they resolve to the configured fallback type.
+Until 24 November 2026 such a reply was matched against type names and keywords
+(`type_mappings` and `fallback_keywords` in the same YAML). That format belonged
+to an older prompt, which asked the model to name the type. Of 12,840 recorded
+classification replies it was reached by 251, all from runs of that older prompt,
+and by none since the four questions were asked. It was removed with its tables.
+
+Because `classification_evidence.default` is a hard type (`INVOICE`), a reply
+whose answers can be read but fit no rule resolves to `INVOICE`, not `UNIVERSAL`.
+(Setting `default: none` would send those to the fallback type instead; it was
+deliberately disabled: see the note above.)
 
 ---
 
@@ -322,7 +323,7 @@ there are no hardcoded Python defaults):
 ```yaml
 pipeline:
   classification:
-    fallback_type: UNIVERSAL   # used when evidence + keywords both fail
+    fallback_type: UNIVERSAL   # the type of a page whose reply cannot be read
 
   token_budgets:
     classify: 150              # max tokens for the detection response

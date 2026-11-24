@@ -11,8 +11,7 @@ A reply may give its answers three ways, all read here:
 - by position alone: ``1. Date | Debit | Balance`` / ``2. NO`` / ``3. 14`` / ``4. NO``;
 - as markdown headings with each answer on a later line.
 
-A reply in none of these forms is matched against the type names and keywords in the same file, and
-failing that the page gets the fallback type.
+A reply in none of these forms gives the page the fallback type.
 """
 
 import re
@@ -44,10 +43,10 @@ _STARTS_WITH_A_NUMBER = re.compile(r"^(\d+)\b")
 
 
 @lru_cache(maxsize=1)
-def _settings() -> tuple[dict[str, list[str]], dict[str, Any], dict[str, Any]]:
-    """The column roles, the rules and the whole detection file, read and checked once."""
+def _settings() -> tuple[dict[str, list[str]], dict[str, Any]]:
+    """The column roles and the rules, read and checked once."""
     catalog = PromptCatalog()
-    return catalog.get_column_roles(), catalog.get_classification_evidence(), catalog.get_detection_config()
+    return catalog.get_column_roles(), catalog.get_classification_evidence()
 
 
 def document_type(reply: str, fallback_type: str) -> str:
@@ -58,7 +57,7 @@ def document_type(reply: str, fallback_type: str) -> str:
         fallback_type: The type of a page whose reply says nothing that can be read.
     """
     from_answers = _type_from_answers(reply)
-    return from_answers if from_answers is not None else _type_from_words(reply, fallback_type)
+    return from_answers if from_answers is not None else fallback_type
 
 
 def _type_from_answers(reply: str) -> str | None:
@@ -86,7 +85,7 @@ def _type_from_answers(reply: str) -> str | None:
         # the headings: a sentence must never be, or a receipt's prose becomes a statement's columns.
         headings = next((_headings(line.strip()) for line in text.splitlines() if line.count("|") >= 2), [])
 
-    roles, evidence, _ = _settings()
+    roles, evidence = _settings()
     present = (
         {role for role, heading in _roles_of(headings, roles).items() if heading} if headings else set()
     )
@@ -171,16 +170,3 @@ def _rule_fits(when: dict[str, Any], present: set[str], paid: bool, travel: bool
     if "paid" in when and bool(when["paid"]) != paid:
         return False
     return not ("travel" in when and bool(when["travel"]) != travel)
-
-
-def _type_from_words(reply: str, fallback_type: str) -> str:
-    """The type a reply names in words, by the names and then the keywords in the detection file."""
-    _, _, detection = _settings()
-    lowered = reply.lower().strip()
-    for variant, settled in detection.get("type_mappings", {}).items():
-        if variant.lower() in lowered:
-            return settled
-    for settled, keywords in detection.get("fallback_keywords", {}).items():
-        if any(keyword in lowered for keyword in keywords):
-            return settled
-    return fallback_type

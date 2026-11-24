@@ -195,6 +195,15 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         "the answer key, e.g. ground_truth=/data/pages/ground_truth.jsonl",
     )
     assert model is not None and output is not None
+    if task == "evaluate" and ground_truth is not None and Path(ground_truth).suffix != ".jsonl":
+        variable, key = _GROUND_TRUTH
+        raise SettingsError(
+            f"What: the answer key {ground_truth!r} is not a JSON lines file. That is the one format read.\n"
+            f"Where: the environment variable {variable}, or the key {key} in {config_path.resolve()}.\n"
+            f"Expected: a file ending .jsonl with one answer a line, each holding the page's file name "
+            f"and its own document type's fields, e.g. {variable}=/data/pages/ground_truth.jsonl\n"
+            f"How to fix: name the set's ground_truth.jsonl, or write the key out as JSON lines."
+        )
 
     return StageSettings(
         task=task,

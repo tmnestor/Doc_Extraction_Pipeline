@@ -1,6 +1,6 @@
 """Stage 4: Evaluation against ground truth (CPU).
 
-Reads cleaned_extractions.jsonl, compares against a ground truth CSV,
+Reads cleaned_extractions.jsonl, compares against the answer key (JSON lines),
 computes F1 scores, and writes evaluation_results.jsonl.
 
 No GPU needed -- this stage runs on CPU nodes.
@@ -18,7 +18,6 @@ from rich.console import Console
 from rich.table import Table
 
 from common import scoring
-from common.field_schema import get_field_schema
 
 from .io import read_jsonl, write_jsonl
 
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def run(
     cleaned_extractions_path: Path,
-    ground_truth_csv: Path,
+    ground_truth: Path,
     output_dir: Path,
     *,
     inference_seconds: float | None = None,
@@ -41,7 +40,7 @@ def run(
 
     Args:
         cleaned_extractions_path: Path to cleaned_extractions.jsonl from Stage 3.
-        ground_truth_csv: Path to ground truth CSV.
+        ground_truth: The answer key, a JSON lines file.
         output_dir: Directory for evaluation output files.
         inference_seconds: GPU inference wall-clock seconds (extract phase
             elapsed time, set by entrypoint.sh). Used for throughput in the
@@ -63,11 +62,7 @@ def run(
         cleaned_extractions_path,
     )
 
-    answers = scoring.load_answer_key(Path(ground_truth_csv))
-    # A CSV key has every type's columns in every row, so the fields to score come from the schema.
-    fields_of_type = (
-        None if Path(ground_truth_csv).suffix == ".jsonl" else get_field_schema().get_all_doc_type_fields()
-    )
+    answers = scoring.load_answer_key(Path(ground_truth))
 
     # Evaluate each record
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +90,6 @@ def run(
                 dict(record.get("extracted_data", {})),
                 answer,
                 record["document_type"],
-                fields_of_type=fields_of_type,
             )
         else:
             evaluation = {"error": f"No ground truth for {image_name}", "overall_accuracy": 0}

@@ -18,8 +18,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
 from .field_schema import get_field_schema
 
 logger = logging.getLogger(__name__)
@@ -30,22 +28,25 @@ NOT_FOUND = "NOT_FOUND"
 # The answer key
 # ---------------------------------------------------------------------------------------------------
 
-_NAME_COLUMNS = ("image_file", "filename", "image_name", "file")
-
 
 def load_answer_key(path: Path) -> dict[str, dict[str, Any]]:
     """The answer key as a map from a page's file name to its answer.
 
-    A ``.jsonl`` file holds one answer a line, each with only its own document type's fields. Any other
-    file is read as CSV, with every column for every row.
+    The key is a JSON lines file: one answer a line, each with the page's file name and only its own
+    document type's fields. A page is scored on exactly the fields its answer carries.
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If it holds no answers, or a CSV has no column naming the page.
+        ValueError: If it is not a ``.jsonl`` file, or holds no answers.
     """
     if not path.exists():
         raise FileNotFoundError(f"Ground truth file not found: {path}")
-    answers = _load_jsonl(path) if path.suffix == ".jsonl" else _load_csv(path)
+    if path.suffix != ".jsonl":
+        raise ValueError(
+            f"The answer key {path} is not a JSON lines file. Expected a file ending .jsonl with one "
+            f"answer a line; name the set's ground_truth.jsonl in ground_truth."
+        )
+    answers = _load_jsonl(path)
     if not answers:
         raise ValueError(
             f"Ground truth loaded from {path} but contains 0 records. Check file format and contents."
@@ -65,18 +66,6 @@ def _load_jsonl(path: Path) -> dict[str, dict[str, Any]]:
         if name:
             answers[str(name)] = record
     return answers
-
-
-def _load_csv(path: Path) -> dict[str, dict[str, Any]]:
-    try:
-        # Every cell as text, or pandas turns the text "False" into the boolean False.
-        table = pd.read_csv(path, dtype=str)
-    except Exception as err:
-        raise ValueError(f"Error reading CSV file: {err}") from err
-    column = next((name for name in _NAME_COLUMNS if name in table.columns), None)
-    if column is None:
-        raise ValueError(f"No image identifier column found. Expected one of: {list(_NAME_COLUMNS)}")
-    return {str(row[column]): row.to_dict() for _, row in table.iterrows() if not pd.isna(row[column])}
 
 
 def find_answer(answers: dict[str, dict[str, Any]], image_path: str) -> dict[str, Any]:
@@ -519,8 +508,6 @@ def score_page(
     read: dict[str, Any],
     answer: dict[str, Any],
     document_type: str,
-    *,
-    fields_of_type: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """A page's fields scored against its answer.
 
@@ -528,20 +515,13 @@ def score_page(
         read: The page's fields as the clean stage left them.
         answer: The page's answer from the key.
         document_type: The page's document type.
-        fields_of_type: For a CSV key only: the fields of each document type, by lower-case type. A CSV
-            row has every type's columns, so the fields to score come from here. With None, the fields
-            scored are the answer's own.
 
     Returns:
         The record the evaluate stage writes for the page, without its name and type.
     """
-    if fields_of_type is None:
-        scored_fields = [
-            name for name in answer if name not in ("filename", "image_name", "image_file", "file")
-        ]
-    else:
-        scored_fields = fields_of_type.get(document_type.lower(), fields_of_type.get("invoice", []))
-    truth = {field: answer[field] for field in scored_fields if field in answer}
+    # The fields scored are the answer's own: everything in it but the name of its page.
+    names_of_the_page = ("filename", "image_name", "image_file", "file")
+    truth = {name: value for name, value in answer.items() if name not in names_of_the_page}
 
     # Credit rows go before the date ordering, so that the ordering sees lists already in step.
     read = _in_date_order(_without_credit_rows(read, document_type), document_type)

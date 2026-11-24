@@ -110,3 +110,33 @@ def test_the_lists_of_missing_and_incorrect_fields_follow_the_scores() -> None:
     assert result["total_fields"] == 2 + 1 + 2
     for field in result["missing_fields"] + result["incorrect_fields"]:
         assert result["field_scores"][field]["f1_score"] < 1.0
+
+
+def test_the_answer_key_is_read_from_json_lines_and_scored_on_the_fields_it_carries(tmp_path) -> None:
+    import json
+
+    from common.scoring import find_answer, load_answer_key, score_page
+
+    key = tmp_path / "ground_truth.jsonl"
+    answer = {"filename": "page_one.png", "DOCUMENT_TYPE": "RECEIPT", "SUPPLIER_NAME": "Wattle Lane Stores"}
+    key.write_text(json.dumps(answer) + "\n\n")
+
+    found = find_answer(load_answer_key(key), "/somewhere/page_one.png")
+    scored = score_page(
+        {"DOCUMENT_TYPE": "RECEIPT", "SUPPLIER_NAME": "Wattle Lane Stores"}, found, "RECEIPT"
+    )
+
+    assert sorted(scored["field_scores"]) == ["DOCUMENT_TYPE", "SUPPLIER_NAME"]
+    assert scored["overall_accuracy"] == 1.0
+
+
+@pytest.mark.parametrize("name", ["ground_truth.csv", "ground_truth.json"])
+def test_an_answer_key_in_another_format_is_refused(tmp_path, name: str) -> None:
+    from common.scoring import load_answer_key
+
+    key = tmp_path / name
+    key.write_text("filename,SUPPLIER_NAME\npage_one.png,Wattle Lane Stores\n")
+
+    with pytest.raises(ValueError, match="not a JSON lines file") as refused:
+        load_answer_key(key)
+    assert str(key) in str(refused.value) and ".jsonl" in str(refused.value)

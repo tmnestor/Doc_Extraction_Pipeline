@@ -95,7 +95,7 @@ it, what it should look like and how to mend it.
 | `model` | A registered model | every task | `bootstrap.model.type` | unchanged |
 | `image_dir` | The folder of pages | `split`, `classify`, `extract` | `pipeline.information_extraction.input.dir` | unchanged |
 | `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
-| `ground_truth` | The answer key | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
+| `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `sroie_max_images` | Score only the first N receipts of the benchmark | optional, `sroie` only | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |

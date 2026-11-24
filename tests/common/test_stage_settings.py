@@ -112,6 +112,30 @@ def test_a_missing_image_folder_is_refused_naming_the_variable_and_the_key(tmp_p
     )
 
 
+@pytest.mark.parametrize(
+    "key", ["/data/pages/ground_truth.csv", "/data/pages/ground_truth", "answers.json"]
+)
+def test_an_answer_key_that_is_not_json_lines_stops_evaluate_before_any_work(key: str) -> None:
+    with pytest.raises(SettingsError) as raised:
+        resolve("evaluate", {**USUAL, "ground_truth": key}, RUN_CONFIG)
+
+    assert_diagnostic(
+        str(raised.value),
+        key,
+        "ground_truth",
+        "pipeline.information_extraction.input.ground_truth",
+        ".jsonl",
+    )
+
+
+def test_the_format_of_the_answer_key_is_checked_for_evaluate_alone() -> None:
+    usual = {**USUAL, "ground_truth": "/data/pages/ground_truth.csv"}
+
+    assert resolve("classify", usual, RUN_CONFIG).ground_truth == Path("/data/pages/ground_truth.csv")
+    key = "/data/pages/ground_truth.jsonl"
+    assert resolve("evaluate", {**USUAL, "ground_truth": key}, RUN_CONFIG).ground_truth == Path(key)
+
+
 def test_the_answer_key_is_needed_to_evaluate_and_not_to_classify(tmp_path: Path) -> None:
     path = config_with(
         tmp_path, lambda raw: raw["pipeline"]["information_extraction"]["input"].update(ground_truth=None)

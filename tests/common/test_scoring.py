@@ -140,3 +140,25 @@ def test_an_answer_key_in_another_format_is_refused(tmp_path, name: str) -> None
     with pytest.raises(ValueError, match="not a JSON lines file") as refused:
         load_answer_key(key)
     assert str(key) in str(refused.value) and ".jsonl" in str(refused.value)
+
+
+@pytest.mark.parametrize("field", ["LINE_ITEM_PRICES", "LINE_ITEM_TOTAL_PRICES"])
+def test_a_single_price_is_compared_as_money_like_a_list_of_prices(field: str) -> None:
+    """Until 24 November 2026 one price alone was compared as text: a right price without its dollar sign
+    lost credit, and a wrong price a digit away earned most of it."""
+    assert calculate_field_accuracy_f1("48.22", "$48.22", field)["f1_score"] == 1.0
+    assert calculate_field_accuracy_f1("$48.22", "$48.22", field)["f1_score"] == 1.0
+    assert calculate_field_accuracy_f1("$15.00", "$16.00", field)["f1_score"] == 0.0
+    assert calculate_field_accuracy_f1("$15.00 | $3.10", "$15.00 | $3.10", field)["f1_score"] == 1.0
+
+
+def test_the_gst_flag_is_cleaned_as_text_and_scored_as_yes_or_no() -> None:
+    from common import reply_fields
+    from common.field_schema import get_field_schema
+
+    entry = get_field_schema().field_named("IS_GST_INCLUDED")
+
+    assert entry is not None and (entry.cleaned_as, entry.scored_as) == ("text", "yes_no")
+    assert reply_fields.clean_value("IS_GST_INCLUDED", " **Yes** ") == "Yes"
+    assert calculate_field_accuracy_f1("Yes", "true", "IS_GST_INCLUDED")["f1_score"] == 1.0
+    assert calculate_field_accuracy_f1("NO", "true", "IS_GST_INCLUDED")["f1_score"] == 0.0

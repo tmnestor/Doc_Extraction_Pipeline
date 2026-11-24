@@ -1,19 +1,24 @@
-"""Per-stage timing: inference vs wall clock vs engine startup.
+"""A run's time on the cards: one row for each stage that uses them, kept in the output folder.
 
-``entrypoint.sh`` times each stage from OUTSIDE the python process, so its
-number bundles engine startup into "inference time" and knows nothing about
-data parallelism. Two consequences:
+``classify`` and ``extract`` each note what they spent in ``<output>/.stage_timing.jsonl``, and the
+evaluate stage reads the rows for its summary. That file is the one record of a run's time.
 
-* On a short run startup is a large share of wall clock (measured at 41%
-  on one 347-image benchmark), so throughput computed from it understates
-  the model badly.
-* Under data parallelism the workers run concurrently, so elapsed inference
-  is the SLOWEST worker's total, not the sum. Summing reports total compute
-  and understates throughput by roughly the GPU count.
+A row holds two times, because they answer different questions:
 
-Each GPU stage writes one row here; ``evaluate`` aggregates them. Timing is
-observability, so every read path degrades quietly: a missing or corrupt
-sidecar falls back to the entrypoint's number rather than failing a run.
+* ``inference_seconds`` is the model's time: reading pages, apart from starting the engine. On a short
+  run starting the engine is a large share of the whole (41% on one run of 347 receipts), so a rate
+  worked out from the whole understates the model badly. With an engine on each card the cards work at
+  once, so this is the SLOWEST card's time and not the sum: the sum is the work done, and would
+  understate the rate by about the number of cards.
+* ``wall_clock`` is the whole of the stage, engine start and all.
+
+Until 24 November 2026 a run's time was kept three ways: a file of whole seconds written round each
+stage, this file, written by extract alone, and the pages' own times, with a rule to choose between
+them. So the summary's one figure meant extract's model time on one run and both stages' whole time on
+another.
+
+Timing is a measurement about a run and never a reason to fail one: a row that cannot be written or read
+is logged and passed over.
 """
 
 import json
@@ -28,7 +33,7 @@ _FILENAME = ".stage_timing.jsonl"
 
 @dataclass(frozen=True)
 class StageTiming:
-    """What one GPU stage spent."""
+    """What one stage spent on the cards."""
 
     stage: str
     wall_clock: float
@@ -37,53 +42,96 @@ class StageTiming:
     images: int
 
 
-@dataclass(frozen=True)
-class TimingSummary:
-    """Aggregate across a run's GPU stages."""
+def inference_seconds_from_records(records: list[dict], *, fallback: float) -> float:
+    """The model's time for a stage, from its records' own times.
 
-    wall_clock: float
-    inference_seconds: float
-    startup_seconds: float
-    execution_mode: str
+    Records that carry ``gpu_id`` came from engines working at once, one on each card, so the time taken
+    is the slowest card's total. Without ``gpu_id`` the pages were read by one engine and the sum is the
+    time taken.
+
+    Args:
+        records: The stage's records, each with ``processing_time``.
+        fallback: What to give when no record was timed, such as the caller's own clock. Never 0.0,
+            which would turn into an absurd rate.
+    """
+    per_card: dict[object, float] = {}
+    timed = False
+    for record in records:
+        elapsed = record.get("processing_time")
+        if elapsed is None:
+            continue
+        timed = True
+        per_card[record.get("gpu_id")] = per_card.get(record.get("gpu_id"), 0.0) + float(elapsed)
+    return max(per_card.values()) if timed else fallback
+
+
+def note_stage_timing(
+    output_dir: Path,
+    *,
+    stage: str,
+    records: list[dict],
+    wall_clock: float,
+    execution_mode: str,
+    carried_on: bool,
+) -> None:
+    """Note what a stage has just spent. Never raises: the stage's work is already done.
+
+    Args:
+        output_dir: The run's output folder.
+        stage: The stage's name.
+        records: The records the stage has just made, each with its ``processing_time``.
+        wall_clock: The whole time the stage took, engine start and all.
+        execution_mode: How the engines were arranged.
+        carried_on: Whether the stage carried on from an earlier run's output. Its time is then added
+            to that run's row, so that the row covers every page the output holds. Otherwise the row is
+            written anew.
+    """
+    try:
+        now = StageTiming(
+            stage=stage,
+            wall_clock=wall_clock,
+            inference_seconds=inference_seconds_from_records(records, fallback=wall_clock),
+            execution_mode=execution_mode,
+            images=len(records),
+        )
+        earlier = [t for t in read_stage_timings(output_dir) if t.stage == stage]
+        if carried_on and earlier:
+            before = earlier[-1]
+            modes = (
+                now.execution_mode
+                if before.execution_mode == now.execution_mode
+                else f"{before.execution_mode}, then {now.execution_mode}"
+            )
+            now = StageTiming(
+                stage=stage,
+                wall_clock=before.wall_clock + now.wall_clock,
+                inference_seconds=before.inference_seconds + now.inference_seconds,
+                execution_mode=modes,
+                images=before.images + now.images,
+            )
+        write_stage_timing(output_dir, now)
+    except Exception as err:  # noqa: BLE001 - timing must not break the stage
+        logger.warning("Could not record %s stage timing: %s", stage, err)
 
 
 def write_stage_timing(output_dir: Path, timing: StageTiming) -> Path:
-    """Record one stage's timing, replacing any earlier row for that stage.
-
-    Replacing matters: re-running extract against an existing output dir
-    would otherwise leave two rows summing to double the real time.
-
-    Args:
-        output_dir: The run's output directory.
-        timing: What this stage spent.
-
-    Returns:
-        The sidecar path.
-    """
+    """Write one stage's row, in the place of any earlier row for that stage. Returns the file."""
     path = output_dir / _FILENAME
-    existing = [t for t in read_stage_timings(output_dir) if t.stage != timing.stage]
-    existing.append(timing)
-
+    rows = read_stage_timings(output_dir)
+    if any(t.stage == timing.stage for t in rows):
+        rows = [timing if t.stage == timing.stage else t for t in rows]
+    else:
+        rows.append(timing)
     output_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(asdict(t)) + "\n" for t in existing), encoding="utf-8")
+    path.write_text("".join(json.dumps(asdict(t)) + "\n" for t in rows), encoding="utf-8")
     return path
 
 
 def read_stage_timings(output_dir: Path) -> list[StageTiming]:
-    """Read every stage timing recorded for a run.
-
-    Args:
-        output_dir: The run's output directory.
-
-    Returns:
-        Timings in write order. Empty when the sidecar is absent: callers
-        fall back rather than reporting 0.0s, which would surface as an
-        absurd throughput instead of as missing data.
-    """
+    """Every stage's row for a run, in the order written. Empty when there is no file."""
     path = output_dir / _FILENAME
     if not path.is_file():
         return []
-
     timings = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -91,139 +139,68 @@ def read_stage_timings(output_dir: Path) -> list[StageTiming]:
         try:
             timings.append(StageTiming(**json.loads(line)))
         except (json.JSONDecodeError, TypeError) as err:
-            # Observability must never fail an evaluation run.
             logger.warning("Skipping unreadable stage timing row: %s", err)
     return timings
 
 
 @dataclass(frozen=True)
-class ResolvedTiming:
-    """Which clock the summary is using, and where it came from.
+class RunTime:
+    """A run's time on the cards, for the evaluate stage's summary, with where it came from.
 
-    ``source`` is printed alongside the number. A run's timing can come
-    from three places of very different quality, and an unlabelled figure
-    invites the reader to trust the worst of them.
+    ``source`` is shown beside the figure: a time can come from two places of very different quality,
+    and a figure with no label invites the reader to trust the worse.
     """
 
-    inference_seconds: float | None
+    # The model's time over the stages, or None if nothing was recorded. Never 0.0.
+    model_seconds: float | None
     source: str
-    summary: TimingSummary | None
+    # The stages' own rows, when they are what the time is from; empty otherwise.
+    stages: tuple[StageTiming, ...]
+
+    @property
+    def wall_clock(self) -> float:
+        return sum(t.wall_clock for t in self.stages)
+
+    @property
+    def startup_seconds(self) -> float:
+        """The whole time less the model's: starting the engines. Never below nothing."""
+        return max(0.0, self.wall_clock - (self.model_seconds or 0.0))
+
+    @property
+    def execution_mode(self) -> str:
+        modes = {t.execution_mode for t in self.stages}
+        if len(modes) == 1:
+            return modes.pop()
+        return ", ".join(f"{t.stage}={t.execution_mode}" for t in self.stages)
 
 
-def resolve_timing(
-    timings: list[StageTiming],
-    *,
-    entrypoint_seconds: float | None,
-    per_image_total: float,
-    images: int,
-) -> ResolvedTiming:
-    """Choose the best available timing and name it.
+def run_time(timings: list[StageTiming], *, per_image_total: float, images: int) -> RunTime:
+    """A run's time on the cards, from the best record there is.
 
-    Preference order:
+    1. **The stages' own rows.** The model's time, apart from engine start, and right for either
+       arrangement of engines. Set aside as stale when the rows cover another number of pages than is
+       being scored, which is what an output folder scored again after a part run would give.
+    2. **The sum of the pages' own times.** With an engine on each card this is the work done and not
+       the time taken, so it understates the rate by about the number of cards. It is labelled so.
 
-    1. **Stage sidecar**: written by the GPU stages themselves, excludes
-       engine startup, DP-aware. Rejected as stale when it covers a
-       different image count than the evaluation, which is what happens
-       when ``evaluate`` is re-run against an older output dir.
-    2. **Entrypoint elapsed**: measured outside the process, so it
-       includes engine startup and knows nothing about parallelism. Also
-       undetectably stale on a standalone re-run: one such run reported
-       3.0s for 165 images, i.e. 3300 images/min. Labelled, not hidden.
-    3. **Sum of per-image processing time**: under data parallelism this
-       is total COMPUTE, not elapsed, so it understates throughput by
-       roughly the GPU count.
-
-    With none of the three, the answer is that timing was not recorded:
-    NOT 0.0s, which a caller would turn into an absurd throughput.
+    With neither, the time is not recorded: never 0.0.
 
     Args:
-        timings: Stage sidecar rows for this output dir.
-        entrypoint_seconds: The ``--inference-seconds`` value, if passed.
-        per_image_total: Sum of per-image processing times.
-        images: Number of documents being evaluated now.
-
-    Returns:
-        The chosen seconds (or None), its provenance, and the stage
-        summary when one applies.
+        timings: The rows of the run's output folder.
+        per_image_total: The sum of the scored pages' own times.
+        images: How many pages are being scored.
     """
-    summary = summarise_timings(timings)
-    if summary is not None and summary.inference_seconds > 0:
-        recorded_images = sum(t.images for t in timings) // max(1, len(timings))
-        if recorded_images == images:
-            return ResolvedTiming(summary.inference_seconds, "stage timing (this run)", summary)
+    if timings and sum(t.inference_seconds for t in timings) > 0:
+        covered = sum(t.images for t in timings) // len(timings)
+        if covered == images:
+            return RunTime(
+                sum(t.inference_seconds for t in timings), "stage timing (this run)", tuple(timings)
+            )
         logger.warning(
             "Stage timing covers %d images but %d are being evaluated: treating it as stale",
-            recorded_images,
+            covered,
             images,
         )
-
-    if entrypoint_seconds is not None and entrypoint_seconds > 0:
-        return ResolvedTiming(entrypoint_seconds, "entrypoint elapsed (includes engine startup)", None)
-
     if per_image_total > 0:
-        return ResolvedTiming(per_image_total, "per-image sum (unreliable under data parallelism)", None)
-
-    return ResolvedTiming(None, "not recorded", None)
-
-
-def inference_seconds_from_records(records: list[dict], *, fallback: float) -> float:
-    """Elapsed inference implied by per-image processing times.
-
-    Records carrying ``gpu_id`` came from concurrent data-parallel workers,
-    so elapsed is the SLOWEST worker's total: summing across workers gives
-    total compute and understates throughput by roughly the GPU count.
-    Without ``gpu_id`` the work was sequential and the sum IS elapsed.
-
-    Args:
-        records: Per-image result dicts with ``processing_time``.
-        fallback: Value when nothing was timed, e.g. the caller's own wall
-            clock. Never falls back to 0.0, which would surface as an
-            absurd throughput rather than as missing data.
-
-    Returns:
-        Seconds of inference.
-    """
-    per_gpu: dict[object, float] = {}
-    timed = False
-    for record in records:
-        elapsed = record.get("processing_time")
-        if elapsed is None:
-            continue
-        timed = True
-        per_gpu[record.get("gpu_id")] = per_gpu.get(record.get("gpu_id"), 0.0) + float(elapsed)
-
-    if not timed:
-        return fallback
-    return max(per_gpu.values())
-
-
-def summarise_timings(timings: list[StageTiming]) -> TimingSummary | None:
-    """Aggregate across stages.
-
-    Args:
-        timings: Per-stage rows.
-
-    Returns:
-        The summary, or None when there is nothing recorded.
-    """
-    if not timings:
-        return None
-
-    wall_clock = sum(t.wall_clock for t in timings)
-    inference = sum(t.inference_seconds for t in timings)
-
-    modes = {t.execution_mode for t in timings}
-    if len(modes) == 1:
-        execution_mode = modes.pop()
-    else:
-        # Naming each stage beats reporting one mode as though it described
-        # the whole run.
-        execution_mode = ", ".join(f"{t.stage}={t.execution_mode}" for t in timings)
-
-    return TimingSummary(
-        wall_clock=wall_clock,
-        inference_seconds=inference,
-        # Clock skew must not print a negative startup.
-        startup_seconds=max(0.0, wall_clock - inference),
-        execution_mode=execution_mode,
-    )
+        return RunTime(per_image_total, "per-image sum (unreliable under data parallelism)", ())
+    return RunTime(None, "not recorded", ())

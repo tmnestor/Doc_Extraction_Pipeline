@@ -71,11 +71,6 @@ class StageSettings:
     def evaluation_dir(self) -> Path:
         return self.output / "evaluation"
 
-    @property
-    def inference_elapsed(self) -> Path:
-        """Whole seconds each stage that uses the cards took, a line a stage, for the evaluate stage."""
-        return self.output / ".inference_elapsed"
-
 
 def _set(environ: Mapping[str, str], name: str) -> str | None:
     """The variable's value, or None if it is unset, empty or the word None."""

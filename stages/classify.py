@@ -104,13 +104,15 @@ def run(
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by classify_pages; only where the engine is started differs.
-    from common.stage_timing import inference_seconds_from_records
+    from common.stage_timing import inference_seconds_from_records, note_stage_timing
     from common.vllm_dp import read_on_the_cards
 
     started = time.time()
-    records = read_on_the_cards(app_cfg, images, classify_pages).records
+    read = read_on_the_cards(app_cfg, images, classify_pages)
+    records = read.records
+    wall_clock = time.time() - started
 
-    elapsed = inference_seconds_from_records(records, fallback=time.time() - started)
+    elapsed = inference_seconds_from_records(records, fallback=wall_clock)
     logger.info(
         "Classification complete: %d images in %.1fs (%.2fs/image)",
         len(records),
@@ -123,6 +125,14 @@ def run(
     write_fn = append_jsonl if resuming else write_jsonl
     count = write_fn(output_path, records)
     logger.info("Wrote %d classifications to %s", count, output_path)
+    note_stage_timing(
+        output_path.parent,
+        stage="classify",
+        records=records,
+        wall_clock=wall_clock,
+        execution_mode=read.arrangement,
+        carried_on=resuming,
+    )
 
     return output_path
 

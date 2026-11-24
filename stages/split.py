@@ -341,4 +341,12 @@ def run(
     logger.info(
         "Split %d of %d photographs; wrote %d images to %s", cut_up, len(records), written, images_dir
     )
+    could_not = sum(1 for record in records if failed(record))
+    if could_not:
+        logger.warning(
+            "The model could not be asked about %d of %d photograph(s). Each is passed through as it "
+            "is and recorded with its error, and is asked about again the next time the stage is run.",
+            could_not,
+            len(records),
+        )
     return images_dir

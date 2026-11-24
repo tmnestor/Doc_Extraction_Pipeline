@@ -45,17 +45,13 @@ stack, so that a model can be compared with published results.
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
 
-A page that cannot be read does not end a task: it is recorded with its error, the task goes on, and
-the next run of the task reads that page again. A task does stop, with its reason and exit code 1, when
-as many requests in a row have failed, with none answered between them, as
-`pipeline.processing.stop_after_failed_requests` allows: the engine has stopped answering, or a setting
-makes every page fail. The `extract` task also reads again a page that has been given another document
-type since it was read.
+A page that cannot be read does not end a task, and is read again by the task's next run: see
+[How a failed page is tried again](#how-a-failed-page-is-tried-again).
 
 A task that is stopped part way keeps what it had read. Each record goes into a journal beside the
 task's output the moment it is made (`<output file>.journal`), however the engines are arranged, and the
-next run adds the journal to the output before it carries on. The output itself is always in the order of
-the pages, never the order the cards finished them in.
+next run adds the journal to the output before it carries on. What a run adds to the output is in the
+order of the pages, never the order the cards finished them in.
 
 Because a task carries on from what its output folder holds, a folder belongs to one run. `split`,
 `classify` and `extract` each note in `<output>/run_manifest.json` the model, the folder of pages and the
@@ -63,6 +59,119 @@ commit of the code they were run with. A task that finds its own earlier note fr
 of pages or commit stops before any work and says what differs: give the run a folder of its own, or
 start the task afresh. `clean` and `evaluate` print what the notes hold, so that a score carries the model
 and the commit that produced it.
+
+## How a failed page is tried again
+
+A page can fail for a reason of its own (a file that cannot be opened, a page too long for the model's
+context) or because the engine has stopped answering. The two are told apart by what happens around the
+page, and each has its own answer. Nothing waits between one try and the next, and no try is hidden:
+each is a line in the log.
+
+```mermaid
+flowchart TD
+    call["Pages go to the engine together, in one call"]
+    alone["Each page of the call is asked again, on its own"]
+    record["A record is written for the page"]
+    failed["The page is recorded with its error, and the task goes on"]
+    count{"As many failures in a row as are allowed?"}
+    stop["The task stops with exit code 1. What it had read is kept"]
+    again["The next run takes the record out and reads the page again"]
+
+    call -->|answered| record
+    call -->|the call fails| alone
+    alone -->|answered| record
+    alone -->|fails again| failed
+    failed --> count
+    count -->|no| call
+    count -->|yes| stop
+    failed -.->|when the task is next run| again
+```
+
+### Inside a run
+
+1. **Pages share an engine call.** How many is in `pipeline.batching`. A call that fails says nothing
+   about which of its pages was at fault.
+2. **So each page of a failed call is asked again on its own, once.** One bad page then costs the pages
+   it shared a call with only that call.
+3. **A page that fails on its own is recorded with its error, and the task goes on.** It is not tried a
+   third time in that run.
+
+What the record of a failed page holds:
+
+| Task | The record | What the later tasks do with it |
+|---|---|---|
+| `split` | `error`, and the reason "the model could not be asked". The photograph is passed through as it is | `classify` reads the photograph whole |
+| `classify` | `error`, and the fallback type (`pipeline.classification.fallback_type`) | `extract` reads the page as that type |
+| `extract` | `error`, an empty reply, and `prompt_used: error` | `clean` passes the error on with no fields. `evaluate` counts the page under "Failed Extraction" and leaves it out of the mean, and gives the mean again with each failed page as 0 |
+
+A task that ends with failed pages says how many in its last lines, and exits with code 0.
+
+### When the task is next run
+
+A task carries on from its earlier output. Before it does, it takes the failed pages' records out of
+that output, so that those pages are read again with any that are new:
+
+- `classify` asks again about each page it could not classify;
+- `extract` reads again each page it could not read, and each page that has been given another
+  document type since it was read, whose record is of the wrong fields. A page `classify` got right the
+  second time is therefore read again under its own type;
+- `split` asks again about each photograph it could not ask about, and removes the image it had passed
+  through in the photograph's place.
+
+Three things follow:
+
+- A page that can never be read is tried on every run. A run with nothing new to read but one such page
+  starts an engine to try it. No setting leaves such a page out.
+- A run with no failed page and nothing new starts no engine.
+- A page read again is added at the end of the output, after the pages read before it.
+
+`CLEAR_PREV_OUTPUT=true` reads every page again, failed or not.
+
+### When the task stops instead
+
+A page that fails among pages that are answered is that page's own failure. When request after request
+fails with none answered between them, it is not: the engine has stopped answering, or a setting makes
+every page fail (a context length too short for every statement, say). Going on would record every page
+left as failed, in seconds.
+
+So each engine counts the requests that fail one after another. A page asked on its own that fails
+adds one. A call that fails does not count by itself: its pages do, as each is asked alone. Any request
+or call that is answered sets the count back to nothing. With an engine on each card, each card keeps
+its own count.
+
+When the count reaches `pipeline.processing.stop_after_failed_requests` (8 as shipped), the task stops:
+
+- it prints `FATAL: the task was stopped part way.`, with the number of requests, the last error and
+  where to look, and exits with code 1;
+- every record made before then is kept, in the task's journal, and the next run carries on from it;
+- the pages of the call being tried when it stopped are not recorded, and are read by the next run. Any
+  page recorded as failed before the count was reached is read again too.
+
+As many unreadable pages next to each other as the number allowed also stop the task: the count cannot
+tell them from an engine that has stopped. Raise the number if a folder is known to hold such a run of
+pages. A value of 1 stops a task at the first page that fails.
+
+### What is never tried again
+
+- **A setting that cannot be used.** It would fail every page the same way. It ends the run at once with
+  `FATAL: the task cannot be started.`, its reason and exit code 1. Each task checks what it reads
+  before any engine starts, so this is normally in the first seconds.
+- **A reply the model gave.** If `classify` cannot turn a reply into a document type, the page is
+  recorded with the error and the reply, and the model is not asked again in that run. The next run
+  asks again, as for any failed page.
+
+### How a task ends
+
+| What happened | Exit code | Last lines of the log |
+|---|---|---|
+| Every page was read | 0 | the count of pages and the time |
+| Some pages failed among pages that were answered | 0 | a warning with how many failed |
+| As many requests failed in a row as are allowed | 1 | `FATAL: the task was stopped part way.` and why |
+| A setting cannot be used | 1 | `FATAL: the task cannot be started.` and why |
+
+`sroie` differs in two ways. It does not carry on from an earlier run, so it reads every receipt each
+time. And it exits with code 1 if any receipt failed, after writing its results, so that a score with
+failures in it is not read as a clean one.
 
 ## The two models
 

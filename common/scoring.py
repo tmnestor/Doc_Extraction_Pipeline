@@ -18,11 +18,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .field_schema import Table, get_field_schema
+from .field_schema import NOT_FOUND, Table, get_field_schema
+from .reply_fields import IDENTIFIER_LABEL
 
 logger = logging.getLogger(__name__)
 
-NOT_FOUND = "NOT_FOUND"
 
 # ---------------------------------------------------------------------------------------------------
 # The answer key
@@ -367,9 +367,6 @@ def _row_by_row(field_name: str) -> bool:
     return bool(entry and entry.scored_row_by_row)
 
 
-_IDENTIFIER_LABEL = r"^(ABN|BSB|ACN|GST|TAX|ID|NUMBER|NO\.?|#)\s*:?\s*"
-
-
 def _scores(f1: float, precision: float, recall: float, tp: int, fp: int, fn: int) -> dict[str, Any]:
     return {"f1_score": f1, "precision": precision, "recall": recall, "tp": tp, "fp": fp, "fn": fn}
 
@@ -423,8 +420,8 @@ def score_field(read_value: Any, true_value: Any, field_name: str) -> dict[str, 
         return _right_or_wrong(_money_matches(read, truth))
     if kind == "identifier":
         # An identifier is right or wrong: its label, spaces, dashes and case are set aside first.
-        read_id = re.sub(r"[\s\-]", "", re.sub(_IDENTIFIER_LABEL, "", read, flags=re.IGNORECASE))
-        true_id = re.sub(r"[\s\-]", "", re.sub(_IDENTIFIER_LABEL, "", truth, flags=re.IGNORECASE))
+        read_id = re.sub(r"[\s\-]", "", re.sub(IDENTIFIER_LABEL, "", read, flags=re.IGNORECASE))
+        true_id = re.sub(r"[\s\-]", "", re.sub(IDENTIFIER_LABEL, "", truth, flags=re.IGNORECASE))
         return _in_part(float(read_id.lower() == true_id.lower()), counts_from=0.5)
     # Text earns its similarity, and nothing below a half: that is a wrong answer, not a near miss.
     similarity = _text_similarity(read, truth)

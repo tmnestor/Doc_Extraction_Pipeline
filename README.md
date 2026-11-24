@@ -69,22 +69,22 @@ each is a line in the log.
 
 ```mermaid
 flowchart TD
-    call["Pages go to the engine together, in one call"]
-    alone["Each page of the call is asked again, on its own"]
-    record["A record is written for the page"]
-    failed["The page is recorded with its error, and the task goes on"]
-    count{"As many failures in a row as are allowed?"}
-    stop["The task stops with exit code 1. What it had read is kept"]
-    again["The next run takes the record out and reads the page again"]
+    P["Pages go to the engine together, in one call"]
+    O["Each page of the call is asked again, on its own"]
+    R["A record is written for the page"]
+    F["The page is recorded with its error, and the task goes on"]
+    Q{"As many failures in a row as are allowed?"}
+    X["The task stops with exit code 1. What it had read is kept"]
+    N["The next run takes the record out and reads the page again"]
 
-    call -->|answered| record
-    call -->|the call fails| alone
-    alone -->|answered| record
-    alone -->|fails again| failed
-    failed --> count
-    count -->|no| call
-    count -->|yes| stop
-    failed -.->|when the task is next run| again
+    P -->|answered| R
+    P -->|the call fails| O
+    O -->|answered| R
+    O -->|fails again| F
+    F --> Q
+    Q -->|no| P
+    Q -->|yes| X
+    F -.->|when the task is next run| N
 ```
 
 ### Inside a run

@@ -79,7 +79,7 @@ def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
     section = raw.get("inference", {}).get("vllm", {})
     defaults = section.get("defaults")
     if not isinstance(defaults, dict):
-        raise ValueError(
+        raise ConfigError(
             "What: the settings file has no inference.vllm.defaults block.\n"
             f"Where: {path}, key inference.vllm.defaults.\n"
             "Expected: a block such as\n"

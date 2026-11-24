@@ -73,10 +73,22 @@ def read_batch_sizes(raw_config: dict[str, Any], *, config_path: Path) -> dict[s
             f"Set it to 1 to keep unlisted types unbatched."
         )
 
+    from common.field_schema import get_field_schema
+
+    types = set(get_field_schema().document_types)
     sizes = {}
     for key, value in block.items():
         if key == _CLASSIFY_KEY:
             continue  # pages per classify call, not a document type: read_classify_batch_size
+        if key != "default" and str(key).lower() not in types:
+            raise BatchingConfigError(
+                f"What: {_SECTION}.{key} is not a document type, so its batch size would never be used.\n"
+                f"Where: {config_path}, under the {_SECTION} section.\n"
+                f"Expected: 'default', '{_CLASSIFY_KEY}', or a document type of the schema file: "
+                f"{', '.join(sorted(types))}.\n"
+                f"How to fix: correct the spelling of {key!r}, or give the type a block under "
+                f"document_types in config/field_definitions.yaml."
+            )
         # bool is an int subclass; a YAML `true` here is a config error.
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise BatchingConfigError(

@@ -17,6 +17,7 @@ import yaml
 from PIL import Image
 
 from common.extraction_batching import BatchingConfigError, read_classify_batch_size
+from common.prompt_catalog import PromptCatalog
 from models.orchestrator import DocumentOrchestrator
 from stages import classify as classify_stage
 
@@ -76,7 +77,7 @@ def test_detect_many_is_one_call_with_the_detection_prompt_for_every_page(pages)
 
     results = orchestrator(backend).detect_many(pages)
 
-    prompt = yaml.safe_load(DETECTION_FILE.read_text())["prompts"]["detection"]["prompt"]
+    prompt = PromptCatalog().classification_prompt()
     assert backend.many_calls == [{"prompts": [prompt] * 3, "max_tokens": 150, "n": 3}]
     assert len(results) == 3
 
@@ -206,10 +207,13 @@ def test_a_reply_that_only_names_a_type_in_words_is_given_the_fallback_type() ->
         assert classification.document_type(reply, "UNIVERSAL") == "UNIVERSAL"
 
 
-def test_the_detection_file_holds_one_prompt_and_the_two_tables_the_rules_read() -> None:
-    import yaml
-
+def test_the_detection_file_holds_the_questions_and_the_two_tables_the_rules_read() -> None:
     detection = yaml.safe_load(DETECTION_FILE.read_text())
 
-    assert list(detection) == ["prompts", "column_roles", "classification_evidence"]
-    assert list(detection["prompts"]) == ["detection"]
+    assert list(detection) == ["classification", "column_roles", "classification_evidence"]
+    assert [question["label"] for question in detection["classification"]["questions"]] == [
+        "COLUMNS",
+        "PAID",
+        "ROWS",
+        "TRAVEL",
+    ]

@@ -276,10 +276,8 @@ def _record(classification: dict[str, Any], **rest: Any) -> dict[str, Any]:
 
 
 def _prompt_name(document_type: str) -> str:
-    """What a record says its page was read with. A statement keeps the name it had when it had its own way."""
-    return (
-        "unified_bank_single_pass" if document_type.upper() == "BANK_STATEMENT" else document_type.lower()
-    )
+    """What a record says its page was read with: the prompt of its type's name."""
+    return document_type.lower()
 
 
 def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]]) -> None:

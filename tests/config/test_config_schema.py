@@ -113,14 +113,27 @@ def test_generation_settings_are_never_supplied_by_the_code() -> None:
 
 
 def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -> None:
-    path = config_with(tmp_path, lambda raw: raw["pipeline"]["batching"].update(reciept=10))
+    path = config_with(tmp_path, lambda raw: raw["pipeline"]["token_budgets"].update(clasify=150))
 
     with pytest.raises(ValueError) as raised:
         read_settings_file(path)
 
     message = str(raised.value)
-    assert "pipeline.batching.reciept" in message
-    assert "pipeline.batching.receipt" in message
+    assert "pipeline.token_budgets.clasify" in message
+    assert "pipeline.token_budgets.classify" in message
+
+
+def test_a_batch_size_for_a_misspelt_document_type_is_refused(tmp_path: Path) -> None:
+    from common.extraction_batching import read_batch_sizes
+
+    path = config_with(tmp_path, lambda raw: raw["pipeline"]["batching"].update(reciept=10))
+
+    with pytest.raises(ValueError) as raised:
+        read_batch_sizes(read_settings_file(path), config_path=path)
+
+    message = str(raised.value)
+    assert "pipeline.batching.reciept" in message and "receipt" in message
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
 
 
 def test_what_is_handed_to_the_engine_may_hold_any_key() -> None:

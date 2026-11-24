@@ -7,20 +7,27 @@ Usage:
     from common.prompt_catalog import PromptCatalog
 
     catalog = PromptCatalog()
-    prompt = catalog.get_prompt("gemma4-31b-w4a16-vllm", "invoice")
-    bank_prompt = catalog.get_prompt("bank", "schema_fallback_extraction")
+    prompt = catalog.get_prompt("gemma4-31b-w4a16-vllm", document_type)
+    classification_prompt = catalog.classification_prompt()
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-# Fixed namespace -> filename mapping (everything else resolves via registry)
-_FIXED_NAMESPACES: dict[str, str] = {
-    "detection": "document_type_detection.yaml",
-    "bank": "bank_prompts.yaml",
-}
+_DETECTION_FILE = "document_type_detection.yaml"
+ANSWER_KINDS = ("columns", "yes_no", "number")
+
+
+@dataclass(frozen=True)
+class Question:
+    """One question of the classification prompt."""
+
+    label: str
+    answer: str
+    ask: str
 
 
 class PromptCatalog:
@@ -28,7 +35,7 @@ class PromptCatalog:
 
     All YAML files live in one directory (``prompts/``).  Namespaces map to
     filenames: ``"detection"`` -> ``document_type_detection.yaml``,
-    ``"bank"`` -> ``bank_prompts.yaml``, or any registered model_type ->
+    or any registered model_type ->
     its ``ModelRegistration.prompt_file``.
 
     Files are parsed once and cached per instance.
@@ -59,9 +66,6 @@ class PromptCatalog:
 
     def _resolve_filename(self, namespace: str) -> str:
         """Resolve a namespace string to a YAML filename."""
-        if namespace in _FIXED_NAMESPACES:
-            return _FIXED_NAMESPACES[namespace]
-        # Dynamic model namespace -- look up via registry
         from models.registry import get_model
 
         registration = get_model(namespace)
@@ -79,10 +83,7 @@ class PromptCatalog:
         """Load a prompt string by namespace and key.
 
         Args:
-            namespace: Logical grouping that maps to a YAML file.
-                ``"detection"`` -> ``document_type_detection.yaml``
-                ``"bank"``      -> ``bank_prompts.yaml``
-                Or any registered model_type -> its prompt_file.
+            namespace: A registered model_type, which maps to its prompt_file.
             key: Prompt key within the YAML file's ``prompts`` section.
             format_args: Optional dict for ``str.format()`` on the template.
                 Used by bank prompts with placeholders like ``{balance_col}``.
@@ -111,7 +112,90 @@ class PromptCatalog:
             text = text.format(**format_args)
         return text
 
-    # -- Entry point 2: the classification rules ----------------------------
+    # -- Entry point 2: the classification questions and rules ----------------
+
+    def get_classification_questions(self) -> tuple[Question, ...]:
+        """The questions the classification prompt asks, in order, checked.
+
+        Raises:
+            ValueError: If the ``classification`` block is missing or a question cannot be used.
+        """
+        path = self._dir / _DETECTION_FILE
+        block = self._load_yaml(path).get("classification")
+        example = (
+            'classification:\n  opening: "Look at this document image and answer each question:"\n'
+            "  questions:\n    - label: PAID\n      answer: yes_no\n      ask: |\n"
+            "        Is there evidence that payment was completed? Answer YES or NO."
+        )
+
+        def refuse(what: str, key: str, fix: str) -> ValueError:
+            return ValueError(
+                f"What: {what}\nWhere: {path.absolute()} (key: {key}).\n"
+                f"Expected: a block like this, with one question of the kind `columns`:\n{example}\n"
+                f"How to fix: {fix}"
+            )
+
+        listed = block.get("questions") if isinstance(block, dict) else None
+        if not isinstance(block, dict) or not isinstance(block.get("opening"), str) or not listed:
+            raise refuse(
+                "the classification block has no opening line or no questions.",
+                "classification",
+                "give the block an `opening:` line and a `questions:` list.",
+            )
+        if not isinstance(listed, list) or len(listed) > 9:
+            raise refuse(
+                "the questions are not a list of at most nine.",
+                "classification.questions",
+                "write the questions as a list. A reply numbers its answers 1 to 9 at most.",
+            )
+        questions: list[Question] = []
+        for number, item in enumerate(listed):
+            key = f"classification.questions[{number}]"
+            label = item.get("label") if isinstance(item, dict) else None
+            if not isinstance(label, str) or not label.isidentifier() or label != label.upper():
+                raise refuse(
+                    f"question {number + 1} has no label in capitals: {label!r}.",
+                    f"{key}.label",
+                    "give it a one-word label in capitals, e.g. label: PAID",
+                )
+            if item.get("answer") not in ANSWER_KINDS:
+                raise refuse(
+                    f"the question {label} has the answer kind {item.get('answer')!r}.",
+                    f"{key}.answer",
+                    f"set `answer:` to one of {', '.join(ANSWER_KINDS)}.",
+                )
+            if not isinstance(item.get("ask"), str) or not item["ask"].strip():
+                raise refuse(
+                    f"the question {label} has no text.", f"{key}.ask", "write the question under `ask:`."
+                )
+            if label in [question.label for question in questions]:
+                raise refuse(
+                    f"two questions have the label {label}.",
+                    f"{key}.label",
+                    "give each question its own label.",
+                )
+            questions.append(Question(label=label, answer=item["answer"], ask=item["ask"]))
+        if [question.answer for question in questions].count("columns") != 1:
+            raise refuse(
+                "there is not exactly one question of the kind `columns`.",
+                "classification.questions",
+                "have one question ask for the column headings of the page's table, with `answer: columns`.",
+            )
+        return tuple(questions)
+
+    def classification_prompt(self) -> str:
+        """The classification prompt: the opening line, then the questions numbered in order.
+
+        A question's first line follows its number and label; its later lines are set under it.
+        """
+        opening = self._load_yaml(self._dir / _DETECTION_FILE)["classification"]["opening"]
+        parts = []
+        for number, question in enumerate(self.get_classification_questions(), start=1):
+            first, *later = question.ask.rstrip("\n").split("\n")
+            parts.append(
+                "\n".join([f"{number}. {question.label}: {first}", *(f"   {line}" for line in later)])
+            )
+        return opening + "\n\n" + "\n\n".join(parts) + "\n"
 
     def get_column_roles(self) -> dict[str, list[str]]:
         """Load semantic column-role -> header-keyword lists from detection YAML.
@@ -124,7 +208,7 @@ class PromptCatalog:
         Raises:
             ValueError: If the ``column_roles`` block is missing or malformed.
         """
-        path = self._dir / "document_type_detection.yaml"
+        path = self._dir / _DETECTION_FILE
         data = self._load_yaml(path)
         roles = data.get("column_roles")
         if not isinstance(roles, dict) or not roles:
@@ -161,7 +245,7 @@ class PromptCatalog:
             ValueError: If the ``classification_evidence`` block is missing or
                 structurally invalid.
         """
-        path = self._dir / "document_type_detection.yaml"
+        path = self._dir / _DETECTION_FILE
         data = self._load_yaml(path)
         evidence = data.get("classification_evidence")
         if not isinstance(evidence, dict):
@@ -205,8 +289,9 @@ class PromptCatalog:
         from common.field_schema import get_field_schema
 
         known_roles = set(self.get_column_roles())
-        supported = {t.lower() for t in get_field_schema().supported_document_types}
-        allowed_when_keys = {"any_roles", "all_roles", "paid", "travel"}
+        supported = set(get_field_schema().document_types)
+        asked = {q.label.lower() for q in self.get_classification_questions() if q.answer == "yes_no"}
+        allowed_when_keys = {"any_roles", "all_roles"} | asked
 
         for i, rule in enumerate(rules):
             loc = f"classification_evidence.rules[{i}]"
@@ -223,8 +308,8 @@ class PromptCatalog:
                     f"Rule type '{rtype}' is not a supported document type.\n"
                     f"Where: {path.absolute()} ({loc}.type).\n"
                     f"Allowed: {sorted(supported)}.\n"
-                    "Fix: use one of the supported types, or register the new "
-                    "type in config/field_definitions.yaml (supported_document_types)."
+                    "Fix: use one of the supported types, or give the new type a "
+                    "block in config/field_definitions.yaml (document_types)."
                 )
             when = rule["when"]
             if not isinstance(when, dict) or not when:
@@ -240,7 +325,8 @@ class PromptCatalog:
                     f"Unknown 'when:' key(s) {sorted(unknown_keys)}.\n"
                     f"Where: {path.absolute()} ({loc}.when).\n"
                     f"Allowed keys: {sorted(allowed_when_keys)}.\n"
-                    "Fix: remove the unknown key or correct the spelling."
+                    "Fix: remove the unknown key, correct the spelling, or add a yes_no "
+                    "question with that label under classification.questions."
                 )
             for role_key in ("any_roles", "all_roles"):
                 for role in when.get(role_key, []):
@@ -263,25 +349,33 @@ class PromptCatalog:
             )
 
     def check_extraction_prompts(self, model_type: str) -> None:
-        """Check that every prompt in a model's prompt file is for a supported document type.
+        """Check that a model's prompt file and the schema file agree on the document types.
 
-        A prompt under a name that is no document type is never used, and usually a misspelling.
+        A document type is a block in the schema file and a prompt of the same name. A prompt under a
+        name that is no type is never used, and usually a misspelling; a type without a prompt cannot be
+        read.
 
         Raises:
-            ValueError: Naming the prompts that belong to no type.
+            ValueError: Naming the prompts that belong to no type and the types that have no prompt.
         """
         from common.field_schema import get_field_schema
 
         path = self._dir / self._resolve_filename(model_type)
         prompts = set(self._load_yaml(path).get("prompts", {}))
-        supported = set(get_field_schema().supported_document_types)
-        strays = sorted(prompts - supported)
-        if strays or not prompts:
+        types = set(get_field_schema().document_types)
+        strays, unread = sorted(prompts - types), sorted(types - prompts)
+        if strays or unread:
+            what = []
+            if strays:
+                what.append(f"prompt(s) for no document type: {', '.join(strays)}")
+            if unread:
+                what.append(f"document type(s) with no prompt: {', '.join(unread)}")
             raise ValueError(
-                f"What: {'prompt(s) for no supported document type: ' + ', '.join(strays) if strays else 'no prompts'}.\n"
-                f"Where: {path.absolute()}, under the prompts: section.\n"
-                f"Expected: a prompt for each of some of: {', '.join(sorted(supported))} "
-                f"(supported_document_types in config/field_definitions.yaml).\n"
-                f"How to fix: rename each prompt to the document type it is for, or add the new type to "
-                f"supported_document_types."
+                f"What: {'; '.join(what)}.\n"
+                f"Where: {path.absolute()}, under the prompts: section, and config/field_definitions.yaml, "
+                f"under document_types.\n"
+                f"Expected: one prompt for each document type, under the type's own name: "
+                f"{', '.join(sorted(types))}.\n"
+                f"How to fix: give each type a prompt and each prompt a type. A new type needs a block "
+                f"under document_types and a prompt of the same name."
             )

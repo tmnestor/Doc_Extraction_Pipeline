@@ -1,11 +1,14 @@
-"""The fields of each document type, read once from ``config/field_definitions.yaml``.
+"""The document types and how their fields are scored, read once from ``config/field_definitions.yaml``.
 
     from common.field_schema import get_field_schema
-    fields = get_field_schema()
+    schema = get_field_schema()
 
-It answers four questions: which fields a document type has, which kind a field is for scoring (money,
-date, yes-or-no, a bank statement's column), which names a document type goes by, and what the scoring
-thresholds are.
+A document type is a block in that file and a prompt of the same name. Nothing in Python names a type:
+what differs from one type to another (its fields, the other names it goes by, a fixed completion budget,
+a table whose rows are lined up before scoring) is asked of the schema.
+
+It also says which kind a field is for scoring (money, date, yes-or-no, a table's column) and what the
+scoring thresholds are.
 """
 
 from dataclasses import dataclass, field
@@ -17,8 +20,14 @@ import yaml
 
 CONFIG = Path(__file__).parent.parent / "config" / "field_definitions.yaml"
 
-# Two columns of a bank statement that are neither asked for nor scored.
-_NOT_ASKED_FOR: frozenset[str] = frozenset({"TRANSACTION_AMOUNTS_RECEIVED", "ACCOUNT_BALANCE"})
+_TYPE_KEYS = frozenset({"fields", "also_called", "completion_tokens", "table"})
+_TABLE_KEYS = frozenset({"columns", "rows_absent_where_not_found_in", "rows_in_date_order_of"})
+_EXAMPLE = (
+    "document_types:\n"
+    "  invoice:\n"
+    "    also_called: [invoice, tax invoice]\n"
+    "    fields: [DOCUMENT_TYPE, SUPPLIER_NAME, TOTAL_AMOUNT]"
+)
 
 
 class FieldSchemaError(Exception):
@@ -30,6 +39,28 @@ class FieldSchemaError(Exception):
 
 
 @dataclass(frozen=True)
+class Table:
+    """A document type's list fields that are the columns of one table, an entry a row."""
+
+    columns: tuple[str, ...]
+    # Rows marked NOT_FOUND in this column are dropped from both sides before scoring.
+    rows_absent_where_not_found_in: str | None
+    # The rows of both sides are put in the date order of this column before scoring.
+    rows_in_date_order_of: str | None
+
+
+@dataclass(frozen=True)
+class DocumentType:
+    """What the schema file says of one document type."""
+
+    name: str
+    fields: tuple[str, ...]
+    also_called: tuple[str, ...]
+    completion_tokens: int | None
+    table: Table | None
+
+
+@dataclass(frozen=True)
 class FieldSchema:
     """The field definitions, as the rest of the pipeline reads them."""
 
@@ -37,10 +68,10 @@ class FieldSchema:
     date_fields: frozenset[str]
     boolean_fields: frozenset[str]
     transaction_list_fields: frozenset[str]
-    supported_document_types: tuple[str, ...]
+    # Every document type, by its own name in lower case, in the order of the file.
+    document_types: dict[str, DocumentType] = field(repr=False)
     # Every name a document type goes by, in lower case, to the type's own name.
     aliases: dict[str, str] = field(repr=False)
-    _fields_of_type: dict[str, tuple[str, ...]] = field(repr=False)
     _thresholds: dict[str, float] = field(repr=False)
     _path: Path = field(repr=False)
 
@@ -49,14 +80,21 @@ class FieldSchema:
         """Read and check the field definitions.
 
         Raises:
-            FieldSchemaError: If the file is missing, is not valid YAML, or lacks a part that is needed.
+            FieldSchemaError: If the file is missing, is not valid YAML, or a document type's block
+                cannot be used.
         """
         where = path.absolute()
-        example = "document_fields:\n  invoice:\n    fields: [DOCUMENT_TYPE, BUSINESS_ABN, ...]"
+
+        def refuse(what: str, key: str, expected: str, fix: str) -> FieldSchemaError:
+            return FieldSchemaError(
+                f"What: {what}\nWhere: {where}, key {key}.\nExpected: {expected}\nHow to fix: {fix}",
+                path=path,
+            )
+
         if not path.exists():
             raise FieldSchemaError(
                 f"What: the field definitions file does not exist.\nWhere: {where}\n"
-                f"Expected: a file with this structure:\n{example}\n"
+                f"Expected: a file with this structure:\n{_EXAMPLE}\n"
                 f"How to fix: restore config/field_definitions.yaml in the repository.",
                 path=path,
             )
@@ -65,58 +103,130 @@ class FieldSchema:
         except yaml.YAMLError as err:
             raise FieldSchemaError(
                 f"What: the field definitions file is not valid YAML: {err}\nWhere: {where}\n"
-                f"Expected: a file with this structure:\n{example}\n"
+                f"Expected: a file with this structure:\n{_EXAMPLE}\n"
                 f"How to fix: correct the YAML at the place the message names.",
                 path=path,
             ) from err
-        document_fields = raw.get("document_fields") if isinstance(raw, dict) else None
-        if not isinstance(document_fields, dict) or not document_fields:
-            raise FieldSchemaError(
-                f"What: the field definitions file has no document_fields section.\n"
-                f"Where: {where}, key document_fields.\nExpected:\n{example}\n"
-                f"How to fix: add a document_fields section with a block for each document type.",
-                path=path,
+        blocks = raw.get("document_types") if isinstance(raw, dict) else None
+        if not isinstance(blocks, dict) or not blocks:
+            raise refuse(
+                "the field definitions file has no document_types section.",
+                "document_types",
+                f"\n{_EXAMPLE}",
+                "add a document_types section with a block for each document type.",
             )
-        fields_of_type: dict[str, tuple[str, ...]] = {}
-        for document_type, block in document_fields.items():
-            if not isinstance(block, dict) or not block.get("fields"):
-                raise FieldSchemaError(
-                    f"What: the document type {document_type!r} has no list of fields.\n"
-                    f"Where: {where}, key document_fields.{document_type}.fields.\n"
-                    f"Expected: a list with at least one field name, e.g. fields: [DOCUMENT_TYPE, TOTAL_AMOUNT]\n"
-                    f"How to fix: give {document_type!r} a fields list, or remove its block.",
-                    path=path,
+
+        document_types: dict[str, DocumentType] = {}
+        aliases: dict[str, str] = {}
+        for name, block in blocks.items():
+            key = f"document_types.{name}"
+            if (
+                not isinstance(block, dict)
+                or not block.get("fields")
+                or not isinstance(block["fields"], list)
+            ):
+                raise refuse(
+                    f"the document type {name!r} has no list of fields.",
+                    f"{key}.fields",
+                    "a list with at least one field name, e.g. fields: [DOCUMENT_TYPE, TOTAL_AMOUNT]",
+                    f"give {name!r} a fields list, or remove its block.",
                 )
-            fields_of_type[document_type] = tuple(
-                name for name in block["fields"] if name not in _NOT_ASKED_FOR
+            unknown = sorted(set(block) - _TYPE_KEYS)
+            if unknown:
+                raise refuse(
+                    f"the document type {name!r} has key(s) the pipeline does not know: {', '.join(unknown)}.",
+                    f"{key}.{unknown[0]}",
+                    f"only {', '.join(sorted(_TYPE_KEYS))}",
+                    "remove the key, or correct its spelling.",
+                )
+            budget = block.get("completion_tokens")
+            if budget is not None and (
+                not isinstance(budget, int) or isinstance(budget, bool) or budget < 1
+            ):
+                raise refuse(
+                    f"the completion budget of {name!r} is {budget!r}.",
+                    f"{key}.completion_tokens",
+                    "a whole number of tokens, e.g. completion_tokens: 4096, or no key at all",
+                    "set it to a positive whole number, or remove it to have the budget worked out.",
+                )
+            names = block.get("also_called") or []
+            if not isinstance(names, list):
+                raise refuse(
+                    f"the other names of {name!r} are not a list.",
+                    f"{key}.also_called",
+                    "a list of names, e.g. also_called: [invoice, tax invoice]",
+                    "write the names as a list, or remove the key.",
+                )
+            document_types[name.lower()] = DocumentType(
+                name=name.lower(),
+                fields=tuple(block["fields"]),
+                also_called=tuple(str(other) for other in names),
+                completion_tokens=budget,
+                table=cls._table(block.get("table"), name, key, refuse),
             )
+            aliases[name.lower()] = name
+            for other in names:
+                aliases[str(other).lower()] = name
 
         evaluation = raw.get("evaluation", {})
         kinds = evaluation.get("field_types", {})
-        aliases: dict[str, str] = {}
-        for document_type, names in raw.get("document_type_aliases", {}).items():
-            aliases[document_type.lower()] = document_type
-            for name in names if isinstance(names, list) else []:
-                aliases[name.lower()] = document_type
         return cls(
             monetary_fields=frozenset(kinds.get("monetary", [])),
             date_fields=frozenset(kinds.get("date", [])),
             boolean_fields=frozenset(kinds.get("boolean", [])),
             transaction_list_fields=frozenset(kinds.get("transaction_list", [])),
-            supported_document_types=tuple(raw.get("supported_document_types", [])),
+            document_types=document_types,
             aliases=aliases,
-            _fields_of_type=fields_of_type,
             _thresholds={name: float(value) for name, value in evaluation.get("thresholds", {}).items()},
             _path=path,
+        )
+
+    @staticmethod
+    def _table(block: Any, name: str, key: str, refuse: Any) -> Table | None:
+        if block is None:
+            return None
+        example = (
+            "table:\n      columns: [TRANSACTION_DATES, TRANSACTION_AMOUNTS_PAID]\n"
+            "      rows_in_date_order_of: TRANSACTION_DATES"
+        )
+        if (
+            not isinstance(block, dict)
+            or not isinstance(block.get("columns"), list)
+            or not block["columns"]
+            or set(block) - _TABLE_KEYS
+        ):
+            raise refuse(
+                f"the table of {name!r} cannot be read.",
+                f"{key}.table",
+                f"a list of columns, and at most the keys {', '.join(sorted(_TABLE_KEYS))}, e.g.\n    {example}",
+                "give the table its columns and remove any other key, or remove the table.",
+            )
+        columns = tuple(block["columns"])
+        for rule in ("rows_absent_where_not_found_in", "rows_in_date_order_of"):
+            if block.get(rule) is not None and block[rule] not in columns:
+                raise refuse(
+                    f"the table of {name!r} names {block[rule]!r} in {rule}, which is not one of its columns.",
+                    f"{key}.table.{rule}",
+                    f"one of {', '.join(columns)}",
+                    f"name one of the table's columns in {rule}, or add the field to columns.",
+                )
+        return Table(
+            columns=columns,
+            rows_absent_where_not_found_in=block.get("rows_absent_where_not_found_in"),
+            rows_in_date_order_of=block.get("rows_in_date_order_of"),
         )
 
     def resolve_doc_type(self, raw_type: str) -> str:
         """A document type's own name in lower case, from any name it goes by; the input if unknown."""
         return self.aliases.get(raw_type.lower(), raw_type.lower())
 
+    def document_type(self, name: str) -> DocumentType | None:
+        """What the schema says of a document type, by its own name in either case; None if it has none."""
+        return self.document_types.get(name.lower())
+
     def get_all_doc_type_fields(self) -> dict[str, list[str]]:
         """The fields of every document type, by the type's name in lower case. A new dict each call."""
-        return {document_type: list(names) for document_type, names in self._fields_of_type.items()}
+        return {name: list(kind.fields) for name, kind in self.document_types.items()}
 
     def get_threshold(self, name: str) -> float:
         """A scoring threshold from ``evaluation.thresholds``.

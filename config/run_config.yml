@@ -538,7 +538,6 @@ pipeline:
   # Workflow YAML nodes reference these by name via `token_budget: <name>`.
   token_budgets:
     classify: 150
-    extract_bank: 4096
     fallback_base: 512
     fallback_per_field: 64
 

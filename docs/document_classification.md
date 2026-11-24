@@ -86,8 +86,9 @@ On any exception it returns the configured `fallback_type` with
 
 ## Step 1: The prompt asks for *evidence*, not a verdict
 
-The live prompt (`prompts/document_type_detection.yaml`, key `detection`, wired
-in `cli.py` as `"detection_key": "detection"`) is deliberately small:
+The prompt is built from the questions in `prompts/document_type_detection.yaml`
+(`classification.questions`): an opening line, then each question with its number
+and label. With the four questions shipped it is deliberately small:
 
 ```text
 Look at this document image and answer each question:
@@ -278,15 +279,10 @@ flowchart LR
     BP --> BPP[bank_statement_* prompt<br/>+ bank fields]
 ```
 
-Each canonical type maps to its own extraction prompt + field list (defined in
-`config/field_definitions.yaml`, `supported_document_types`). `BANK_STATEMENT` is
-the only one with a second step:
-
-`BANK_STATEMENT` gets a second, finer vision sub-classification
-(`_classify_bank_structure`) into `bank_statement_flat` vs
-`bank_statement_date_grouped`, which picks the matching extraction prompt.
-The `column_mapping` produced during classification is carried forward so the
-bank extractor knows which physical column is debit/credit/balance.
+Each type has its own extraction prompt and field list: a block under
+`document_types` in `config/field_definitions.yaml`, and a prompt of the same name
+in `prompts/extraction_prompts.yaml`. Every type is read the same way, a bank
+statement included: there is no second classification step.
 
 ---
 
@@ -329,49 +325,45 @@ pipeline:
     classify: 150              # max tokens for the detection response
 ```
 
-The prompt file and prompt key are wired in `cli.py`:
-
-```python
-"detection_file": detection_path,          # prompts/document_type_detection.yaml
-"detection_key": "detection",              # the enriched COLUMNS/PAID/ROWS prompt
-```
-
 ---
 
-## Reusing this for a new task
+## Adding a document type
 
-You do **not** touch the orchestrator or stage plumbing. Which files you change
-depends on whether the existing evidence can already tell your new type apart.
+No Python changes, whichever case applies. Nothing in the code names a document
+type or a question, and a test fails if a type's name appears in it.
 
-### Case A: the new type is distinguishable by *existing* evidence (pure YAML)
+### Always: the type's block and its prompt
 
-If your type has a distinctive table column or is separated by `paid`/`travel`,
-it's a YAML-only change in `prompts/document_type_detection.yaml`:
+1. Add a block for the type under `document_types` in
+   `config/field_definitions.yaml`, with its `fields`. The head of that file says
+   what else a block may hold: other names the type goes by, a fixed completion
+   budget, and a table whose rows are lined up before scoring.
+2. Add a prompt of the same name under `prompts:` in
+   `prompts/extraction_prompts.yaml`. A type without a prompt, or a prompt without
+   a type, stops the run with a message naming it.
+3. If the type has fields that are money, dates or yes-or-no, list them under
+   `evaluation.field_types` in the schema file, so that they are scored as such.
 
-1. (If column-based) add the semantic column under `column_roles:` with its
-   header keywords.
-2. Add a rule to `classification_evidence.rules` at the right precedence.
-3. Add the canonical label to `config/field_definitions.yaml`
-   (`supported_document_types`) plus its extraction prompt/fields. The rule
-   validator fails fast if a rule emits a type that isn't supported.
+### Case A: the questions already asked tell the type apart
 
-No Python edit: `_evaluate_classification` walks the rules generically.
+If the type has a distinctive table column, or is separated by an answer already
+asked for (`paid`, `travel`), add to `prompts/document_type_detection.yaml`:
 
-### Case B: the new type needs a *new* fact (prompt + parser + YAML)
+1. (If column-based) the column's role under `column_roles:`, with the headings
+   that play it.
+2. A rule under `classification_evidence.rules`, at the right precedence.
 
-This is what `TRAVEL` required, because no existing fact distinguished it. Four
-edits (see the `TRAVEL` commit as the reference diff):
+### Case B: the type needs a new fact
 
-1. **Prompt**: add a new observable question (e.g. a `FOO: YES/NO` field) to the
-   `detection` prompt.
-2. **Parser** (`common/classification.py`): extract the new field in
-   `_parse_enriched` and thread it through `_when_matches` /
-   `_evaluate_classification` as a new flag (mirror how `travel` is wired); or,
-   for a new column role, just add it under `column_roles`.
-3. **Validation** (`common/prompt_catalog.py`): add the new key to
-   `allowed_when_keys` so `when: { foo: true }` passes fail-fast validation.
-4. **YAML + routing**: add the `when: { foo: true }` rule and the label/fields
-   as in Case A.
+This is what `TRAVEL` needed, because nothing asked told it apart. Add to
+`prompts/document_type_detection.yaml`:
+
+1. A question under `classification.questions`, with a `label`, `answer: yes_no`
+   and the text to `ask`. It is asked last, with the next number.
+2. A rule that uses it by its label in lower case, e.g. `when: { permit: true }`.
+
+Adding a question changes the classification prompt for every page, so measure
+classification on the sandbox before keeping it.
 
 ### Either case
 

@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from queue import Empty
 from typing import Any, Protocol
 
+from common.cards import cards_to_use
 from common.config_schema import ConfigError
 from common.engine_calls import StageStopped
 from common.settings import Settings
@@ -47,12 +48,15 @@ class CardsRead:
     """What a stage's reading gave, and how the engines were arranged for it."""
 
     records: list[dict[str, Any]]
-    # How many engines were started, one on each card; None for one engine across the cards.
+    # How many engines were started, one on each card; None for one engine across the cards. It is the
+    # number started and not the number of cards: one page left to read starts one engine.
     engines: int | None
 
     @property
     def arrangement(self) -> str:
-        return f"data-parallel ({self.engines} GPUs)" if self.engines else "single-engine"
+        if not self.engines:
+            return "single-engine"
+        return f"data-parallel ({self.engines} GPU{'' if self.engines == 1 else 's'})"
 
 
 def read_on_the_cards(
@@ -81,9 +85,8 @@ def read_on_the_cards(
     check_processor(settings)
     engines = resolve_dp_gpus(settings, settings.model_type)
     if engines:
-        return CardsRead(
-            run_dp(num_gpus=engines, items=items, read=read, settings=settings, sink=sink), engines
-        )
+        records = run_dp(num_gpus=engines, items=items, read=read, settings=settings, sink=sink)
+        return CardsRead(records, max(1, min(engines, len(items))))
     with open_processor(settings) as processor:
         if sink is not None:
             return CardsRead(read(processor, items, settings, sink=sink), None)
@@ -91,20 +94,12 @@ def read_on_the_cards(
 
 
 def resolve_gpu_count(config: Settings) -> int:
-    """Resolve effective GPU count for vLLM DP.
-
-    Priority: data_parallel_size > num_gpus > auto-detect.
+    """How many engines to start, one on each card: ``data_parallel_size`` if the settings give it, else
+    the number of cards the run has (``common.cards``), counted as the engine loader counts them.
     """
     if config.data_parallel_size is not None:
         return config.data_parallel_size
-    if config.num_gpus > 0:
-        return config.num_gpus
-    try:
-        import torch
-
-        return max(1, torch.cuda.device_count())
-    except ImportError:
-        return 1
+    return cards_to_use(config)
 
 
 def resolve_dp_gpus(config: Settings, model_type: str) -> int | None:

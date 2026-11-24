@@ -10,27 +10,16 @@ defaulted here.
 """
 
 import os
-import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from common.cards import cards_to_use
 from common.prompt_trace import effective_trace_path
 from common.settings import Settings
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
 from models.registry import VllmSpec
-
-
-def _cards(settings: Settings) -> int:
-    """How many cards the engine is split across: the settings' number, else every card it can see."""
-    if settings.num_gpus and settings.num_gpus > 0:
-        return settings.num_gpus
-    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if visible is not None:
-        return max(1, len(visible.split(",")))
-    listed = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, check=False)
-    return max(1, len(listed.stdout.strip().splitlines())) if listed.returncode == 0 else 1
 
 
 @contextmanager
@@ -54,7 +43,9 @@ def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
 
     engine = None
     try:
-        cards = _cards(settings)
+        # The engine is split across every card the run has (common.cards). A worker that has one card
+        # to itself is handed settings that say so.
+        cards = cards_to_use(settings)
         tuning = settings.get_vllm_config(spec.model_type)
 
         # The share of each card's memory: the environment's, else the settings file's.

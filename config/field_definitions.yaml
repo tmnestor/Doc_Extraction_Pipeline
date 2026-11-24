@@ -259,15 +259,19 @@ fields:
 
 # The scoring thresholds.
 evaluation:
-  # Metric thresholds: single source of truth for common/scoring.py
+  # Every threshold the scorer reads (common/scoring.py), and no other: one that nothing reads is
+  # refused, since it would look like a setting and change nothing.
   thresholds:
     fuzzy_text_match: 0.75
-    phone_match_high: 0.80
-    phone_match_low: 0.60
-    word_overlap_high: 0.80
-    word_overlap_low: 0.60
     monetary_tolerance: 0.01
+    # The similarity below which a single text value earns nothing: under it the value is a wrong
+    # answer and not a near miss (the ANLS floor).
     anls_threshold: 0.50
+    # The score of a date that agrees with the answer in its day and month and not in its year.
+    date_day_and_month_only: 0.80
+    # The median F1 of its fields at which a page's record says it meets the threshold
+    # (meets_threshold). It marks the record and is in no score.
+    page_meets_threshold_at: 0.80
     # Edit-distance similarity required to call two TRANSACTION register
     # descriptions the same row. NOT the ANLS 0.50 floor above: that is for
     # partial credit on a scalar answer, whereas this is a boolean "is this the

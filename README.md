@@ -45,6 +45,13 @@ stack, so that a model can be compared with published results.
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
 
+A page that cannot be read does not end a task: it is recorded with its error, the task goes on, and
+the next run of the task reads that page again. A task does stop, with its reason and exit code 1, when
+as many requests in a row have failed, with none answered between them, as
+`pipeline.processing.stop_after_failed_requests` allows: the engine has stopped answering, or a setting
+makes every page fail. The `extract` task also reads again a page that has been given another document
+type since it was read.
+
 A task that is stopped part way keeps what it had read. Each record goes into a journal beside the
 task's output the moment it is made (`<output file>.journal`), however the engines are arranged, and the
 next run adds the journal to the output before it carries on. The output itself is always in the order of

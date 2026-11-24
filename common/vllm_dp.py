@@ -21,6 +21,7 @@ from queue import Empty
 from typing import Any, Protocol
 
 from common.config_schema import ConfigError
+from common.engine_calls import StageStopped
 from common.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -292,9 +293,9 @@ def _worker(
         for record in records:
             record["gpu_id"] = gpu_id
         result_queue.put((gpu_id, _FINISHED, records))
-    except ConfigError as err:
-        # A setting that cannot be used is handed to the parent as it is, so that the run ends with
-        # its reason, as it would have had the parent met it.
+    except (ConfigError, StageStopped) as err:
+        # A setting that cannot be used, or an engine that has stopped answering, is handed to the
+        # parent as it is, so that the run ends with its reason, as it would have had the parent met it.
         result_queue.put((gpu_id, _FAILED, err))
     except Exception:
         tb = traceback.format_exc()

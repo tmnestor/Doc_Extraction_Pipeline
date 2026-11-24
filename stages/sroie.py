@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
-from common.engine_calls import groups_of, in_engine_calls
+from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.sroie.config import SroieSettings
 from common.sroie.ground_truth import SroieRecord, load_sroie_split
 from common.sroie.prompt import SROIE_PROMPT
@@ -136,7 +136,8 @@ def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[
 
     records: list[dict[str, Any]] = []
     total = len(image_paths)
-    calls = in_engine_calls(groups_of(image_paths, settings.batch_size), ask, what="receipts")
+    watch = EngineWatch(app_config.stop_after_failed_requests)
+    calls = in_engine_calls(groups_of(image_paths, settings.batch_size), ask, watch=watch, what="receipts")
     for outcomes in calls:
         for outcome in outcomes:
             if outcome.error is not None:

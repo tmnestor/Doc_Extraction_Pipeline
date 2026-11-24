@@ -20,10 +20,18 @@ from pathlib import Path
 from typing import Any
 
 from common.config_schema import ConfigError
-from common.engine_calls import in_engine_calls
+from common.engine_calls import EngineWatch, in_engine_calls
 from common.vllm_dp import RecordSink
 
-from .io import Journal, StreamingJsonlWriter, append_jsonl, read_completed_images, read_jsonl
+from .io import (
+    Journal,
+    StreamingJsonlWriter,
+    append_jsonl,
+    failed,
+    read_completed_images,
+    read_jsonl,
+    take_out,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +92,25 @@ def run(
         from common.stage_timing import note_recovered
 
         note_recovered(output_path.parent, stage="extract", records=recovered)
+
+    # Two kinds of page are read again, and their records taken out of the output so that they are not
+    # among the pages already done: a page an earlier run could not read, and a page that has been
+    # given another document type since it was read, whose record is of the wrong fields.
+    now_typed = {c["image_name"]: c["document_type"] for c in classifications}
+
+    def retyped(record: dict[str, Any]) -> bool:
+        name = record.get("image_name")
+        return name in now_typed and record.get("document_type") != now_typed[name]
+
+    read_again = take_out(output_path, lambda record: failed(record) or retyped(record))
+    if read_again:
+        logger.info(
+            "%d page(s) will be read again: %d an earlier run could not read, %d given another "
+            "document type since",
+            len(read_again),
+            sum(1 for record in read_again if failed(record)),
+            sum(1 for record in read_again if not failed(record)),
+        )
 
     # Check for resumption
     completed = read_completed_images(output_path)
@@ -171,8 +198,17 @@ def run(
         wall_clock=wall_clock,
         execution_mode=execution_mode,
         carried_on=bool(completed),
+        read_again=len(read_again),
     )
     logger.info("Wrote %d extractions to %s", len(records), output_path)
+    could_not = sum(1 for record in records if failed(record))
+    if could_not:
+        logger.warning(
+            "%d of %d page(s) could not be read. Each is recorded with its error, and is read again "
+            "the next time the stage is run.",
+            could_not,
+            len(records),
+        )
     return output_path
 
 
@@ -249,13 +285,16 @@ def extract_pages(
         One record per page, holding the model's raw reply, in the order given.
     """
     collected = _Collected(sink)
+    # One watch for the whole of this engine's reading: pages that fail one after another are counted
+    # across its calls.
+    watch = EngineWatch(app_config.stop_after_failed_requests)
     done, total = 0, len(classified)
     for batch in _plan_batches(classified, app_config):
         # A dense statement can take a while, so say what is in flight before it starts.
         logger.info(
             "[%d/%d] reading %d %s...", done + len(batch), total, len(batch), batch[0]["document_type"]
         )
-        _read_batch(collected, processor, batch)
+        _read_batch(collected, processor, batch, watch)
         done += len(batch)
     return collected.records
 
@@ -274,7 +313,9 @@ def _prompt_name(document_type: str) -> str:
     return document_type.lower()
 
 
-def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]]) -> None:
+def _read_batch(
+    writer: RecordSink, processor: Any, batch: list[dict[str, Any]], watch: EngineWatch
+) -> None:
     """Read a group of pages of one document type in one engine call, and write a record for each.
 
     A group that fails is read again one page at a time, so a single bad page costs its group only the
@@ -296,7 +337,7 @@ def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]])
         ):
             return processor.read_pages([pages[0]["image_path"]], kind)
 
-    for outcomes in in_engine_calls([batch], ask, what=kind):
+    for outcomes in in_engine_calls([batch], ask, watch=watch, what=kind):
         for outcome in outcomes:
             if outcome.error is not None:
                 logger.error("Error extracting %s: %s", outcome.item["image_name"], outcome.error)

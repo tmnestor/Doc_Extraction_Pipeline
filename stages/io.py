@@ -5,6 +5,8 @@ so that partial output survives crashes (critical at 10K images).
 """
 
 import json
+import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -150,6 +152,53 @@ class Journal:
         """Remove the journal, once the stage's output holds everything it held."""
         if self.path.is_file():
             self.path.unlink()
+
+
+def take_out(path: Path, read_again: Callable[[dict[str, Any]], bool]) -> list[dict[str, Any]]:
+    """Take out of a stage's output the records of pages the stage is to read again.
+
+    A stage carries on from its earlier output by the names of the pages in it. A page recorded as
+    failed is in it too, and until 25 November 2026 was therefore never read again: an engine that
+    stopped answering part way left every page after it recorded as failed, and done.
+
+    The file is written again without those records, and put in place whole, so that a run stopped
+    during this leaves either the old file or the new one. A line that cannot be read, which a run
+    stopped while writing leaves, is dropped with them. A file with nothing to take out is not touched.
+
+    Args:
+        path: The stage's output.
+        read_again: Says of a record whether its page is to be read again.
+
+    Returns:
+        The records taken out.
+    """
+    if not path.is_file():
+        return []
+    kept: list[str] = []
+    taken: list[dict[str, Any]] = []
+    spoilt = 0
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            spoilt += 1
+            continue
+        if isinstance(record, dict) and read_again(record):
+            taken.append(record)
+        else:
+            kept.append(line)
+    if taken or spoilt:
+        rewritten = path.with_name(path.name + ".rewriting")
+        rewritten.write_text("".join(line + "\n" for line in kept))
+        os.replace(rewritten, path)
+    return taken
+
+
+def failed(record: dict[str, Any]) -> bool:
+    """Whether a record is of a page the stage could not read."""
+    return bool(record.get("error"))
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:

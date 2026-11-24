@@ -16,10 +16,14 @@ import pytest
 import yaml
 from PIL import Image
 
+from common.engine_calls import EngineWatch
 from common.extraction_batching import BatchingConfigError, read_classify_batch_size
 from common.prompt_catalog import PromptCatalog
 from models.orchestrator import DocumentOrchestrator
 from stages import classify as classify_stage
+
+# A watch that never stops a stage: these tests are not of an engine that has stopped answering.
+NEVER = EngineWatch(10_000)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
@@ -118,7 +122,9 @@ def test_asking_about_no_pages_makes_no_call():
 def test_pages_are_classified_in_shared_calls_of_the_configured_size(pages):
     backend = FakeBackend()
 
-    records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=2, verbose=False)
+    records = classify_stage._classify_images(
+        orchestrator(backend), pages, batch_size=2, verbose=False, watch=NEVER
+    )
 
     assert [call["n"] for call in backend.many_calls] == [2, 1]
     assert [r["image_path"] for r in records] == pages
@@ -126,10 +132,10 @@ def test_pages_are_classified_in_shared_calls_of_the_configured_size(pages):
 
 def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
     together = classify_stage._classify_images(
-        orchestrator(FakeBackend()), pages, batch_size=3, verbose=False
+        orchestrator(FakeBackend()), pages, batch_size=3, verbose=False, watch=NEVER
     )
     one_by_one = classify_stage._classify_images(
-        orchestrator(FakeBackend()), pages, batch_size=1, verbose=False
+        orchestrator(FakeBackend()), pages, batch_size=1, verbose=False, watch=NEVER
     )
 
     # A page's time is a measurement, and differs from one call to the next.
@@ -154,7 +160,7 @@ def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
 def test_a_batch_size_of_one_keeps_one_call_a_page(pages):
     backend = FakeBackend()
 
-    classify_stage._classify_images(orchestrator(backend), pages, batch_size=1, verbose=False)
+    classify_stage._classify_images(orchestrator(backend), pages, batch_size=1, verbose=False, watch=NEVER)
 
     assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
 
@@ -163,7 +169,9 @@ def test_a_failed_shared_call_is_retried_one_page_at_a_time(pages, caplog):
     backend = FakeBackend(fail_shared=True)
 
     with caplog.at_level("WARNING"):
-        records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=3, verbose=False)
+        records = classify_stage._classify_images(
+            orchestrator(backend), pages, batch_size=3, verbose=False, watch=NEVER
+        )
 
     assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
     assert [r["document_type"] for r in records] == [
@@ -181,7 +189,9 @@ def test_a_page_that_fails_alone_is_given_the_fallback_type_and_carries_the_erro
 
     processor = orchestrator(Refuses())  # type: ignore[arg-type]
 
-    (record,) = classify_stage._classify_images(processor, pages[:1], batch_size=1, verbose=False)
+    (record,) = classify_stage._classify_images(
+        processor, pages[:1], batch_size=1, verbose=False, watch=NEVER
+    )
 
     assert record["document_type"] == "INVOICE"
     assert record["error"] == "engine refused the page"

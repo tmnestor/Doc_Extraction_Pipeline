@@ -123,23 +123,205 @@ throughout:
 - **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
 - **A key the code does not know is refused.** A misspelt key cannot sit in the file doing nothing.
 
-## Adding a document type
+## Adding a New Document Class
 
-A document type is a prompt and a block in the schema file. Nothing in Python names a type or a field.
+A document class (the files call it a document type) is a block in the schema file and a prompt of the
+same name. Nothing in Python names a type or a field, so adding one changes no code: three YAML files
+and, to score it, an answer key.
 
-1. **Its block**, under `document_types` in `config/field_definitions.yaml`: the fields its prompt asks for.
-   A block may also give other names the type goes by, a fixed completion budget, and a table whose rows
-   are lined up before scoring. Each field that no other type already has needs an entry under `fields:`
-   in the same file: how its values are tidied, whether it is a list, and how it is scored. The file
-   describes every key.
-2. **Its prompt**, of the same name, under `prompts:` in `prompts/extraction_prompts.yaml`.
-3. **A rule that recognises it**, under `classification_evidence.rules` in
-   `prompts/document_type_detection.yaml`. If none of the questions asked tells the type apart, add a
-   question under `classification.questions` in the same file, and use its answer in the rule.
+| What | Where | Needed |
+|---|---|---|
+| The type's block: its fields | `config/field_definitions.yaml`, under `document_types` | always |
+| An entry for each new field | `config/field_definitions.yaml`, under `fields` | for each field no other type has |
+| The type's prompt | `prompts/extraction_prompts.yaml`, under `prompts` | always |
+| A rule that recognises it | `prompts/document_type_detection.yaml`, under `classification_evidence.rules` | to have pages classified as it |
+| A question that tells it apart | the same file, under `classification.questions` | only if no question asked already does |
+| Its batch size and its place in the order | `config/run_config.yml` | optional |
+| Its answers | the answer key, a JSON lines file | to score it |
 
-A type with no prompt, a prompt with no type, a field with no entry, a rule for a type that has no block,
-and a rule that uses a question nobody asks each stop the run with a message that says which. `docs/document_classification.md`
-has the detail.
+The steps below add a payslip. Every name and value in them is made up.
+
+### 1. The type's block
+
+Under `document_types` in `config/field_definitions.yaml`. The name is in lower case; pages of the type
+are recorded under it in capitals (`PAYSLIP`).
+
+```yaml
+  payslip:
+    also_called:          # optional: other names a reply may give the type
+      - payslip
+      - pay slip
+      - pay advice
+    fields:               # what its prompt asks for, and what it is scored on
+      - DOCUMENT_TYPE
+      - BUSINESS_ABN
+      - EMPLOYER_NAME
+      - EMPLOYEE_NAME
+      - PAY_PERIOD
+      - PAY_DATE
+      - EARNINGS_DESCRIPTIONS
+      - EARNINGS_AMOUNTS
+      - GROSS_PAY
+      - TAX_WITHHELD
+      - NET_PAY
+```
+
+A block may also hold `completion_tokens`, a fixed limit on the length of a reply, for a type whose pages
+run long. Without it the limit is worked out from the number of fields. A type whose list fields are the
+columns of one table may hold a `table`, which says how the rows of a reply and of the answer are lined
+up before they are compared. The head of the file describes both, and the bank statement uses both.
+
+### 2. An entry for each new field
+
+Under `fields` in the same file. `DOCUMENT_TYPE` and `BUSINESS_ABN` have entries already, since other
+types use them, so the payslip needs nine:
+
+```yaml
+  EMPLOYER_NAME:                {cleaned_as: text, list: false, scored_as: text}
+  EMPLOYEE_NAME:                {cleaned_as: text, list: false, scored_as: text}
+  PAY_PERIOD:                   {cleaned_as: date, list: false, scored_as: date}
+  PAY_DATE:                     {cleaned_as: day_month_year, list: false, scored_as: date}
+  EARNINGS_DESCRIPTIONS:        {cleaned_as: text, list: true, scored_as: text}
+  EARNINGS_AMOUNTS:             {cleaned_as: money, list: true, scored_as: money}
+  GROSS_PAY:                    {cleaned_as: money, list: false, scored_as: money}
+  TAX_WITHHELD:                 {cleaned_as: money, list: false, scored_as: money}
+  NET_PAY:                      {cleaned_as: money, list: false, scored_as: money}
+```
+
+An entry says three things, and all three must be written out:
+
+- `cleaned_as`: how a value in a reply is tidied, so that one answer written two ways compares as the
+  same. One of `text`, `money`, `amount_as_written`, `quantity`, `date`, `day_month_year`, `identifier`,
+  `address`, `document_type`.
+- `list`: `true` for a field that holds several entries, written with ` | ` between them.
+- `scored_as`: how a value is compared with the answer. One of `text`, `money`, `date`, `yes_no`,
+  `identifier`.
+
+The comments above `fields` in the file say what each of these does. A field is named in capitals with
+underscores.
+
+### 3. The type's prompt
+
+Under `prompts` in `prompts/extraction_prompts.yaml`, under the same name as the block. It asks for the
+block's fields, one a line, in the form the shipped prompts use:
+
+```yaml
+  payslip:
+    name: "Payslip Extraction"
+    description: "Extract 11 payslip fields"
+    prompt: |
+      Extract ALL data from this payslip image. Respond in exact format below with actual values or NOT_FOUND.
+
+      DOCUMENT_TYPE: PAYSLIP
+      BUSINESS_ABN: NOT_FOUND
+      EMPLOYER_NAME: NOT_FOUND
+      EMPLOYEE_NAME: NOT_FOUND
+      PAY_PERIOD: NOT_FOUND
+      PAY_DATE: NOT_FOUND
+      EARNINGS_DESCRIPTIONS: NOT_FOUND
+      EARNINGS_AMOUNTS: NOT_FOUND
+      GROSS_PAY: NOT_FOUND
+      TAX_WITHHELD: NOT_FOUND
+      NET_PAY: NOT_FOUND
+
+      Write a list with " | " between its entries, in the order the rows are printed.
+```
+
+A reply is read as lines of `FIELD_NAME: value`. A field the reply does not give is `NOT_FOUND`.
+
+**No example in a prompt may hold a value from a set of pages the prompt will be scored on.** The model
+reads the prompt: a real name, amount or date in it hands the model part of an answer. Describe the form
+of an answer, or make the example up and check that it appears in no answer key.
+
+### 4. A rule that recognises it
+
+A page's type is not asked of the model. The model is asked questions about what can be seen on the page,
+and the type is worked out from its answers by the rules in `prompts/document_type_detection.yaml`. The
+rules are tried from the top and the first that fits gives the type, so where a rule is put matters.
+
+If the answers to the questions already asked tell the new type apart, a rule is enough. A rule may use
+the roles of a table's column headings (`any_roles`, `all_roles`, from `column_roles` in the same file)
+and the answer to any YES or NO question, by its label in lower case.
+
+A payslip is not told apart by the four questions shipped, so it needs a question as well. Under
+`classification.questions`, after the others:
+
+```yaml
+    - label: PAYSLIP
+      answer: yes_no
+      ask: |
+        Is this a payslip or pay advice (showing an employee, a
+        pay period, and gross and net pay)? Answer YES or NO.
+```
+
+and under `classification_evidence.rules`, above the rule for `RECEIPT`, since a payslip also shows that
+a payment was made:
+
+```yaml
+    - type: PAYSLIP
+      when: { payslip: true }
+```
+
+**A new question changes what every page is asked**, not only pages of the new type. Classification must
+then be measured again for every type (step 7). A new rule alone changes nothing that is sent to the
+model. There may be nine questions at most.
+
+A type with no rule is still a type: a page can be read as it, but no page will be classified as it.
+
+### 5. Optional settings
+
+In `config/run_config.yml`. Neither is needed for the type to work.
+
+- `pipeline.batching.payslip`: how many of its pages go to the engine in one call. Without it the type
+  has `pipeline.batching.default`.
+- `pipeline.extraction.order`: the order the types are read in. A type that is not listed is read last.
+
+### 6. Its answers
+
+To score the type, the answer key needs a line for each of its pages. The key is a JSON lines file: one
+answer a line, holding the page's file name and its own type's fields. A page is scored on exactly the
+fields its answer carries, so a field left out of an answer is not scored.
+
+```json
+{"filename": "payslip_001.png", "DOCUMENT_TYPE": "PAYSLIP", "BUSINESS_ABN": "51824753556", "EMPLOYER_NAME": "Quillfeather Books Pty Ltd", "EMPLOYEE_NAME": "Marigold Tansley", "PAY_PERIOD": "01/02/2031 - 14/02/2031", "PAY_DATE": "16/02/2031", "EARNINGS_DESCRIPTIONS": "Ordinary hours | Overtime", "EARNINGS_AMOUNTS": "$2150.00 | $187.50", "GROSS_PAY": "$2337.50", "TAX_WITHHELD": "$512.00", "NET_PAY": "$1825.50"}
+```
+
+A field that is not on the page is `NOT_FOUND` in its answer, and a list is written with ` | ` between its
+entries, as a reply writes it.
+
+### 7. Check it, then measure it
+
+From the repository's folder, on any machine, with no model:
+
+```bash
+python -c "
+from common.prompt_catalog import PromptCatalog
+catalog = PromptCatalog()
+for model in ('gemma4-31b-w4a16-vllm', 'gemma4-12b-unified-w4a16-vllm'):
+    catalog.check_extraction_prompts(model)
+catalog.get_classification_evidence()
+print(catalog.classification_prompt())
+"
+```
+
+It prints the classification prompt as the model will be sent it, or stops with what is wrong. Each of
+these stops it, and stops a run in the same way, with a message that says which and where:
+
+- a type with no prompt, or a prompt with no type;
+- a field a type names that has no entry, or an entry missing one of its three parts;
+- a key in a block or an entry that the pipeline does not know;
+- a rule for a type that has no block, or one that uses a column role or a question nobody defined;
+- a batch size in the settings file for a name that is no type.
+
+Then run the tests (see below). If a question was added, the tests that hold the classification prompt
+and its recorded replies fixed will fail, as they are meant to: what the model is sent has changed. Their
+records are written again on purpose, and each of those test files says how.
+
+Last, measure on the cards. Run the new type's pages through `classify`, `extract`, `clean` and
+`evaluate`. If a question was added, run the existing sets through `classify` as well and compare the
+types with an earlier run: a question that helps one type can cost another.
+
+`docs/document_classification.md` has the detail of how the answers become a type.
 
 ## Adding a model
 

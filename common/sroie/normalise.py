@@ -3,7 +3,7 @@
 Every function here either returns a canonical value or raises. Nothing
 falls back to comparing raw strings: a fallback of that kind is what made
 the previous SROIE run report 0.74 for a date field that was actually
-scoring 0.92 — the model was right and the scorer could not tell.
+scoring 0.92: the model was right and the scorer could not tell.
 """
 
 import re
@@ -56,11 +56,11 @@ def _raise_unparseable(kind: str, raw: str, source: str | None, examples: str) -
     raise SroieNormalisationError(
         f"What: cannot parse {kind} value {raw!r}{origin}.\n"
         f"Where: the {kind} field of that SROIE record.\n"
-        f"Expected: one of the corpus formats — {examples}.\n"
+        f"Expected: one of the corpus formats: {examples}.\n"
         f"How to fix: if this is a real corpus format, add it to "
         f"common/sroie/normalise.py and cover it in "
         f"tests/common/test_sroie_normalise.py. Do NOT make this a silent "
-        f"fallback — an unscoreable value must stop the run, not become a "
+        f"fallback: an unscoreable value must stop the run, not become a "
         f"false negative."
     )
 

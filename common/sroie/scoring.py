@@ -2,9 +2,9 @@
 
 Both numbers are reported for every run:
 
-* ``STRICT`` follows the official SROIE protocol — the extracted string
+* ``STRICT`` follows the official SROIE protocol: the extracted string
   must equal the answer key, forgiving only case and whitespace runs.
-* ``LENIENT`` asks whether the model read the receipt — dates compare as
+* ``LENIENT`` asks whether the model read the receipt: dates compare as
   dates, totals as amounts, and text ignores punctuation.
 
 Publishing one number alone hides the gap between them. That gap is not
@@ -52,7 +52,7 @@ class FieldCounts:
             self.true_positives += 1
             return
         # A wrong answer is both a bad prediction and a missed gold value.
-        # A declined answer costs recall only — silence is not a claim.
+        # A declined answer costs recall only: silence is not a claim.
         if answered:
             self.false_positives += 1
         self.false_negatives += 1
@@ -116,7 +116,7 @@ def field_matches(
 
     The two sides are treated differently on purpose. A ground-truth value
     that cannot be canonicalised is a dataset defect and raises. A
-    prediction that cannot be canonicalised is simply a wrong answer — one
+    prediction that cannot be canonicalised is simply a wrong answer: one
     malformed model reply must not abort the run.
 
     Args:
@@ -222,8 +222,8 @@ def per_document_f1(
 ) -> list[float]:
     """Each receipt's score: the share of its four fields read correctly.
 
-    Unlike the per-field scores this is a genuine distribution — a receipt
-    can land anywhere from 0.0 to 1.0 — so its mean, median and standard
+    Unlike the per-field scores this is a genuine distribution (a receipt
+    can land anywhere from 0.0 to 1.0), so its mean, median and standard
     deviation each carry information.
 
     Args:

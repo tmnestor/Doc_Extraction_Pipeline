@@ -1,7 +1,7 @@
 """The ``pipeline.sroie`` configuration block.
 
 Every key is required. Nothing here carries a Python-side default, so
-reading the YAML alone answers what a run is configured to do — and a
+reading the YAML alone answers what a run is configured to do, and a
 config that is missing a key stops the run instead of quietly benchmarking
 something nobody chose.
 """

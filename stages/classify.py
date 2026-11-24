@@ -85,7 +85,7 @@ def run(
 
     # Resume: skip images already classified in a prior (possibly crashed) run,
     # and APPEND below instead of truncating. A clean-slate re-run is the opt-in
-    # (clear the output first — the entrypoint does this for full re-runs). This
+    # (clear the output first: the entrypoint does this for full re-runs). This
     # mirrors the extract stage and runs BEFORE the model load, so a fully
     # resumed run skips the GPU entirely.
     original_total = len(images)

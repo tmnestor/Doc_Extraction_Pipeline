@@ -35,7 +35,7 @@ def inference_seconds_from_responses(
     """Wall-clock inference time across data-parallel workers.
 
     Workers run concurrently, so the elapsed time is the SLOWEST worker's
-    total, not the sum of all of them — summing would report total compute
+    total, not the sum of all of them: summing would report total compute
     and understate throughput by roughly the number of GPUs.
 
     Engine startup is excluded because each worker times only its own
@@ -75,7 +75,7 @@ def benchmark_from_worker_responses(
 
     Returns:
         The run. A record absent from
-        *responses* — a worker died part-way through its partition —
+        *responses* (a worker died part-way through its partition)
         becomes an explicit error, never a missing row.
     """
     by_id = {str(item["image_id"]): item for item in responses}
@@ -85,7 +85,7 @@ def benchmark_from_worker_responses(
         item = by_id.get(record.image_id)
         if item is None:
             run.errors[record.image_id] = (
-                "no response returned — the data-parallel worker holding this image did not report it"
+                "no response returned: the data-parallel worker holding this image did not report it"
             )
             run.raw_responses[record.image_id] = ""
             run.predictions[record.image_id] = {}

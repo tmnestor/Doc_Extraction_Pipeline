@@ -42,7 +42,7 @@ def _record_stage_timing(
 ) -> None:
     """Write this stage's timing sidecar for the evaluate summary.
 
-    Observability only — a failure here must never fail a run that has
+    Observability only: a failure here must never fail a run that has
     already done its expensive work.
     """
     try:

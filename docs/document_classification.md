@@ -14,7 +14,7 @@ is *how* it decides:
   concrete, observable questions (what are the table column headers, is there
   payment evidence, how many rows, is this a travel document).
 - The Python layer then **derives the type from that evidence** using
-  declarative rules in YAML (`classification_evidence`) — the model reports
+  declarative rules in YAML (`classification_evidence`): the model reports
   facts, the rules make the decision. This is far more robust than trusting a
   model's one-word self-classification, especially with reasoning ("thinking")
   models that drift.
@@ -24,17 +24,17 @@ new type:
 
 | Evidence kind | Example | Detects |
 |---|---|---|
-| **Column roles** — semantic columns recovered from the table headers | `debit`/`credit`/`balance`, `distance`/`odometer`/`purpose`, `gst`/`unit_price`/`quantity` | `BANK_STATEMENT`, `LOGBOOK`, `INVOICE` |
-| **Boolean flags** — a direct YES/NO observation | `paid`, `travel` | `RECEIPT`, `TRAVEL` |
+| **Column roles**: semantic columns recovered from the table headers | `debit`/`credit`/`balance`, `distance`/`odometer`/`purpose`, `gst`/`unit_price`/`quantity` | `BANK_STATEMENT`, `LOGBOOK`, `INVOICE` |
+| **Boolean flags**: a direct YES/NO observation | `paid`, `travel` | `RECEIPT`, `TRAVEL` |
 
 Boolean flags exist because some document types have **no distinctive table** to
-key off. A flight itinerary/boarding pass has no financial ledger columns — the
-model literally answers `COLUMNS: NONE` — so it can only be caught by asking a
+key off. A flight itinerary/boarding pass has no financial ledger columns: the
+model literally answers `COLUMNS: NONE`, so it can only be caught by asking a
 dedicated `TRAVEL: YES/NO` question. See
 [The TRAVEL case](#the-travel-case-when-columns-arent-enough).
 
 If you want to adapt this to a new task, the pattern to copy is
-**"ask for evidence, derive the label from declarative rules"** — see
+**"ask for evidence, derive the label from declarative rules"**: see
 [Reusing this for a new task](#reusing-this-for-a-new-task).
 
 ---
@@ -67,7 +67,7 @@ flowchart TD
     I --> J[Downstream: type-specific<br/>extraction prompt]
 ```
 
-**The contract** — `detect_and_classify_document(image_path) -> dict`:
+**The contract**: `detect_and_classify_document(image_path) -> dict`:
 
 ```python
 {
@@ -80,11 +80,11 @@ flowchart TD
 ```
 
 On any exception it returns the configured `fallback_type` with
-`confidence: 0.1` — it never raises into the pipeline.
+`confidence: 0.1`: it never raises into the pipeline.
 
 ---
 
-## Step 1 — The prompt asks for *evidence*, not a verdict
+## Step 1: The prompt asks for *evidence*, not a verdict
 
 The live prompt (`prompts/document_type_detection.yaml`, key `detection`, wired
 in `cli.py` as `"detection_key": "detection"`) is deliberately small:
@@ -120,13 +120,13 @@ Why this shape:
 - **Observable questions** ("list the column headers", "is this a boarding
   pass") are things a VLM is good at. "Classify this document" forces it to do
   reasoning we can't inspect.
-- The answers are **auditable** — `raw_response` is stored, so a wrong call can
+- The answers are **auditable**: `raw_response` is stored, so a wrong call can
   be traced to a wrong fact, not a black-box guess.
 - It keeps the response **short** (`token_budgets.classify: 150`), which is fast
   and cheap.
 - **Add evidence, not verdicts.** When a new type can't be told apart by the
   existing facts, the fix is to add a *new observable question* (as `TRAVEL` was
-  added) — never to ask the model for the final label.
+  added): never to ask the model for the final label.
 
 > The file also contains a `detection_complex` prompt that *does* ask the model
 > to name the type directly. It is kept for reference/fallback but is **not** the
@@ -134,13 +134,13 @@ Why this shape:
 
 ---
 
-## Step 2 — Derive the type from the evidence (YAML-driven rules)
+## Step 2: Derive the type from the evidence (YAML-driven rules)
 
 `document_type()` (`common/classification.py`) turns the
-answers into a label. The Python layer parses the evidence — matching headers to
+answers into a label. The Python layer parses the evidence: matching headers to
 a `column_mapping` and reading the `paid` / `travel` booleans; the **decision
 itself is declared in YAML** (`classification_evidence` in
-`prompts/document_type_detection.yaml`) and walked generically — no hardcoded
+`prompts/document_type_detection.yaml`) and walked generically: no hardcoded
 type heuristics:
 
 ```mermaid
@@ -157,7 +157,7 @@ flowchart TD
     D -->|INVOICE / TYPE| TYPE
 ```
 
-The rules (`prompts/document_type_detection.yaml`) — first match wins:
+The rules (`prompts/document_type_detection.yaml`): first match wins:
 
 ```yaml
 classification_evidence:
@@ -167,7 +167,7 @@ classification_evidence:
     - type: LOGBOOK
       when: { any_roles: [distance, odometer, purpose] }
     - type: TRAVEL
-      when: { travel: true }        # boolean flag — travel docs have no table
+      when: { travel: true }        # boolean flag: travel docs have no table
     - type: RECEIPT
       when: { paid: true }          # payment wins over an itemised table
     - type: INVOICE
@@ -191,7 +191,7 @@ ANDs together any of these keys:
 checked first; `TRAVEL` sits before `RECEIPT` so a *paid* e-ticket stays
 `TRAVEL` rather than being downgraded to a receipt. Adding a column-detectable
 type is a pure YAML edit; adding a type that needs a brand-new fact requires a
-prompt + parser change too — see
+prompt + parser change too: see
 [Reusing this for a new task](#reusing-this-for-a-new-task).
 
 > **`default: INVOICE`, not `none`.** A remote smoke (2026-06-20) showed
@@ -200,13 +200,13 @@ prompt + parser change too — see
 > dropping F1 mean 0.650 → 0.626. `INVOICE` restores parity and routes unmatched
 > docs to the focused invoice prompt. Because the default is a hard type (not
 > `none`), an enriched response that contains a `COLUMNS` label **never** falls
-> through to the legacy keyword path — see [Fallback path](#fallback-path).
+> through to the legacy keyword path: see [Fallback path](#fallback-path).
 
 Design points worth stealing:
 
 - **Reasoning-model defence.** `<think>...</think>` blocks (and an unterminated
   `<think>` tail from a truncated response) are stripped *first*, so the model's
-  internal monologue — e.g. "there's no table with headers like Date, Debit" —
+  internal monologue (e.g. "there's no table with headers like Date, Debit")
   can never be mistaken for the answer.
 - **Prose is never harvested as data.** Column headers are only recovered from a
   genuinely tabular, pipe-delimited line (`>= 2` pipes). This stopped receipts
@@ -220,7 +220,7 @@ Design points worth stealing:
   chain-of-thought reply where the conclusion lands on a later line
   (`### 4. TRAVEL` … `Answer: YES`). The recovery anchors on the field heading,
   strips the echoed "Answer YES or NO" instruction, and takes the last explicit
-  YES/NO — so neither the question echo nor a prose mention ("not a travel doc")
+  YES/NO, so neither the question echo nor a prose mention ("not a travel doc")
   can be misread as the answer.
 
 ### The TRAVEL case: when columns aren't enough
@@ -232,13 +232,13 @@ reasons *"this is a boarding pass and does not contain a transaction table"*.
 
 Two consequences:
 
-1. A column-role approach for travel is a **dead end** — there are no
+1. A column-role approach for travel is a **dead end**: there are no
    `flight`/`gate`/`seat` headers to match because the model never reports a
    table. (This was tried and reverted; don't re-attempt it.)
 2. Without a travel-specific signal, every itinerary matched no rule and fell to
    `default: INVOICE`.
 
-The fix was to ask a **direct observable question** — `TRAVEL: YES/NO` — and add
+The fix was to ask a **direct observable question** (`TRAVEL: YES/NO`) and add
 a `when: { travel: true }` rule. On the `synthetic_20260622` set this moved all
 10 travel docs from `INVOICE` to `TRAVEL` with no regression on the other types.
 The takeaway: if a type has no distinctive table, give the classifier a boolean
@@ -254,14 +254,14 @@ orchestrator then falls back to keyword matching (`type_mappings` /
 
 Because `classification_evidence.default` is a hard type (`INVOICE`), an enriched
 response that *does* contain a `COLUMNS` label can never defer to the keyword
-path — an unmatched-but-enriched doc resolves to `INVOICE`, not `UNIVERSAL`.
+path: an unmatched-but-enriched doc resolves to `INVOICE`, not `UNIVERSAL`.
 (Setting `default: none` would re-enable that deferral; it was deliberately
-disabled — see the note above.) Unrecognised labels do **not** fail fast here —
+disabled: see the note above.) Unrecognised labels do **not** fail fast here:
 they resolve to the configured fallback type.
 
 ---
 
-## Step 3 — Routing into extraction
+## Step 3: Routing into extraction
 
 The classification result selects the **type-specific extraction prompt** and
 **field list** downstream (`read_pages()` in `orchestrator.py`):
@@ -292,7 +292,7 @@ bank extractor knows which physical column is debit/credit/balance.
 ## Running the classify stage
 
 In production this runs as its own KFP pod (`KFP_TASK=classify`). Never invoke
-the module by hand — the entrypoint sets the model path, tiling, and GPU env:
+the module by hand: the entrypoint sets the model path, tiling, and GPU env:
 
 ```bash
 KFP_TASK=classify bash entrypoint.sh
@@ -300,7 +300,7 @@ KFP_TASK=classify bash entrypoint.sh
 ```
 
 **Input:** a directory of images.
-**Output:** `classifications.jsonl` — one JSON record per image:
+**Output:** `classifications.jsonl`: one JSON record per image:
 
 ```json
 {"image_path": "/data/img_001.png", "image_name": "img_001.png",
@@ -316,7 +316,7 @@ output and appends, rather than re-classifying everything.
 
 ## Configuration
 
-All knobs live in `config/run_config.yml` (YAML is the single source of truth —
+All knobs live in `config/run_config.yml` (YAML is the single source of truth:
 there are no hardcoded Python defaults):
 
 ```yaml
@@ -342,7 +342,7 @@ The prompt file and prompt key are wired in `cli.py`:
 You do **not** touch the orchestrator or stage plumbing. Which files you change
 depends on whether the existing evidence can already tell your new type apart.
 
-### Case A — the new type is distinguishable by *existing* evidence (pure YAML)
+### Case A: the new type is distinguishable by *existing* evidence (pure YAML)
 
 If your type has a distinctive table column or is separated by `paid`/`travel`,
 it's a YAML-only change in `prompts/document_type_detection.yaml`:
@@ -354,32 +354,32 @@ it's a YAML-only change in `prompts/document_type_detection.yaml`:
    (`supported_document_types`) plus its extraction prompt/fields. The rule
    validator fails fast if a rule emits a type that isn't supported.
 
-No Python edit — `_evaluate_classification` walks the rules generically.
+No Python edit: `_evaluate_classification` walks the rules generically.
 
-### Case B — the new type needs a *new* fact (prompt + parser + YAML)
+### Case B: the new type needs a *new* fact (prompt + parser + YAML)
 
 This is what `TRAVEL` required, because no existing fact distinguished it. Four
 edits (see the `TRAVEL` commit as the reference diff):
 
-1. **Prompt** — add a new observable question (e.g. a `FOO: YES/NO` field) to the
+1. **Prompt**: add a new observable question (e.g. a `FOO: YES/NO` field) to the
    `detection` prompt.
-2. **Parser** (`common/classification.py`) — extract the new field in
+2. **Parser** (`common/classification.py`): extract the new field in
    `_parse_enriched` and thread it through `_when_matches` /
    `_evaluate_classification` as a new flag (mirror how `travel` is wired); or,
    for a new column role, just add it under `column_roles`.
-3. **Validation** (`common/prompt_catalog.py`) — add the new key to
+3. **Validation** (`common/prompt_catalog.py`): add the new key to
    `allowed_when_keys` so `when: { foo: true }` passes fail-fast validation.
-4. **YAML + routing** — add the `when: { foo: true }` rule and the label/fields
+4. **YAML + routing**: add the `when: { foo: true }` rule and the label/fields
    as in Case A.
 
 ### Either case
 
 Keep the questions concrete and answerable from the pixels (headers present? a
 particular field present? a count? is it an X?), and put the most specific rule
-first — order is precedence.
+first: order is precedence.
 
 The reusable principle, regardless of domain:
 
 > **Ask the VLM for facts it can see. Decide the label in code from those facts.**
 > Strip any chain-of-thought before parsing, and only treat strongly-structured
-> output (tables/pipes) as data — never prose.
+> output (tables/pipes) as data: never prose.

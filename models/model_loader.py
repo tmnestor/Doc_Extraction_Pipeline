@@ -28,7 +28,7 @@ class VllmSpec:
 
     Holds only *structural* fields. Engine tuning (gpu_memory_utilization,
     max_model_len, max_num_seqs, limit_mm_per_prompt, enable_prefix_caching)
-    lives in ``config/run_config.yml`` under ``inference.vllm:`` — the YAML is the
+    lives in ``config/run_config.yml`` under ``inference.vllm:``. The YAML is the
     single source of truth and is resolved at load time via
     ``app_config.get_vllm_config(model_type)``.
     """
@@ -40,16 +40,15 @@ class VllmSpec:
     mm_processor_kwargs: dict[str, Any] = field(default_factory=dict)
     hf_overrides: dict[str, Any] = field(default_factory=dict)
     # Forwarded to every engine.chat() call. Suppresses a thinking-by-default
-    # chat template (e.g. Gemma 4: {"enable_thinking": False}). NOTE: this does
-    # nothing on InternVL3.5, where thinking is driven by the system prompt, not
-    # an enable_thinking flag — use bootstrap.model.chat_template there instead.
+    # chat template (e.g. Gemma 4: {"enable_thinking": False}). A model whose
+    # template ignores that flag needs bootstrap.model.chat_template instead.
     chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # -- Capabilities: properties of the MODEL, so they live in code, not YAML --
     # (Operator *intent* stays in run_config.yml; what a checkpoint can physically
     # do is structural, same rationale as attention_backend above.)
 
-    # False for models too large to hold one whole engine per GPU — the DP fast
+    # False for models too large to hold one whole engine per GPU: the DP fast
     # path would start N independent engines and OOM.
     supports_data_parallel: bool = True
     # Whether a request puts the image before the text. The model's chat template renders the two
@@ -60,7 +59,7 @@ class VllmSpec:
 def _resolve_vllm_overrides(app_config: Any | None, model_type: str) -> dict[str, Any]:
     """Resolve per-model vLLM engine tuning from the runtime Settings.
 
-    The YAML is the single source of truth — there is no spec-level or Python
+    The YAML is the single source of truth: there is no spec-level or Python
     fallback, so an Settings is mandatory for vLLM loads.
 
     Raises:
@@ -125,7 +124,7 @@ def build_vllm_loader(spec: VllmSpec):
                 tp_size = max(1, tp_size)
 
                 # All engine tuning comes from app_config (YAML single source of
-                # truth). No spec-level fallback — a vLLM model MUST be loaded
+                # truth). No spec-level fallback: a vLLM model MUST be loaded
                 # with an Settings. Keys are required, not optional, per the
                 # "every config key is required" rule.
                 vllm_overrides = _resolve_vllm_overrides(app_config, spec.model_type)
@@ -144,7 +143,7 @@ def build_vllm_loader(spec: VllmSpec):
 
                 # max_num_seqs is printed because it is the ceiling on
                 # concurrency and there is otherwise NO way to tell from a run
-                # whether the configured value reached the engine — vLLM's own
+                # whether the configured value reached the engine: vLLM's own
                 # startup lines are INFO, and entrypoint.sh suppresses those.
                 console.print(
                     f"\n[bold]Loading {spec.model_type} via vLLM "
@@ -225,8 +224,6 @@ def build_vllm_processor_creator(spec: VllmSpec):
         *,
         app_config=None,
     ):
-        # debug=config.debug → Tier C; verbose=config.verbose → Tier B. See
-        # `plans/quiet-pipeline-output.md` for the split.
         backend = VllmBackend(
             engine=model,
             model_type_key=spec.model_type,
@@ -254,8 +251,8 @@ def build_vllm_processor_creator(spec: VllmSpec):
 
 # Registered specs, keyed by model_type. ``register_model`` stores loaders and
 # processor creators built from a spec via closures, so without this map a spec's
-# declared capabilities — chat_template_kwargs,
-# default_image_first — are unreachable once registration has happened. That
+# declared capabilities (chat_template_kwargs,
+# default_image_first) are unreachable once registration has happened. That
 # matters because those capabilities fail QUIETLY: a model that reasons when it
 # should not still returns a parseable response.
 _VLLM_SPECS: dict[str, VllmSpec] = {}

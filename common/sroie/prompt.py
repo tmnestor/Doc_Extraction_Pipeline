@@ -4,12 +4,12 @@ One definition, shared by every model under test. Comparability between
 runs depends on this text being identical across them, so it lives here
 rather than in a per-model notebook or config file.
 
-Wording history — read before "tidying" this text:
+Wording history: read before "tidying" this text:
 
 * 2026-08-14: the total line said "write the total as a plain number,
   without a currency symbol", with no example. InternVL3.5 read "plain
   number" as "no punctuation" and wrote ``490`` for 4.90 on 196 of 347
-  receipts — every digit correct, the decimal point dropped — taking
+  receipts (every digit correct, the decimal point dropped) taking
   total F1 from 0.95 to 0.58. A worked example is doing real work here;
   do not remove it.
 
@@ -22,7 +22,7 @@ Wording history — read before "tidying" this text:
   rather than whether it read the receipt.
 
   This change is known to help Gemma 4 far more than InternVL3.5. It is
-  made because the instruction was ambiguous, NOT to move the ranking —
+  made because the instruction was ambiguous, NOT to move the ranking:
   the projection is that InternVL3.5 still leads afterwards.
 """
 

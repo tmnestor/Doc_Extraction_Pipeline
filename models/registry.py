@@ -75,7 +75,7 @@ def supports_data_parallel(model_type: str) -> bool:
 
     False for models too large to replicate per GPU (a quantised 31B still wants
     the whole card once KV cache and vision activations are counted). Unknown
-    types answer True — ``get_model()`` is the place that rejects them.
+    types answer True: ``get_model()`` is the place that rejects them.
     """
     reg = _REGISTRY.get(model_type)
     return reg.supports_data_parallel if reg else True

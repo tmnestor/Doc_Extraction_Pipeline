@@ -10,19 +10,19 @@ Operational runbook for making the three registered Gemma 4 models runnable on t
 
 **All three run in the same `vllm_env3` env** (vLLM 0.25.1 registers both architectures and ships
 `compressed-tensors==0.17.0`), so the engine work below is done once and serves all of them. Budget
-**~57 GB** of share space for all three, or just **~10 GB** for the W4A16 12B alone — which is the
+**~57 GB** of share space for all three, or just **~10 GB** for the W4A16 12B alone, which is the
 only one the current 2xL4 evaluation needs.
 
 **Target box: 2xL4 (~22.5 GiB usable each)** for `gemma4-12b-unified-w4a16-vllm`, which is the current
 evaluation target. At 9.56 GiB it fits one WHOLE engine per card, so the pipeline runs **DP=2 / tp=1**
-via `run_dp` — roughly 2x the throughput of sharding a single engine tp=2 over PCIe (the L4 has no
+via `run_dp`: roughly 2x the throughput of sharding a single engine tp=2 over PCIe (the L4 has no
 NVLink). The DP path uses no NCCL and no `/dev/shm`, so it also sidesteps the tensor-parallel SHM
 deadlock noted at the top of `entrypoint.sh`.
 
-The two larger checkpoints below do not fit one L4 and need **1xL40S (~44-48 GiB) at tp=1** — that
+The two larger checkpoints below do not fit one L4 and need **1xL40S (~44-48 GiB) at tp=1**: that
 was this document's original target, and their sections still assume it.
 
-The model registration and config already exist on branch `feature/gemma4` — this document only
+The model registration and config already exist on branch `feature/gemma4`: this document only
 covers getting the environment and weights in place.
 
 **Most of this runs on a CPU-only node.** Only the engine load and the smoke need the GPU, so the
@@ -30,36 +30,36 @@ preparation can all be done while waiting for a GPU allocation:
 
 | Step | CPU-only node | Needs the L40S |
 | --- | --- | --- |
-| Part 2 — create `vllm_env3` (vllm 0.25.1) | ✅ | |
-| Part 2 — arch-registry check | ✅ (pure Python import) | |
-| Part 3 / 3b — downloads + verification | ✅ (network + disk) | |
-| Part 4 — `run_config.yml` edits | ✅ | |
-| Part 5 — engine load and smoke | | ✅ |
+| Part 2: create `vllm_env3` (vllm 0.25.1) | ✅ | |
+| Part 2: arch-registry check | ✅ (pure Python import) | |
+| Part 3 / 3b: downloads + verification | ✅ (network + disk) | |
+| Part 4: `run_config.yml` edits | ✅ | |
+| Part 5: engine load and smoke | | ✅ |
 
-The downloads are the long pole (~47 GB for both models), so start them first — they cost nothing to run
+The downloads are the long pole (~47 GB for both models), so start them first: they cost nothing to run
 while an allocation is pending, and they take the wait off the critical path.
 
 ## Why a nightly engine is required
 
 `google/gemma-4-12B-it` is the *Unified* variant: `model_type: gemma4_unified`, architecture
-`Gemma4UnifiedForConditionalGeneration`. It is encoder-free — raw image patches and audio waveforms are
+`Gemma4UnifiedForConditionalGeneration`. It is encoder-free: raw image patches and audio waveforms are
 projected straight into the LLM embedding space, with no vision tower.
 
-Support (`vllm-project/vllm#44429`) shipped in **stable v0.23.0 on 2026-06-15** — its release notes read
+Support (`vllm-project/vllm#44429`) shipped in **stable v0.23.0 on 2026-06-15**: its release notes read
 *"Added encoder-free Gemma 4 Unified support (#44429) and Gemma 4 MTP (#43241), plus numerous accuracy and
 startup fixes."* Verified still registered at v0.25.1.
 
-**So a nightly is NOT required — use a pinned stable release ≥ 0.23.0.** Anything older fails at engine
+**So a nightly is NOT required: use a pinned stable release ≥ 0.23.0.** Anything older fails at engine
 load with an unknown-architecture error that has nothing to do with this repo's code.
 
 > **Correction (2026-07-28):** earlier revisions of this document claimed the model needed a nightly wheel,
-> based on the upstream vLLM *recipes* page, which is stale — it predates the v0.23.0 release. The nightly
+> based on the upstream vLLM *recipes* page, which is stale: it predates the v0.23.0 release. The nightly
 > route below still works and is recorded for anyone who already took it, but a pinned stable release is
 > the right answer: reproducible by construction, no commit-SHA resolution, no wheel archiving, no risk of
 > the build being pruned from the nightly index, and realistically a precondition for KFP.
 
 **This is already settled, not something to discover on the box.** The environment in use,
-`conda_envs/vllm_env2.yaml`, pins **`vllm==0.19.0`** — below the threshold. The 12B cannot run on the
+`conda_envs/vllm_env2.yaml`, pins **`vllm==0.19.0`**: below the threshold. The 12B cannot run on the
 current stack.
 
 > **The 31B does NOT need a nightly.** `vllm==0.19.0` already carries `compressed-tensors` as a
@@ -73,18 +73,18 @@ current stack.
 | Repo | `google/gemma-4-12B-it` |
 | Parameters | 11.95B |
 | Download size | ~23.95 GB (single unsharded `model.safetensors` = 23,919,549,408 bytes) |
-| Licence | Apache-2.0, **not gated** — no token, no click-through |
+| Licence | Apache-2.0, **not gated**: no token, no click-through |
 | Fits | Single 40 GB+ GPU unquantised (~24 GB BF16) |
-| Engine | vLLM **≥ 0.23.0** (stable — recommend a pinned `0.25.1`) in a separate conda env |
+| Engine | vLLM **≥ 0.23.0** (stable: recommend a pinned `0.25.1`) in a separate conda env |
 
 ---
 
-## Part 1 — Survey the box first
+## Part 1: Survey the box first
 
 Nothing below is destructive; run it before deciding which route to take.
 
 ```bash
-# Confirm the production env still matches its pin (expect 0.19.0) — this env
+# Confirm the production env still matches its pin (expect 0.19.0): this env
 # CANNOT run the 12B; it is checked only to confirm it has not drifted.
 conda activate vllm_env2
 python -c "import vllm; print(vllm.__version__)"
@@ -100,12 +100,12 @@ ls /home/jovyan/nfs_share/models | grep -i gemma
 ```
 
 If `vllm.__version__` reports something other than `0.19.0`, the env has drifted from
-`conda_envs/vllm_env2.yaml` — find out why before continuing. If it is already a nightly/dev build that
+`conda_envs/vllm_env2.yaml`: find out why before continuing. If it is already a nightly/dev build that
 post-dates PR #44429, skip Part 2 entirely.
 
 ---
 
-## Part 2 — Nightly vLLM
+## Part 2: Nightly vLLM
 
 ### ⚠️ Never upgrade `vllm_env2` in place
 
@@ -117,23 +117,23 @@ flashinfer-python==0.6.6  flashinfer-cubin==0.6.6
 ```
 
 The yaml's own note: these are *"exact `==` pins; must install together from the same CUDA build or vLLM
-will fail to load"*. Bumping `vllm` alone would break that matching — and rebuilding it is the only way
+will fail to load"*. Bumping `vllm` alone would break that matching, and rebuilding it is the only way
 back to the engine the 91.8% baseline was measured on. Create a separate environment.
 
-### Route A — pinned stable release (RECOMMENDED)
+### Route A: pinned stable release (RECOMMENDED)
 
 **Version choice:** **0.23.0** is the minimum with the architecture; **0.25.1** (2026-07-14) is the
-recommendation — two weeks old, arch verified present, and several releases of Gemma 4 fixes past 0.23.0,
+recommendation: two weeks old, arch verified present, and several releases of Gemma 4 fixes past 0.23.0,
 whose own notes still mention accuracy and startup fixes landing. **0.26.0** (2026-07-27) is latest stable
 but only a day old.
 
-Plain `pip` is correct here — an ordinary PyPI release, so no nightly-index caveats and no `uv`. That also
+Plain `pip` is correct here: an ordinary PyPI release, so no nightly-index caveats and no `uv`. That also
 keeps us inside the constraint `conda_envs/vllm_env2.yaml` records: *"Do not add --index-url here; data
 engineering policy forbids extra indexes."* The nightly route violates that policy by construction, which
 is a second reason to prefer this one.
 
 **The env file already exists: `conda_envs/vllm_env3.yaml`** (`name: vllm_env3`). It follows
-`vllm_env2.yaml`'s discipline without copying its pins — `torch==2.10.0` / `flashinfer==0.6.6` are matched
+`vllm_env2.yaml`'s discipline without copying its pins: `torch==2.10.0` / `flashinfer==0.6.6` are matched
 to vLLM 0.19.0 and would conflict. Its pins come from the `vllm==0.25.1` wheel metadata:
 
 | Package | vllm_env2 (0.19.0) | vllm_env3 (0.25.1) |
@@ -146,11 +146,11 @@ to vLLM 0.19.0 and would conflict. Its pins come from the `vllm==0.25.1` wheel m
 | transformers | >=4.56 | **>=5.5.3** (resolved 5.14.1) |
 | CUDA runtime | 12.8 | **13.0** (`torch 2.11.0+cu130`) |
 
-**All pins confirmed against a real install on 2026-07-28** — every version resolved exactly as the yaml
+**All pins confirmed against a real install on 2026-07-28**: every version resolved exactly as the yaml
 specifies. The one surprise was the CUDA runtime: torch 2.11.0's default PyPI wheel is **cu130**, a
 major-version jump from vllm_env2's 12.8. That is *not* covered by NVIDIA's minor-version compatibility
 policy, so this env needs a driver supporting CUDA 13.0. Driver 580 on the L4/L40S boxes is fine; the
-**prod A10G driver is unverified** — check `nvidia-smi` there before assuming this env can run in prod.
+**prod A10G driver is unverified**: check `nvidia-smi` there before assuming this env can run in prod.
 
 **1. Create it:**
 
@@ -160,7 +160,7 @@ conda activate vllm_env3
 ```
 
 **2. Verify, and reconcile the pins against reality.** The yaml's pins are derived from published metadata,
-not yet from a real install — so confirm what pip actually resolved:
+not yet from a real install, so confirm what pip actually resolved:
 
 ```bash
 pip freeze | grep -iE "^(vllm|torch|torchvision|torchaudio|flashinfer|transformers)"
@@ -168,10 +168,10 @@ python -c "import torch; print(torch.__version__, torch.version.cuda)"
 ```
 
 If anything differs from the table above, **edit `conda_envs/vllm_env3.yaml` to match what installed**, and
-fill in the CUDA runtime version in its header where marked. Then run the file's VERIFY block — the arch
+fill in the CUDA runtime version in its header where marked. Then run the file's VERIFY block: the arch
 check works on a CPU-only node; `_custom_ops` and `device_count` need the GPU.
 
-**3. Prove the yaml reproduces the env** — the step that makes it a reproducible artifact rather than a
+**3. Prove the yaml reproduces the env**: the step that makes it a reproducible artifact rather than a
 hopeful description:
 
 ```bash
@@ -183,12 +183,12 @@ pip freeze > vllm-0.25.1-frozen-requirements.txt   # hand this to data engineeri
 
 ### ⚠️ vllm_env3 is for Gemma 4 only
 
-vLLM 0.25.1 requires **transformers>=5.5.3** — a major-version jump from the `>=4.56` that `vllm_env2`'s
+vLLM 0.25.1 requires **transformers>=5.5.3**: a major-version jump from the `>=4.56` that `vllm_env2`'s
 stack was validated against. `ensure_corrected_tokenizer()` calls
 `AutoTokenizer(..., fix_mistral_regex=True)` for InternVL, and that API surface is not verified on
 transformers 5.x. Run InternVL in `vllm_env2`, Gemma in `vllm_env3`, and don't cross them.
 
-### Route B — nightly wheel (recorded; no longer necessary)
+### Route B: nightly wheel (recorded; no longer necessary)
 
 Kept for anyone who already went this way before the v0.23.0 release was noticed. Note there is **no
 Docker in the AI Sandbox**, so the upstream recipe's pinned `vllm/vllm-openai:gemma4-unified` container is
@@ -206,11 +206,11 @@ conda env create -f conda_envs/vllm_nightly_env.yaml
 conda activate vllm_nightly
 ```
 
-**`uv` is required and is NOT installed on the sandbox.** This is not a style preference — vLLM's docs
+**`uv` is required and is NOT installed on the sandbox.** This is not a style preference: vLLM's docs
 state that installing from the nightly index with plain `pip` is *"not supported, because pip combines
 packages from `--extra-index-url` and the default index, choosing only the latest version"*, and
 `--torch-backend=auto` (which detects the CUDA driver and picks the matching torch wheel) is a uv-only
-flag with no pip equivalent. Install uv into the env — an ordinary pip package, no root needed:
+flag with no pip equivalent. Install uv into the env: an ordinary pip package, no root needed:
 
 ```bash
 pip install uv
@@ -232,10 +232,10 @@ compatibility policy CUDA 12.x is cross-compatible within 12.x on the 13.0-capab
 sets `VLLM_ATTENTION_BACKEND=FLASHINFER`; if the nightly's bundled FlashInfer differs, let it resolve
 rather than forcing 0.6.6.
 
-To pin an exact commit instead of a moving nightly — strongly preferred for anything whose result you
+To pin an exact commit instead of a moving nightly: strongly preferred for anything whose result you
 want to reproduce or report.
 
-**Finding the commit.** It is already in the version string: `0.23.1rc1.dev1458+ge222c33f2` — the `+g` is
+**Finding the commit.** It is already in the version string: `0.23.1rc1.dev1458+ge222c33f2`: the `+g` is
 git's marker, so the short commit is `e222c33f2`. The wheels index needs the full 40 characters; the
 GitHub API resolves abbreviated SHAs:
 
@@ -244,7 +244,7 @@ curl -s https://api.github.com/repos/vllm-project/vllm/commits/e222c33f2 \
   | python -c "import json,sys; print(json.load(sys.stdin)['sha'])"
 ```
 
-No GitHub egress? Try the local install record first — if it was installed from a URL, the nightly URL
+No GitHub egress? Try the local install record first: if it was installed from a URL, the nightly URL
 embeds the full SHA (returns `None` when installed from an index):
 
 ```bash
@@ -267,7 +267,7 @@ uv pip install vllm --torch-backend=auto \
 
 ### ⚠️ A recorded SHA is provenance, not a guarantee
 
-Nightly wheels are not kept on `wheels.vllm.ai` indefinitely — old builds get pruned, so a pinned commit
+Nightly wheels are not kept on `wheels.vllm.ai` indefinitely: old builds get pruned, so a pinned commit
 may stop being installable. If this env matters (and it does once a smoke result is reported), **archive
 the wheel itself** to the share:
 
@@ -278,11 +278,11 @@ find "$(uv cache dir)" -name "vllm-0.23*.whl" -exec ls -l {} \;
 ```
 
 A local `.whl` plus the recorded torch version rebuilds the env regardless of upstream pruning. The
-cleaner long-term answer is still a **stable 0.23.x release** if one carries the architecture —
+cleaner long-term answer is still a **stable 0.23.x release** if one carries the architecture:
 reproducible by construction, and effectively required before this could run under KFP.
 
-**Plain-pip fallback, only if installing `uv` is blocked.** Requires the full wheel URL — package names
-do not work against the nightly index — plus installing torch separately from the correct index and
+**Plain-pip fallback, only if installing `uv` is blocked.** Requires the full wheel URL: package names
+do not work against the nightly index: plus installing torch separately from the correct index and
 resolving the rest by hand:
 
 ```bash
@@ -295,23 +295,23 @@ The filename changes every build, so this is fiddly and hard to reproduce. Prefe
 
 With no container fallback, these are the remaining options, cheapest first:
 
-1. **Try an older nightly.** Pick a commit shortly after PR #44429 landed rather than today's `main` —
+1. **Try an older nightly.** Pick a commit shortly after PR #44429 landed rather than today's `main`:
    less drift from the 0.19.0-era dependency set, and it still has the architecture.
 2. **Loosen resolution:** add `--index-strategy unsafe-best-match` so the resolver can mix the nightly
    index with PyPI. Use only if a straight install deadlocks on a dependency conflict.
 3. **Stop and report.** If the nightly needs a torch that the driver or the rest of the stack can't
    accommodate, that is a real finding: the 12B is not reachable on this sandbox without infrastructure
-   work. The **31B W4A16 runs on the existing engine today** — say so and fall back to it rather than
+   work. The **31B W4A16 runs on the existing engine today**: say so and fall back to it rather than
    burning days on the engine.
 
 Building vLLM from source is possible but is a multi-hour compile with its own CUDA toolchain
 requirements; treat it as out of scope for an evaluation.
 
 **Known-good nightly (verified on the sandbox 2026-07-28):** `vllm 0.23.1rc1.dev1458+ge222c33f2`, which
-registers `Gemma4UnifiedForConditionalGeneration`. This works, but it is superseded by Route A — a stable
+registers `Gemma4UnifiedForConditionalGeneration`. This works, but it is superseded by Route A: a stable
 pin needs no SHA resolution and cannot be pruned from the index.
 
-Verify the architecture is registered — do this whichever route you took:
+Verify the architecture is registered: do this whichever route you took:
 
 ```bash
 python -c "import vllm; print(vllm.__version__)"
@@ -339,7 +339,7 @@ Triton is installed but 0 active driver(s) found (expected 1). Disabling Triton
 ```
 
 It just means the process saw no GPU driver. The arch check is a pure Python import, so it is valid
-regardless — this is exactly why Part 2 can be completed before a GPU allocation arrives.
+regardless: this is exactly why Part 2 can be completed before a GPU allocation arrives.
 
 Before the Part 5 smoke (not before the download), confirm the GPU is actually visible:
 
@@ -348,13 +348,13 @@ nvidia-smi
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
 ```
 
-`False 0` means no GPU in this session. Note the engine will get as far as vLLM's init and fail there —
+`False 0` means no GPU in this session. Note the engine will get as far as vLLM's init and fail there:
 the loader resolves tensor-parallel size from `nvidia-smi` and falls back to 1, so a CPU-node attempt
 does not fail on GPU *counting*. Don't read that failure as a problem with the model or the config.
 
 ---
 
-## Part 3 — Download the model
+## Part 3: Download the model
 
 Public and ungated, so no authentication step. The `hf` CLI comes with `huggingface_hub`
 (`pip install -U huggingface_hub` if missing; `huggingface-cli` is the deprecated alias).
@@ -373,7 +373,7 @@ hf download google/gemma-4-12B-it \
 
 That path is the one already listed in `config/run_config.yml` under
 `bootstrap.model.default_paths`. `--local-dir` writes real files (not cache symlinks) and keeps a
-`.cache/huggingface/` metadata folder at the destination, so **re-running the same command resumes** —
+`.cache/huggingface/` metadata folder at the destination, so **re-running the same command resumes**:
 which matters because a single 23.9 GB file means one interrupted transfer has a lot to redo.
 
 If `$HOME` is small or read-only, keep temp/cache writes on the share:
@@ -383,7 +383,7 @@ HF_HOME=/home/jovyan/nfs_share/.hf_home hf download google/gemma-4-12B-it \
   --local-dir /home/jovyan/nfs_share/models/gemma-4-12B-it
 ```
 
-**No outbound internet from the box?** The repo is public, so there is no credential to move — download
+**No outbound internet from the box?** The repo is public, so there is no credential to move: download
 on a machine that has egress and copy it across:
 
 ```bash
@@ -393,7 +393,7 @@ rsync -av --progress ./gemma-4-12B-it/ <box>:/home/jovyan/nfs_share/models/gemma
 
 ### Verify the download
 
-A truncated `model.safetensors` is the most likely silent problem — the byte count is the check.
+A truncated `model.safetensors` is the most likely silent problem: the byte count is the check.
 
 **`jq` is NOT installed on the AI Sandbox** (it is present on the remote GPU/cluster box; don't assume it
 here). Use python, which is always available inside the conda env:
@@ -418,13 +418,13 @@ has vision_soft_tokens_per_image: False
 The last two matter: this model's soft-token budget lives at `vision_config.num_soft_tokens`, **not** the
 `vision_soft_tokens_per_image` / `vision_config.default_output_length` fields the dense 31B uses. The YAML
 already reflects that. If these checks disagree with the above, stop and re-check the config before
-running — a mismatch means the override silently no-ops and the engine quietly runs at 280.
+running: a mismatch means the override silently no-ops and the engine quietly runs at 280.
 
 ---
 
-## Part 3b — Download the 31B W4A16
+## Part 3b: Download the 31B W4A16
 
-Also public and ungated, and it needs **no additional engine work** — `vllm_env3` already registers
+Also public and ungated, and it needs **no additional engine work**: `vllm_env3` already registers
 `Gemma4ForConditionalGeneration` and ships `compressed-tensors==0.17.0`. Same download pattern, but the
 **verification fields differ**: this is a different architecture, and checking the 12B's field names here
 would prove nothing.
@@ -456,7 +456,7 @@ default_output_length: 280
 quant: compressed-tensors pack-quantized
 ```
 
-**ALL VERIFIED on the sandbox 2026-07-28** — byte count exact, and every field as predicted:
+**ALL VERIFIED on the sandbox 2026-07-28**: byte count exact, and every field as predicted:
 `Gemma4ForConditionalGeneration` / `gemma4` / `soft_tokens_top: 280` / `default_output_length: 280` /
 `quant: compressed-tensors pack-quantized`.
 
@@ -471,12 +471,12 @@ KV cache and vision activations. Activations are what OOM'd the BF16 31B at `max
 
 ---
 
-## Part 3c — Download the 12B QAT W4A16 (the 2xL4 target)
+## Part 3c: Download the 12B QAT W4A16 (the 2xL4 target)
 
 Public and ungated, and it needs no engine work beyond `vllm_env3`. At ~10.3 GB it is by far the
 smallest of the three, and it is the **only one the current 2xL4 evaluation needs**.
 
-**The verification fields are the UNIFIED ones** — this is the same architecture as the BF16 12B, so
+**The verification fields are the UNIFIED ones**: this is the same architecture as the BF16 12B, so
 checking the 31B's field names here would prove nothing.
 
 ```bash
@@ -505,22 +505,22 @@ quant: compressed-tensors pack-quantized
 ```
 
 **Why 10.3 GB and not ~6 GB:** the quantisation ignore list holds 17 entries excluding the vision
-embedder, the patch dense layers and `lm_head` — the same effect that made the 31B 23.3 GB rather
+embedder, the patch dense layers and `lm_head`: the same effect that made the 31B 23.3 GB rather
 than the ~18 GB a naive 4-bit estimate predicts.
 
 **Memory note (2xL4):** 9.56 GiB of weights against ~22.5 GiB usable per card. At
 `gpu_memory_utilization: 0.90` that is a ~20.25 GiB budget, leaving **~10.7 GiB per card** for KV
-cache and vision activations — comfortable, and enough for one whole engine per GPU. That is what
+cache and vision activations: comfortable, and enough for one whole engine per GPU. That is what
 makes `supports_data_parallel=True` correct for this checkpoint and wrong for the other two.
 
 > **Unverified on GPU:** `vllm_env3` is confirmed to load compressed-tensors W4A16 on the *dense*
 > `gemma4` 31B. This checkpoint pairs that quantisation with the `gemma4_unified` architecture for
 > the first time. Quantisation is layer-level so it is expected to hold, and it fails **loudly** at
-> engine load if it does not — but it is the one genuine unknown in this setup.
+> engine load if it does not, but it is the one genuine unknown in this setup.
 
 ---
 
-## Part 4 — Switch the pipeline to it
+## Part 4: Switch the pipeline to it
 
 In `config/run_config.yml`, three coupled edits:
 
@@ -533,7 +533,7 @@ bootstrap:
 inference:
   tiling:
     pre_tiling:
-      enabled: false      # REQUIRED — Gemma sizes images via its own soft-token budget
+      enabled: false      # REQUIRED: Gemma sizes images via its own soft-token budget
 ```
 
 Pre-tiling must be off: it crops InternVL 448-px tiles, which this model does not want, and with
@@ -543,19 +543,19 @@ diagnostic if you forget, so a missed edit is loud rather than silent.
 Everything else (`max_model_len`, `gpu_memory_utilization`, soft-token budget) is already set under
 `inference.vllm.models.gemma4-12b-unified-vllm`.
 
-**For the 31B instead**, the same three edits with its own values — `type: gemma4-31b-w4a16-vllm`,
+**For the 31B instead**, the same three edits with its own values: `type: gemma4-31b-w4a16-vllm`,
 `path: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct`, and `pre_tiling.enabled: false`. Its
 engine tuning lives under `inference.vllm.models.gemma4-31b-w4a16-vllm`, which differs from the 12B's
 (`max_model_len: 8192`, `gpu_memory_utilization: 0.85`, and the dense architecture's override field names).
 
-Only one model runs at a time — `bootstrap.model.type` selects it. Switching between the two Gemma models
+Only one model runs at a time: `bootstrap.model.type` selects it. Switching between the two Gemma models
 is a two-line edit; both use `vllm_env3`, so no environment change is needed.
 
 ---
 
-## Part 5 — Smoke it
+## Part 5: Smoke it
 
-Always through the entrypoint — never a standalone `python -m stages/...`, or the model path, tiling and
+Always through the entrypoint: never a standalone `python -m stages/...`, or the model path, tiling and
 GPU-memory environment will be wrong and the measurement invalid.
 
 ```bash
@@ -567,34 +567,34 @@ Confirm from the logs:
 1. For `gemma4-12b-unified-w4a16-vllm` on 2xL4: **two** engines load, `tp=1` each, and the log shows
    `vLLM DP: distributing N images across 2 GPUs (TP=1 per GPU)`. If instead you see the
    single-engine fallback from `common/vllm_dp.py` ("cannot run one engine per GPU"), the capability
-   flag or the GPU count is wrong — the run still works, at half the throughput. For the two larger
+   flag or the GPU count is wrong: the run still works, at half the throughput. For the two larger
    checkpoints on 1xL40S: one engine, `tp=1`.
 2. No `<think>` blocks in raw output (enable `inference.tracing.raw_prompts: true` for one run to inspect).
 3. The image part precedes the text part in the prompt.
-4. Accuracy and s/image, compared against an InternVL3.5-8B run **from the same day and same code** —
+4. Accuracy and s/image, compared against an InternVL3.5-8B run **from the same day and same code**:
    historical numbers are not a valid comparison.
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
-| Unknown/unsupported architecture at engine load | vLLM predates PR #44429 — Part 2 not done, or running in `vllm_env2` (0.19.0) instead of the nightly env |
-| `ImportError` / undefined symbol after pip install | torch/flashinfer pins carried over from the 0.19.0 yaml — remove them and let the nightly resolve |
-| `bash: uv: command not found` | `uv` is not on the sandbox — `pip install uv` into the nightly env first (see Part 2) |
+| Unknown/unsupported architecture at engine load | vLLM predates PR #44429: Part 2 not done, or running in `vllm_env2` (0.19.0) instead of the nightly env |
+| `ImportError` / undefined symbol after pip install | torch/flashinfer pins carried over from the 0.19.0 yaml: remove them and let the nightly resolve |
+| `bash: uv: command not found` | `uv` is not on the sandbox: `pip install uv` into the nightly env first (see Part 2) |
 | uv installs into the wrong place, or refuses to run | Pass `--python "$CONDA_PREFIX/bin/python"` so it targets the active conda env |
-| Nightly install "succeeds" but vLLM is still 0.19.0 | pip was used against the nightly index — it silently prefers the default index's latest release. Use uv |
+| Nightly install "succeeds" but vLLM is still 0.19.0 | pip was used against the nightly index: it silently prefers the default index's latest release. Use uv |
 | Loads but behaves as if budget is 280 | `hf_overrides` not landing; re-check the Part 3 `jq` output |
 | Silently reads only part of the page | `pre_tiling.enabled` still true, or `limit_mm_per_prompt` > 1 |
 | `<think>` blocks in output | Thinking is opt-in on this model via a `<\|think\|>` token in the system prompt; check nothing is injecting a system prompt |
 
 ## Rollback
 
-**Switch branch.** InternVL3.5-8B is run from `main`, Gemma 4 from `feature/gemma4` — one model per
+**Switch branch.** InternVL3.5-8B is run from `main`, Gemma 4 from `feature/gemma4`: one model per
 branch. Returning to the InternVL baseline means `git checkout main`, not editing config here. Each
 branch's `entrypoint.sh` already defaults `CONDA_ENV` to the env its model needs (`vllm_env2` on
 `main`, `vllm_env3` here), so no `DOC_EXTRACT_CONDA_ENV` export is needed on either.
 
-**Never run InternVL from the Gemma branch.** It would not crash — that is precisely the problem.
+**Never run InternVL from the Gemma branch.** It would not crash: that is precisely the problem.
 vLLM 0.25.1 pulls transformers 5.x, where `ensure_corrected_tokenizer()`'s `fix_mistral_regex=True`
 path is unverified, so the failure mode is a silently degraded tokenizer on exactly the
 whitespace-aligned, digit-dense bank amounts the 91.8% baseline rests on. A quiet wrong number, not
@@ -603,9 +603,9 @@ an error.
 Reverting *within* this branch (only if the Gemma work is abandoned in place) is two steps, because
 the `entrypoint.sh` change is the one whose effect is not additive:
 
-1. `config/run_config.yml` — uncomment the original `bootstrap.model.type` / `path` lines, comment
+1. `config/run_config.yml`: uncomment the original `bootstrap.model.type` / `path` lines, comment
    out the Gemma ones, and set `inference.tiling.pre_tiling.enabled: true`.
-2. `entrypoint.sh` — uncomment the `vllm_env2` `CONDA_ENV` line (and its recovery hint) and comment
+2. `entrypoint.sh`: uncomment the `vllm_env2` `CONDA_ENV` line (and its recovery hint) and comment
    out the `vllm_env3` ones.
 
 The `vllm_env2` environment itself is never modified either way.

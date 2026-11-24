@@ -267,7 +267,7 @@ evaluation:
     enabled: true
     threshold: 0.85
 
-  # Metric thresholds — single source of truth for common/scoring.py
+  # Metric thresholds: single source of truth for common/scoring.py
   thresholds:
     fuzzy_text_match: 0.75
     phone_match_high: 0.80

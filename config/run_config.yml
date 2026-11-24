@@ -2,7 +2,7 @@
 # All options explicitly stated - YAML takes priority over defaults
 # CLI flags override YAML when explicitly provided
 
-# Bootstrap configuration — the minimal set the entrypoint and model loader need
+# Bootstrap configuration: the minimal set the entrypoint and model loader need
 # before any pipeline work begins (model identity, GPU count, log dir).
 # conda_env: bootstrapped from DOC_EXTRACT_CONDA_ENV + the entrypoint default; it CANNOT
 # be a real key here (chicken-and-egg: this YAML is read by the conda python, so
@@ -21,7 +21,7 @@ bootstrap:
                            #        startup, higher throughput for long runs)
     # false from 2026-08-11: a 165-image run pays the compilation cost ONCE and
     # gets the decode speedup 165 times, so eager is the wrong trade here. Costs
-    # extra VRAM for the captured graphs — there is ~10.7 GiB spare per L4 at
+    # extra VRAM for the captured graphs: there is ~10.7 GiB spare per L4 at
     # gpu_memory_utilization 0.90, but watch for OOM at engine load if the
     # soft-token budget is ever raised from 560.
     enforce_eager: false
@@ -47,14 +47,14 @@ bootstrap:
     # log_dir: ../evaluation_data/output/logs   # Directory for entrypoint log files (sandbox-backed)
     # Kept beside the dataset and the run outputs under tod_2026 (2026-08-11), so
     # a run's images, ground truth, artifacts and logs all live in one tree.
-    # Follows output.dir when that is re-dated — keep the two in step.
+    # Follows output.dir when that is re-dated: keep the two in step.
     # Keep this in step with pipeline.information_extraction.output.dir. It is a
     # SEPARATE key, not derived from it. A run normally sets both from the
     # environment (DOC_EXTRACT_LOG_DIR and output); these are what applies when it does not.
-    log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921/logs
+    log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run/logs
 
 
-# Inference configuration — generation budget, sampling, vLLM engine,
+# Inference configuration: generation budget, sampling, vLLM engine,
 # and debug tracing. Everything that shapes how the model produces output.
 inference:
 
@@ -73,10 +73,10 @@ inference:
       #   gemma4-31b-w4a16-vllm         -> gemma4-31b
       #   gemma4-12b-unified-vllm       -> gemma4-12b-unified
       #   gemma4-12b-unified-w4a16-vllm -> gemma4-12b-unified  (SHARED with the
-      #     BF16 12B above — deliberate. `-vllm` strips, "w4a16" fails the
+      #     BF16 12B above: deliberate. `-vllm` strips, "w4a16" fails the
       #     size-suffix test, then `-w4a16` strips. Same architecture, so the
       #     same generation budget; no separate key is needed or wanted.)
-      # A wrong key here does NOT fail — the lookup silently falls back to
+      # A wrong key here does NOT fail: the lookup silently falls back to
       # generation.defaults above, which is how it can look correct while doing
       # nothing.
       gemma4-31b:
@@ -86,7 +86,7 @@ inference:
         max_new_tokens_base: 512
         max_new_tokens_per_field: 64
 
-  # vLLM engine parameters — per-model overrides for VllmSpec defaults
+  # vLLM engine parameters: per-model overrides for VllmSpec defaults
   vllm:
     defaults:
       gpu_memory_utilization: 0.90
@@ -96,11 +96,11 @@ inference:
       enable_prefix_caching: true
     models:
       # Gemma 4 31B-it QAT W4A16 (compressed-tensors) on 2xL4, tp=2.
-      # CORRECTED 2026-09-22 — this block previously read "1xL40S, tp=1" with
+      # CORRECTED 2026-09-22: this block previously read "1xL40S, tp=1" with
       # "weights ~18 GB of ~44-48 GiB". All three were wrong. The checkpoint is
       # 23,265,352,448 B = 21.67 GiB, which EXCEEDS a single 24 GiB L4 (~22.5
       # usable), so it runs as ONE engine sharded tp=2 across both cards over
-      # PCIe with no NVLink — not one engine per card. 10.84 GiB of weights per
+      # PCIe with no NVLink, not one engine per card. 10.84 GiB of weights per
       # card leaves ~9.4 GiB for KV cache and vision activations at 0.90.
       # models/registry.py sets supports_data_parallel=False; without it the DP
       # fast path starts two whole engines and OOMs at load.
@@ -108,7 +108,7 @@ inference:
       # hardware): soft tokens 1120 OOM'd, gpu_memory_utilization 0.92 OOM'd,
       # max_model_len 16384 was cut to 8192. Activations were the binding
       # resource, not weights. Those were single-card BF16 limits and do not
-      # transfer directly to a tp=2 4-bit engine — VERIFY rather than assume.
+      # transfer directly to a tp=2 4-bit engine: VERIFY rather than assume.
       gemma4-31b-w4a16-vllm:
         max_model_len: 8192
         # 0.85 was a BF16-era single-card OOM workaround. At tp=2 the per-card
@@ -166,11 +166,11 @@ inference:
               vision_soft_tokens_per_image: 560
               vision_config:
                 default_output_length: 560
-      # Gemma 4 12B-it Unified, QAT W4A16 (compressed-tensors) — the 2xL4 target.
+      # Gemma 4 12B-it Unified, QAT W4A16 (compressed-tensors): the 2xL4 target.
       # SAME architecture as the BF16 12B above, so the hf_overrides field name is
       # identical (vision_config.num_soft_tokens); only the weights differ.
       # 9.56 GiB of ~22.5 GiB per L4 leaves ~10.7 GiB for KV cache and vision
-      # activations at gpu_memory_utilization 0.90 — so one WHOLE engine fits per
+      # activations at gpu_memory_utilization 0.90, so one WHOLE engine fits per
       # card and run_dp spawns two (DP=2, tp=1 each), rather than sharding one
       # engine tp=2 across PCIe. See models/registry.py for the capability flag.
       gemma4-12b-unified-w4a16-vllm:
@@ -189,34 +189,34 @@ inference:
         # 8 is evidence-based: the SROIE benchmark ran this checkpoint at 8
         # with 560 soft tokens, no retries, 106 images/min. A batch that does
         # not fit is retried one image at a time, so an over-large value
-        # costs throughput, never results — watch for "retrying one at a
+        # costs throughput, never results: watch for "retrying one at a
         # time" and lower BOTH if it appears.
         # max_num_seqs: 1            # pre-2026-08-14 behaviour, one at a time
         # KV cache caps real concurrency at 3.43x for this model at
         # max_model_len 16384, so 8 and 10 both delivered the SAME dose and
         # scored identically (0.915). 2 is the first value below that
         # ceiling, so it is the first that genuinely changes concurrency.
-        # max_num_seqs: 2            # 0.914 AND 2.8x slower — worst of both
+        # max_num_seqs: 2            # 0.914 AND 2.8x slower: worst of both
         # max_num_seqs: 8            # 0.915, IS_GST_INCLUDED 0.5758
         max_num_seqs: 10
         enable_prefix_caching: true
         mm_processor_kwargs:
           # 560 -> 1120 on 2026-08-11. At 560 the `nab_classic` layout sat right
           # on the legibility threshold: 2 of its 6 statements read perfectly and
-          # the other 4 returned NOT_FOUND for every transaction list — the model
+          # the other 4 returned NOT_FOUND for every transaction list: the model
           # saw a bank statement but resolved no table at all. Bimodal
           # all-or-nothing at a fixed visual budget is a resolution limit, not a
           # reading error. Every other layout scored 0.924 at 560.
           # MEMORY WATCH: 1120 doubles peak prefill activation, and it competes
           # with CUDA graphs (enforce_eager: false) and disable_chunked_mm_input,
           # which forces each image's soft tokens through in ONE prefill step.
-          # It fails loudly at engine load if it does not fit — revert to 560.
+          # It fails loudly at engine load if it does not fit: revert to 560.
           # REVERTED 2026-08-11: 1120 was a decisive REGRESSION, not an
           # improvement. Global median F1 0.953 -> 0.369, mean 0.827 -> 0.455,
           # AND classification broke (55/55/55 -> 52/55/58: three bank statements
           # read as receipts) despite being 165/165 perfect at 560. Classify and
           # extract share the visual budget, so degrading both means the IMAGE
-          # REPRESENTATION got worse at 1120 — more visual tokens is not more
+          # REPRESENTATION got worse at 1120: more visual tokens is not more
           # detail for this checkpoint. Do not re-try 1120.
           #
           # PROBE 2026-08-14, 560 -> 280 (the checkpoint's own default).
@@ -227,7 +227,7 @@ inference:
           #
           # NOT an extrapolation from the 1120 result. That direction made
           # the image representation worse (address collapsed to 0.0000);
-          # this direction removes detail instead — a different failure mode
+          # this direction removes detail instead: a different failure mode
           # that has to be measured, not inferred.
           #
           # Baseline to beat (batch 10, 560 soft tokens, 165 degraded
@@ -237,7 +237,7 @@ inference:
           #   soft tokens  overall  inference  concurrency  note
           #       280       0.882     180.6s      3.43x     BUSINESS_ABN -0.182
           #       560       0.915     158.4s      3.43x     <- keep
-          #      1120       0.275       —           —       address to 0.0000
+          #      1120       0.275       -           -       address to 0.0000
           #
           # Concurrency did NOT move, and could not have: vLLM computes
           # "Maximum concurrency" as KV tokens / max_model_len, a worst-case
@@ -255,9 +255,9 @@ inference:
         # Unified architecture: the knob is vision_config.num_soft_tokens. This
         # checkpoint has NO top-level vision_soft_tokens_per_image and NO
         # vision_config.default_output_length (verified 2026-08-11 against its own
-        # config.json) — using the 31B's names would set attributes nothing reads,
+        # config.json): using the 31B's names would set attributes nothing reads,
         # leaving the engine silently at 280 while the YAML claims otherwise.
-        # MUST match max_soft_tokens above — a test asserts they agree, because a
+        # MUST match max_soft_tokens above: a test asserts they agree, because a
         # mismatch leaves the engine at one budget while the YAML claims another.
         hf_overrides:
           vision_config:
@@ -272,7 +272,7 @@ inference:
   # The keys are, EXACTLY (see common/prompt_trace.py:record):
   #   image_name, pipeline, label, model, prompt, raw_response,
   #   prompt_tokens, completion_tokens
-  # NOTE there is no `tokens` key — the counts are the two separate
+  # NOTE there is no `tokens` key: the counts are the two separate
   # prompt_tokens / completion_tokens fields. An earlier version of this comment
   # said `tokens`, which sends anyone reading it here to write `r.get("tokens")`
   # and silently get None for every line.
@@ -280,12 +280,12 @@ inference:
     raw_prompts: false   # true -> persist every VLM prompt+response to JSONL
     path: none           # none -> <output_dir>/raw_prompt_trace.jsonl ; or an explicit path
 
-# Pipeline configuration — per-task settings grouped together: information
+# Pipeline configuration, per-task settings grouped together: information
 # extraction (the default classify/extract/clean/evaluate paths), classification,
 # processing toggles, token budgets, batch tuning,
 # extraction ordering/skip labels, and the bank-header cache.
 pipeline:
-  # Information extraction — the DEFAULT image-source + output paths, used by the
+  # Information extraction: the DEFAULT image-source + output paths, used by the
   # extraction pipeline: KFP_TASK = split | classify | extract | clean | evaluate. Those read images from
   # information_extraction.input.dir, score against input.ground_truth, and write
   # to output.dir.
@@ -301,7 +301,7 @@ pipeline:
       # The 165-image synthetic set for the Gemma 4 evaluation (2026-08-11).
       # Absolute, and NOT tilde-prefixed: YAML reads a bare `~` as null and
       # nothing in the entrypoint path shell-expands these values.
-      # synthetic_20260728 is CORRUPT — it holds 330 images (55 cases x 6) while
+      # synthetic_20260728 is CORRUPT: it holds 330 images (55 cases x 6) while
       # its ground truth covers only 165, so half of every run was extracted but
       # unscorable. Replaced 2026-08-11 by synthetic_20260807: 165 images, 165 GT
       # records, exact 1:1, 55 each of BANK_STATEMENT / INVOICE / RECEIPT.
@@ -312,12 +312,12 @@ pipeline:
       # Swap the two lines below to score robustness against scan artefacts.
       # DEGRADED set: 55 receipts x 3 severity tiers (_v1 light, _v2 moderate,
       # _v3 heavy). Tier is recovered from the filename suffix at analysis time,
-      # so one run covers all three. Swap to synthetic_ for the clean set — the
+      # so one run covers all three. Swap to synthetic_ for the clean set: the
       # clean receipt scores are the tier-0 baseline.
       #
       # The _20260812 pair is the ONLY dated set on the box: the _20260811 pair
       # it replaced was deleted 2026-08-13, and the earlier _20260728 /
-      # _20260807 sets before that. Nothing here is a fallback — if a path below
+      # _20260807 sets before that. Nothing here is a fallback: if a path below
       # names a set that no longer exists, the stage stops because it finds no images.
       #
       # It carries the same DOCUMENTS as _20260811 (the source YAMLs have not
@@ -327,7 +327,7 @@ pipeline:
       # shows one amount and that amount is the line total, so the per-unit
       # figure was a value no reader could extract. Positions where quantity is
       # 1 keep their amount (there the two coincide); the rest are NOT_FOUND.
-      # Invoices are untouched — their layout has a real Unit Price column.
+      # Invoices are untouched: their layout has a real Unit Price column.
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/nab_probe
       # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
       # The CLEAN 165-image set, not the degraded sibling. Same date, one character
@@ -343,13 +343,13 @@ pipeline:
       # MUST be swapped together with input.dir above. Each set ships its own GT
       # copy, and the clean and degraded copies of one dated pair hold the SAME
       # values (distortion never changes the answer), differing only in the
-      # _v1/_v2/_v3 filenames — so crossing them inside a pair is harmless but
+      # _v1/_v2/_v3 filenames, so crossing them inside a pair is harmless but
       # crossing DATED SETS is not: filenames match across dates, so the run
       # would score new extractions against an older answer key and report
       # plausible numbers. Keep the date on both lines identical.
       # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/nab_probe/ground_truth.jsonl
       # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812/ground_truth.jsonl
-      # MUST stay on the same dataset as input.dir above — filenames match across
+      # MUST stay on the same dataset as input.dir above: filenames match across
       # the clean and degraded sets, so a mismatch scores real extractions against
       # the wrong answer key and reports plausible numbers.
       # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/degraded_20260812/ground_truth.jsonl
@@ -359,8 +359,10 @@ pipeline:
       # and still report a plausible score.
       # max_images: 12       # a short trial only
       max_images: null       # null = process all images
-      # document_types: null   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
-      document_types: [BANK_STATEMENT]   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
+      # null = every type. A list keeps only the pages whose file name holds one of the names, e.g.
+      # [BANK_STATEMENT] or [INVOICE, RECEIPT]. Like max_images, a list left here from a trial would
+      # make a later run read fewer pages than intended, so the committed value is null.
+      document_types: null
     # Output settings
     output:
       # dir: ../evaluation_data/output
@@ -368,7 +370,7 @@ pipeline:
       # (inference.tracing.path: none) derives from this dir, so it follows.
       # DATED per dataset. The stages resume from image_name values already in
       # this directory's JSONLs (stages/io.py read_completed_images), so reusing
-      # the old `output/` — which holds the corrupt 20260728 run's 330 records —
+      # the old `output/` (which holds the corrupt 20260728 run's 330 records)
       # would silently skip every image instead of re-running it.
       # Dated per DATASET, not per day: a clean and a degraded run must not share
       # an output dir or the second inherits the first's completed image_names.
@@ -389,16 +391,17 @@ pipeline:
       # One dir per model, and they must NEVER be shared: the stages resume from
       # image_name values already present, so the second model would skip every
       # image the first completed and still report a plausible score.
-      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma31b_20260921  # Gemma 31B, DONE
-      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_qwen38_20260921
+      # What applies when a run does not name its own folder in `output`. Every measured run does
+      # name its own, for the reasons above, so this folder is for trials only.
+      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run
 
-  # SROIE benchmark (KFP_TASK=sroie) — ICDAR 2019 Task 3 receipt key
+  # SROIE benchmark (KFP_TASK=sroie): ICDAR 2019 Task 3 receipt key
   # information extraction, on a PUBLIC dataset. Separate from
   # information_extraction above: its own data, its own 4-field answer key
   # (company/date/address/total), its own prompt and scorer, and its own
   # output dir. It does NOT run classify/extract/clean/evaluate.
   #
-  # The stage reads ONLY this block. Every key below is required — a
+  # The stage reads ONLY this block. Every key below is required: a
   # missing key fails at startup with a diagnostic rather than defaulting.
   #
   # Comparability between models rests on this block and the model type
@@ -406,12 +409,12 @@ pipeline:
   # parser, same scorer. Give each model its OWN output_dir so a second run
   # cannot overwrite the first.
   sroie:
-    # The split ROOT — the directory CONTAINING img/ and entities/, not
+    # The split ROOT: the directory CONTAINING img/ and entities/, not
     # either subdirectory.
     #
     # test/ is the 347-image ICDAR leaderboard split and is what we report.
     # The 626-image train split also ships (as img/ + key/ at the dataset
-    # root); it is NOT interchangeable — two of its records have a blank
+    # root); it is NOT interchangeable: two of its records have a blank
     # answer-key field and the loader rejects them by design.
     # dir: /home/jovyan/nfs_share/tod_2026/data/sroie          # 626-image train split
     data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test  # 347-image test split
@@ -441,7 +444,7 @@ pipeline:
     fallback_type: UNIVERSAL     # Default type when model response can't be parsed
 
   # Processing options
-  # Extraction batching — documents submitted to the engine in ONE chat()
+  # How extraction is batched: documents submitted to the engine in ONE chat()
   # call, so vLLM's scheduler can run them concurrently. Calling generate()
   # per image keeps exactly one sequence in flight however max_num_seqs is
   # set, which is what the pipeline did until 2026-08-14 and what made its
@@ -485,7 +488,7 @@ pipeline:
   #    10          3.43               0.5636       0.915      158.4s
   #
   # 8 and 10 gave the SAME result because the KV cache caps concurrency at
-  # 3.43x for this model at max_model_len 16384 — both offered more than the
+  # 3.43x for this model at max_model_len 16384: both offered more than the
   # engine could run, so both delivered the same dose. Raising further tests
   # nothing.
   #
@@ -498,7 +501,7 @@ pipeline:
   # the same dose; 2 gave the same ACCURACY as 10 and was 2.8x slower.
   #
   #   batch  concurrency  IS_GST_INCLUDED  overall  inference
-  #     1        1.0          0.8485        0.930      —
+  #     1        1.0          0.8485        0.930      -
   #     2        2.0          0.5515        0.914    438.5s
   #     8        3.43         0.5758        0.915    174.6s
   #    10        3.43         0.5636        0.915    158.4s   <- fastest
@@ -507,7 +510,7 @@ pipeline:
   # moment concurrency exceeds 1 and then stays flat, because batched
   # attention numerics flip a single-token boolean sitting on the decision
   # boundary. It cannot be tuned away with batch size. It is also fragile
-  # unbatched (0.8485, SD 0.44 — bimodal) and DERIVABLE from GST_AMOUNT,
+  # unbatched (0.8485, SD 0.44: bimodal) and DERIVABLE from GST_AMOUNT,
   # which is the real fix.
   batching:
     # Pages the classify stage submits in one engine call (vLLM backend). A
@@ -532,7 +535,7 @@ pipeline:
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)
 
-  # Named token budgets — single source of truth for all max_tokens values.
+  # Named token budgets: single source of truth for all max_tokens values.
   # Workflow YAML nodes reference these by name via `token_budget: <name>`.
   token_budgets:
     classify: 150
@@ -856,7 +859,7 @@ pipeline:
       paper_refine_outside_frac: 0.02
       paper_refine_inside_frac: 0.01
 
-  # Extraction ordering — controls batch submission order for prefix-cache reuse
+  # Extraction ordering: controls batch submission order for prefix-cache reuse
   extraction:
     order:
       - bank_statement

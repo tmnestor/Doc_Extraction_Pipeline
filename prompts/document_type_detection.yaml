@@ -88,7 +88,7 @@ prompts:
 
 # Type mappings for response normalization
 type_mappings:
-  # Bank statement variations (checked first — bank statements contain
+  # Bank statement variations (checked first: bank statements contain
   # receipt/payment words like "EFTPOS", "Card xx", "payment" that would
   # false-match RECEIPT if checked later)
   "bank statement": "BANK_STATEMENT"
@@ -151,7 +151,7 @@ type_mappings:
 
 # Fallback keyword matching (used when type_mappings don't match)
 # Maps canonical document types to keywords that indicate that type.
-# Checked in order — first match wins. Put more specific types before general ones.
+# Checked in order: first match wins. Put more specific types before general ones.
 fallback_keywords:
   BANK_STATEMENT:
     - bank
@@ -187,7 +187,7 @@ fallback_keywords:
 # ============================================================================
 # These two blocks drive the evidence-based classifier. The model is asked for
 # observable facts (COLUMNS / PAID / ROWS); the Python layer derives the type
-# from those facts using the declarative rules below — no hardcoded heuristics.
+# from those facts using the declarative rules below: no hardcoded heuristics.
 
 # Semantic column roles: role -> header keywords that map to it.
 # Read by common/classification.py (replaces the former
@@ -273,14 +273,14 @@ classification_evidence:
     - type: LOGBOOK
       when: { any_roles: [distance, odometer, purpose] }
     # Travel docs (flight ticket / e-ticket / boarding pass / itinerary). These
-    # carry no transaction table — the model reports COLUMNS: NONE — so they are
+    # carry no transaction table (the model reports COLUMNS: NONE), so they are
     # undetectable from columns. The detection prompt asks a dedicated TRAVEL
     # YES/NO question instead; this rule fires on that boolean. Checked before
     # RECEIPT so a paid e-ticket stays TRAVEL rather than downgrading to RECEIPT.
     - type: TRAVEL
       when: { travel: true }
     # Payment evidence wins over an itemised table (a paid, itemised receipt
-    # stays a RECEIPT) — so RECEIPT is checked before INVOICE.
+    # stays a RECEIPT), so RECEIPT is checked before INVOICE.
     - type: RECEIPT
       when: { paid: true }
     # Unpaid itemised billing table -> invoice.
@@ -293,7 +293,7 @@ classification_evidence:
   # restores parity (F1 mean 0.650, median 0.846) and routes them to the focused
   # invoice prompt.
   # NOTE: TRAVEL is detected from the prompt's TRAVEL YES/NO evidence field (the
-  # `travel: true` rule above), NOT from columns — travel docs report COLUMNS: NONE.
+  # `travel: true` rule above), NOT from columns: travel docs report COLUMNS: NONE.
   # A travel doc the model fails to flag (TRAVEL: NO) falls through to this INVOICE
   # default.
   default: INVOICE

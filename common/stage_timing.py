@@ -4,8 +4,8 @@
 number bundles engine startup into "inference time" and knows nothing about
 data parallelism. Two consequences:
 
-* On a short run startup is a large share of wall clock — measured at 41%
-  on one 347-image benchmark — so throughput computed from it understates
+* On a short run startup is a large share of wall clock (measured at 41%
+  on one 347-image benchmark), so throughput computed from it understates
   the model badly.
 * Under data parallelism the workers run concurrently, so elapsed inference
   is the SLOWEST worker's total, not the sum. Summing reports total compute
@@ -76,7 +76,7 @@ def read_stage_timings(output_dir: Path) -> list[StageTiming]:
         output_dir: The run's output directory.
 
     Returns:
-        Timings in write order. Empty when the sidecar is absent — callers
+        Timings in write order. Empty when the sidecar is absent: callers
         fall back rather than reporting 0.0s, which would surface as an
         absurd throughput instead of as missing data.
     """
@@ -121,19 +121,19 @@ def resolve_timing(
 
     Preference order:
 
-    1. **Stage sidecar** — written by the GPU stages themselves, excludes
+    1. **Stage sidecar**: written by the GPU stages themselves, excludes
        engine startup, DP-aware. Rejected as stale when it covers a
        different image count than the evaluation, which is what happens
        when ``evaluate`` is re-run against an older output dir.
-    2. **Entrypoint elapsed** — measured outside the process, so it
+    2. **Entrypoint elapsed**: measured outside the process, so it
        includes engine startup and knows nothing about parallelism. Also
        undetectably stale on a standalone re-run: one such run reported
        3.0s for 165 images, i.e. 3300 images/min. Labelled, not hidden.
-    3. **Sum of per-image processing time** — under data parallelism this
+    3. **Sum of per-image processing time**: under data parallelism this
        is total COMPUTE, not elapsed, so it understates throughput by
        roughly the GPU count.
 
-    With none of the three, the answer is that timing was not recorded —
+    With none of the three, the answer is that timing was not recorded:
     NOT 0.0s, which a caller would turn into an absurd throughput.
 
     Args:
@@ -152,7 +152,7 @@ def resolve_timing(
         if recorded_images == images:
             return ResolvedTiming(summary.inference_seconds, "stage timing (this run)", summary)
         logger.warning(
-            "Stage timing covers %d images but %d are being evaluated — treating it as stale",
+            "Stage timing covers %d images but %d are being evaluated: treating it as stale",
             recorded_images,
             images,
         )
@@ -170,7 +170,7 @@ def inference_seconds_from_records(records: list[dict], *, fallback: float) -> f
     """Elapsed inference implied by per-image processing times.
 
     Records carrying ``gpu_id`` came from concurrent data-parallel workers,
-    so elapsed is the SLOWEST worker's total — summing across workers gives
+    so elapsed is the SLOWEST worker's total: summing across workers gives
     total compute and understates throughput by roughly the GPU count.
     Without ``gpu_id`` the work was sequential and the sum IS elapsed.
 

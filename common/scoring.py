@@ -171,7 +171,7 @@ def parse_date(text: str) -> tuple[int, int, int] | None:
 def _dates_in(text: str) -> list[tuple[int, int, int]]:
     """The dates of a single date or of a range ("1 February 2024 - 28 June 2024")."""
     dates: list[tuple[int, int, int]] = []
-    for separator in (" - ", " to ", " – ", " — ", "-"):
+    for separator in (" - ", " to ", " \u2013 ", " \u2014 ", "-"):  # the last two: en and em dash
         if separator in text.lower():
             parts = text.split(separator) if separator != "-" else re.split(r"\s*-\s*", text)
             parts = [part.strip() for part in parts if part.strip() and len(part.strip()) > 4]

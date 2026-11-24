@@ -71,10 +71,10 @@ export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
 export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 
 # NCCL shared memory: KFP pods may default /dev/shm to 64 MB, which is
-# too small for NCCL's SHM transport under tensor parallelism — after ~11
+# too small for NCCL's SHM transport under tensor parallelism: after ~11
 # images the SHM region fills and NCCL silently deadlocks. The fix is to
 # increase /dev/shm in the KFP pod spec (emptyDir medium=Memory, 8Gi+).
-# Setting NCCL_SHM_DISABLE=1 does NOT work — on G5 instances without
+# Setting NCCL_SHM_DISABLE=1 does NOT work: on G5 instances without
 # NVLink, disabling SHM leaves NCCL with no viable intra-node transport
 # and it fails immediately with "unhandled system error".
 
@@ -84,7 +84,7 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
 #
 # Priority: DOC_EXTRACT_LOG_DIR env var > run_config.yml bootstrap.logging.log_dir > fail
-# No silent fallback — in KFP, pod-local writes are ephemeral/forbidden.
+# No silent fallback: in KFP, pod-local writes are ephemeral/forbidden.
 CONFIG_FILE="./config/run_config.yml"
 
 # ---- The conda environment's own python ---- #
@@ -99,7 +99,7 @@ CONDA_PY="${CONDA_ENV}/bin/python"
 if [[ ! -x "$CONDA_PY" ]]; then
   echo "FATAL: bootstrap interpreter not found: $CONDA_PY"
   echo "  What:  the python used to parse $CONFIG_FILE (it needs PyYAML) is missing."
-  echo "  Where: CONDA_ENV='$CONDA_ENV' — from DOC_EXTRACT_CONDA_ENV env var, or the default in entrypoint.sh."
+  echo "  Where: CONDA_ENV='$CONDA_ENV': from DOC_EXTRACT_CONDA_ENV env var, or the default in entrypoint.sh."
   echo "  Fix:   point DOC_EXTRACT_CONDA_ENV at a real conda env dir so \$DOC_EXTRACT_CONDA_ENV/bin/python exists, e.g."
   echo "           export DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
   exit 1
@@ -114,22 +114,22 @@ LOG_FILE="${LOG_DIR}/entrypoint_$(date +'%Y%m%d_%H%M%S').log"
 # both the console (for KFP) and the log file (for persistent debugging).
 # The `2>&1` merges stderr into stdout so errors are captured too.
 # NOTE: Process substitution with tee means the subshell can outlive this
-# script — the final log line(s) may flush slightly after exit. This is a
+# script: the final log line(s) may flush slightly after exit. This is a
 # known bash nuance and is harmless in practice.
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-# Timestamped logging function — prefixes every message with a timestamp
+# Timestamped logging function: prefixes every message with a timestamp
 # so you can correlate events with KFP logs and identify slow steps.
 log() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Prominent stage banner — mirrors the top-level run banner so each phase of a
+# Prominent stage banner: mirrors the top-level run banner so each phase of a
 # multi-stage pipeline stands out in the logs. Leads with a blank line for
 # separation; pass the stage label (e.g. "Phase 1/5: classify (GPU)").
 
 # ---- Cleanup Trap ---- #
-# `trap ... EXIT` runs this code whenever the script exits — whether it
+# `trap ... EXIT` runs this code whenever the script exits, whether it
 # succeeds, fails, or gets killed (e.g. OOM). This guarantees you always
 # see the exit code and how long the run took, even on crashes.
 # $SECONDS is a built-in bash variable that counts elapsed seconds.
@@ -159,7 +159,7 @@ eval "$(conda shell.bash hook)"
 # CONDA_ENV was bootstrapped (and its python validated) during the YAML
 # resolution above, before the tee redirect.
 log "Conda env: $CONDA_ENV"
-# Temporarily allow unbound variables — conda activation scripts (e.g. MKL)
+# Temporarily allow unbound variables: conda activation scripts (e.g. MKL)
 # reference variables that may not be set yet.
 set +o nounset
 conda activate "$CONDA_ENV" || { set -o nounset; log "FATAL: conda activate failed"; exit 1; }
@@ -173,7 +173,7 @@ export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 # Use vLLM's PyTorch-native top-k/top-p sampler instead of FlashInfer's.
 # REQUIRED on this box, and it costs nothing: every extraction path here decodes
 # GREEDILY (VllmBackend builds SamplingParams(temperature=0)), so the top-k/top-p
-# kernel is never used for real work — vLLM just warms it at startup regardless.
+# kernel is never used for real work: vLLM just warms it at startup regardless.
 #
 # Without this, engine start FAILS during sampler warmup. flashinfer 0.6.18 has no
 # pre-compiled kernels on PyPI (see conda_envs/vllm_env4.yaml), so it JIT-compiles,
@@ -190,7 +190,7 @@ export VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-WARNING}"
 export TRANSFORMERS_VERBOSITY="${TRANSFORMERS_VERBOSITY:-warning}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 
-# Log environment details for debugging failed runs —
+# Log environment details for debugging failed runs:
 # knowing the Python version, conda env, and GPU type is critical
 # when something works locally but fails in the pipeline.
 log "---------------------------------------"
@@ -203,10 +203,10 @@ log ""
 
 # ---- GPU Health Check ---- #
 # Verify GPUs are accessible and healthy before loading ~16GB models onto them.
-# Catches ECC errors, fallen-off-bus GPUs, and driver mismatches early —
+# Catches ECC errors, fallen-off-bus GPUs, and driver mismatches early:
 # much cheaper than discovering mid-inference after a 60s model load.
 log "GPU environment:"
-log "  CUDA_VISIBLE_DEVICES:  ${CUDA_VISIBLE_DEVICES:-<not set — all GPUs visible>}"
+log "  CUDA_VISIBLE_DEVICES:  ${CUDA_VISIBLE_DEVICES:-<not set: all GPUs visible>}"
 log "  CUDA_DEVICE_ORDER:     ${CUDA_DEVICE_ORDER}"
 log "  NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-<not set>}"
 log ""
@@ -222,7 +222,7 @@ if command -v nvidia-smi &>/dev/null; then
   done
   log ""
 
-  # Check for GPUs in error state — ERR or "Unknown Error" in nvidia-smi
+  # Check for GPUs in error state: ERR or "Unknown Error" in nvidia-smi
   # means the GPU has fallen off the bus or has a hardware fault.
   if nvidia-smi --query-gpu=index,pstate --format=csv,noheader 2>/dev/null | grep -qi "err"; then
     log "WARNING: One or more GPUs report error state. Run may fail."
@@ -230,7 +230,7 @@ if command -v nvidia-smi &>/dev/null; then
     log ""
   fi
 else
-  log "WARNING: nvidia-smi not found — cannot verify GPU health"
+  log "WARNING: nvidia-smi not found: cannot verify GPU health"
   log ""
 fi
 

@@ -98,7 +98,7 @@ def load_sroie_split(split_dir: Path) -> list[SroieRecord]:
             expected="every '<image_id>.txt' to have a matching image file.",
             how_to_fix=(
                 "re-copy the split so img/ and entities/ correspond exactly. "
-                "Do NOT skip these records — scoring a receipt the model never "
+                "Do NOT skip these records: scoring a receipt the model never "
                 "saw counts a certain miss as a model failure."
             ),
         )
@@ -113,7 +113,7 @@ def load_sroie_split(split_dir: Path) -> list[SroieRecord]:
             expected="every image to have a matching '<image_id>.txt'.",
             how_to_fix=(
                 "re-copy the split so img/ and entities/ correspond exactly. "
-                "Do NOT skip these images — an unscoreable image silently "
+                "Do NOT skip these images: an unscoreable image silently "
                 "shrinks the denominator."
             ),
         )
@@ -146,7 +146,7 @@ def load_sroie_split(split_dir: Path) -> list[SroieRecord]:
                 expected=f"all four SROIE keys, each non-empty: {', '.join(SROIE_FIELDS)}.",
                 how_to_fix=(
                     "repair or re-copy that file. Do NOT default the value to "
-                    "NOT_FOUND — an absent answer key is not a wrong answer, "
+                    "NOT_FOUND: an absent answer key is not a wrong answer, "
                     "and scoring against it would charge the model for a "
                     "question the corpus never asked."
                 ),

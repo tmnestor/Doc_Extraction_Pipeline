@@ -32,7 +32,7 @@
 #   torchvision 0.28.0    |  exact == pins; must install together from the
 #   torchaudio  2.11.0    /  same CUDA build or vLLM will fail to load
 #   flashinfer-python  0.6.18   (pinned ==, transitive from vLLM)
-#   flashinfer-cubin   DELIBERATELY ABSENT — see the block below
+#   flashinfer-cubin   DELIBERATELY ABSENT: see the block below
 #   compressed-tensors 0.17.0   (the Gemma W4A16 path; UNCHANGED from
 #                                vllm_env3, so that loader is not a new variable)
 #   transformers       >=5.10.4
@@ -42,12 +42,12 @@
 #   VERIFIED ON THE SANDBOX 2026-09-22. Every pin resolved exactly as written:
 #     vllm 0.29.0, torch 2.13.0+cu130, torchvision 0.28.0+cu130,
 #     torchaudio 2.11.0+cu130, flashinfer-python 0.6.18.
-#   The CUDA 13.0 runtime is confirmed, not assumed — torch reports cuda 13.0.
+#   The CUDA 13.0 runtime is confirmed, not assumed: torch reports cuda 13.0.
 #   Arch check passed: BOTH Qwen3_5ForConditionalGeneration and
 #   Gemma4ForConditionalGeneration are registered, so one engine really does
 #   serve both models and the comparison carries no engine confound.
 #   One correction was needed to get here: flashinfer-cubin==0.6.18 does not
-#   exist on PyPI and failed the build — see the flashinfer block below.
+#   exist on PyPI and failed the build: see the flashinfer block below.
 #
 # VERSION CHOICE
 #   0.28.0 (2026-08-26) is the MINIMUM stable release that both carries
@@ -119,7 +119,7 @@
 #
 #   COST: FlashInfer JIT-compiles its kernels on first use instead of loading
 #   pre-compiled cubins, so the FIRST engine start in this env is slow. That is
-#   startup, not inference — and the benchmark reports engine startup separately
+#   startup, not inference, and the benchmark reports engine startup separately
 #   from inference time, so it does not contaminate the throughput comparison.
 #   BUT: warm both models the same way before quoting throughput, or whichever
 #   model is measured first silently pays the whole JIT bill.
@@ -184,7 +184,7 @@ dependencies:
       # vLLM and its most version-sensitive hard dep. Listed explicitly (even
       # though transitive) so an accidental later `pip install --upgrade` of
       # flashinfer cannot silently break vLLM.
-      # flashinfer-cubin is NOT here — it left PyPI at 0.6.14 and vLLM excludes
+      # flashinfer-cubin is NOT here: it left PyPI at 0.6.14 and vLLM excludes
       # it from its own requirements. See the flashinfer block in the header.
       - vllm==0.29.0
       - flashinfer-python==0.6.18
@@ -208,7 +208,7 @@ dependencies:
 #   The ONE pin that did not survive contact was flashinfer-cubin, which the
 #   release tag pins at 0.6.18 but which has not been published to PyPI since
 #   0.6.14. Reading a version out of a release tag is not the same as knowing it
-#   installs — the same lesson vllm_env3 recorded, in a new shape.
+#   installs: the same lesson vllm_env3 recorded, in a new shape.
 #
 #   ARCH CHECK PASSED on the sandbox 2026-09-22:
 #     Qwen3_5ForConditionalGeneration  OK

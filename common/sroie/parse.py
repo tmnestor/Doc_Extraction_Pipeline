@@ -1,7 +1,7 @@
 """Parsing of model responses into SROIE field values.
 
-The parser is deliberately forgiving about packaging — casing, code
-fences, surrounding prose — and strict about content: only the four SROIE
+The parser is deliberately forgiving about packaging (casing, code
+fences, surrounding prose) and strict about content: only the four SROIE
 labels are read, and a declined or blank answer is recorded as absent
 rather than as a value. That distinction matters at scoring time, where an
 absent answer is a miss and a present one can be a wrong answer.

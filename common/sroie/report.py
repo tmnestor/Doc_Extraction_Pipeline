@@ -2,7 +2,7 @@
 
 The per-image file is the one a disputed score gets checked in, so it
 carries both sides of every comparison and both policies' verdicts. The
-summary keeps raw tp/fp/fn counts alongside the ratios — dropping them
+summary keeps raw tp/fp/fn counts alongside the ratios: dropping them
 would make any pooled metric uncomputable without re-running the model.
 """
 
@@ -54,7 +54,7 @@ def _policy_block(
     Per field the mean and SD are taken over documents, matching the
     convention another team reports against. Because a SROIE field is a
     single value, each document scores 1 or 0, so that SD is mechanically
-    ``sqrt(p(1-p))`` and adds nothing to the mean — the Wilson interval
+    ``sqrt(p(1-p))`` and adds nothing to the mean: the Wilson interval
     and ``n`` beside it are what actually express uncertainty.
     """
     by_field = per_field_document_scores(records, predictions, policy=policy)
@@ -160,7 +160,7 @@ def render_per_field_table(
         by_field = per_field_document_scores(records, predictions, policy=policy)
 
         table = Table(
-            title=f"Per-Field F1 — {policy.value}",
+            title=f"Per-Field F1: {policy.value}",
             show_header=True,
             header_style="bold",
         )
@@ -276,7 +276,7 @@ def write_summary_json(
         image_count: Number of receipts scored.
         elapsed_seconds: Wall-clock inference time.
         execution_mode: How inference ran. Stored alongside throughput
-            because a rate is uninterpretable without it — the same model
+            because a rate is uninterpretable without it: the same model
             reads twice as fast data-parallel across two GPUs.
 
     Returns:

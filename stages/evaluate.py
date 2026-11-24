@@ -190,7 +190,7 @@ def _print_summary_table(
 
     # Per-field dispersion, printed BEFORE the summary so the headline mean
     # is read with the spread already in view. Built from field_scores the
-    # evaluator already stores — no scorer change involved.
+    # evaluator already stores: no scorer change involved.
     from common.field_report import field_distributions, render_field_table
 
     render_field_table(field_distributions(eval_results))

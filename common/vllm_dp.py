@@ -75,7 +75,7 @@ def _partition_images(images: list[Path], n: int) -> list[list[Path]]:
 
     Images arrive sorted by document type (expensive bank statements first,
     per ``extraction_order``). Contiguous chunking would pile every bank
-    statement onto GPU 0 — it becomes the straggler while the other GPUs race
+    statement onto GPU 0: it becomes the straggler while the other GPUs race
     through cheap receipts. Dealing round-robin (``images[i::n]``) spreads each
     type evenly across GPUs, so every GPU gets roughly the same number of
     banks / invoices / receipts and thus a balanced workload.
@@ -118,7 +118,7 @@ def run_dp(
 
     No global timeout: workers run until they finish or die. A slow-but-alive
     worker (e.g. a GPU grinding through dense bank statements) is never falsely
-    killed — the collect loop polls the queue every ``poll_interval`` seconds
+    killed: the collect loop polls the queue every ``poll_interval`` seconds
     and only fails if a worker is found dead (OOM/SIGKILL) without having
     written a result.
 
@@ -157,11 +157,11 @@ def run_dp(
         p.start()
         procs.append(p)
 
-    # Collect results — no global timeout. Poll the queue on a short interval
+    # Collect results: no global timeout. Poll the queue on a short interval
     # and check worker liveness. Workers that complete normally put results on
     # the queue; workers that hit a Python-level error put an exception. The
     # only unhandled case is a worker killed by the OS (OOM, SIGKILL) without
-    # writing to the queue — detected via is_alive() + exitcode so a slow but
+    # writing to the queue: detected via is_alive() + exitcode so a slow but
     # healthy worker is never falsely timed out.
     gpu_results: dict[int, list[dict]] = {}
     try:

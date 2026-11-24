@@ -75,9 +75,10 @@ def processor(backend: Backend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._model_type_key = MODEL
-    orch.debug = False
-    orch.gen_config = {"max_new_tokens_base": 500, "max_new_tokens_per_field": 50}
-    orch.app_config = types.SimpleNamespace(get_token_budget=lambda name: 0)  # type: ignore[assignment]
+
+    orch.app_config = types.SimpleNamespace(
+        get_token_budget=lambda name: {"extract_base": 500, "extract_per_field": 50}[name]
+    )  # type: ignore[assignment]
     return orch
 
 

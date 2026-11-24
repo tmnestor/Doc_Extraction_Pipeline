@@ -60,12 +60,11 @@ def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._model_type_key = MODEL
-    orch.debug = False
-    orch.gen_config = {"max_new_tokens_base": 500, "max_new_tokens_per_field": 50}
+
     orch.app_config = types.SimpleNamespace(
         get_token_budget=lambda name: {
-            "fallback_base": 512,
-            "fallback_per_field": 64,
+            "extract_base": 500,
+            "extract_per_field": 50,
         }[name]
     )  # type: ignore[assignment]
     return orch
@@ -209,12 +208,9 @@ def test_a_model_registered_image_first_is_sent_the_image_first(no_vllm):
 
 
 def test_both_registered_models_put_the_text_first():
-    from models import (
-        model_loader,
-        registry,  # noqa: F401 - importing it is what registers the models
-    )
+    from models import registry
 
-    orders = {name: spec.default_image_first for name, spec in model_loader._VLLM_SPECS.items()}
+    orders = {name: spec.default_image_first for name, spec in registry._REGISTRY.items()}
 
     assert orders == {"gemma4-31b-w4a16-vllm": False, "gemma4-12b-unified-w4a16-vllm": False}
 

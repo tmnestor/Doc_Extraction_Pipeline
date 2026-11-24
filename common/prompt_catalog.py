@@ -36,7 +36,7 @@ class PromptCatalog:
     All YAML files live in one directory (``prompts/``).  Namespaces map to
     filenames: ``"detection"`` -> ``document_type_detection.yaml``,
     or any registered model_type ->
-    its ``ModelRegistration.prompt_file``.
+    its ``VllmSpec.prompt_file``.
 
     Files are parsed once and cached per instance.
 

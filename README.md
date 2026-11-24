@@ -117,7 +117,7 @@ The number of cards is not a variable. It comes from `bootstrap.gpus` in the set
 ## The settings file
 
 `config/run_config.yml` holds every setting that is not one of the variables above: the engine's limits for
-each model, the generation settings, the classification and extraction rules, batch sizes. Two rules hold
+each model, the completion budgets, the classification and extraction rules, batch sizes. Two rules hold
 throughout:
 
 - **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
@@ -147,9 +147,7 @@ has the detail.
    two that are there. The specification holds what is true of the model itself: its name, its prompt
    file, and whether it can run as one engine on each card.
 2. **Give it its settings** in `config/run_config.yml`: the folder of its weights under
-   `bootstrap.model.default_paths`, and its engine limits in a block under `inference.vllm.models`. A block
-   under `inference.generation.models` is needed only if its generation settings differ from
-   `inference.generation.defaults`.
+   `bootstrap.model.default_paths`, and its engine limits in a block under `inference.vllm.models`.
 
 Then name it in `model`.
 

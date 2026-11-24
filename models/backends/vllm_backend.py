@@ -34,7 +34,6 @@ class VllmBackend:
         chat_template_kwargs: dict[str, Any] | None = None,
         default_image_first: bool = False,
         trace_path: str | None = None,
-        debug: bool = False,
     ) -> None:
         self.model = engine
         self._model_type_key = model_type_key
@@ -45,12 +44,6 @@ class VllmBackend:
         self._chat_template_kwargs = dict(chat_template_kwargs) if chat_template_kwargs else {}
         # Whether this model's own request form puts the image before the text.
         self._default_image_first = default_image_first
-        self._debug = debug
-        # How many prompt tokens the engine served from its cache, of how many, over this backend's calls.
-        self._cached_prompt_tokens = 0
-        self._total_prompt_tokens = 0
-        self._cache_stats_available = True
-        self._requests = 0
         if trace_path:
             prompt_trace.enable(trace_path)
 
@@ -121,7 +114,6 @@ class VllmBackend:
 
         replies = []
         for output, prompt in zip(outputs, prompts, strict=True):
-            self._count_cached_tokens(output)
             reply = output.outputs[0].text.strip()
             if prompt_trace.is_enabled():
                 prompt_ids = getattr(output, "prompt_token_ids", None)
@@ -135,31 +127,3 @@ class VllmBackend:
                 )
             replies.append(reply)
         return replies
-
-    def _count_cached_tokens(self, output: Any) -> None:
-        """Add one reply's cached and total prompt tokens to the running counts.
-
-        A build of vLLM whose replies lack either number gives none for the whole run, so the first
-        reply without them marks the counts as unavailable.
-        """
-        self._requests += 1
-        cached = getattr(output, "num_cached_tokens", None)
-        prompt_ids = getattr(output, "prompt_token_ids", None)
-        if cached is None or prompt_ids is None:
-            self._cache_stats_available = False
-            return
-        self._cached_prompt_tokens += int(cached)
-        self._total_prompt_tokens += len(prompt_ids)
-
-    def cache_hit_summary(self) -> dict[str, Any]:
-        """How much of the prompts the engine served from its cache, over this backend's calls."""
-        if not self._cache_stats_available:
-            return {"available": False, "calls": self._requests}
-        total = self._total_prompt_tokens
-        return {
-            "available": True,
-            "calls": self._requests,
-            "cached_prompt_tokens": self._cached_prompt_tokens,
-            "total_prompt_tokens": total,
-            "hit_ratio": (self._cached_prompt_tokens / total) if total else 0.0,
-        }

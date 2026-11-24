@@ -1,93 +1,82 @@
-"""Model registry with lazy loading for document extraction processors.
+"""The models the pipeline can run, by the name a task asks for.
 
-Central registry mapping model type strings to loader/creator callables.
-All heavy imports (torch, transformers) are deferred to function bodies
-so that importing this module has zero GPU/ML overhead.
+A model is one ``register_vllm_model(VllmSpec(...))`` call below. Its specification holds what is true of
+the model itself. How its engine is tuned (memory, context length, how many requests at once, the image
+token budget) is in ``config/run_config.yml`` under ``inference.vllm.models``.
+
+Nothing here imports the engine, so reading the registry costs nothing.
 """
 
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from typing import Any, Callable
-
-type ModelLoader = Callable[..., AbstractContextManager[tuple[Any, Any]]]
-type ProcessorCreator = Callable[..., Any]
+from dataclasses import dataclass, field
+from typing import Any
 
 
-@dataclass
-class ModelRegistration:
-    """Registration entry for a vision-language model.
+@dataclass(frozen=True)
+class VllmSpec:
+    """What is true of one model, whatever a run's settings.
 
     Attributes:
         model_type: The name a task asks for, e.g. "gemma4-31b-w4a16-vllm".
-        loader: Callable(Settings) -> ContextManager[(model, tokenizer)].
-        processor_creator: Callable(model, tokenizer, config, universal_fields,
-                           field_definitions) -> DocumentProcessor.
-        prompt_file: Extraction prompt YAML filename, e.g. "extraction_prompts.yaml".
-        description: Human-readable description for help text.
+        prompt_file: The file of its extraction prompts, in ``prompts/``.
+        description: A line for a reader.
+        chat_template_kwargs: Sent with every request. For a chat template that can think,
+            ``{"enable_thinking": False}``. A model whose template ignores that needs
+            ``bootstrap.model.chat_template`` in the settings file instead.
+        supports_data_parallel: Whether one whole engine fits on each card. False for a model too large
+            for one card: starting an engine on each would run out of memory.
+        default_image_first: Whether a request puts the image before the text. The model's chat template
+            renders the two in the order given, so this is part of what the model is sent.
     """
 
     model_type: str
-    loader: ModelLoader
-    processor_creator: ProcessorCreator
-    prompt_file: str
+    prompt_file: str = "extraction_prompts.yaml"
     description: str = ""
-    requires_sharding: bool = False  # True = model must shard across GPUs (keep device_map="auto")
-    is_vllm: bool = False  # True = vLLM backend (eligible for data-parallel)
-    # False = one whole engine per GPU won't fit; the DP fast path must not fire.
+    chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
     supports_data_parallel: bool = True
+    default_image_first: bool = False
 
 
-_REGISTRY: dict[str, ModelRegistration] = {}
+_REGISTRY: dict[str, VllmSpec] = {}
 
 
-def register_model(registration: ModelRegistration) -> None:
-    """Register a model type. Overwrites any existing registration."""
-    _REGISTRY[registration.model_type] = registration
+def register_vllm_model(spec: VllmSpec) -> None:
+    """Add a model. A second specification under the same name takes the first's place."""
+    _REGISTRY[spec.model_type] = spec
 
 
-def get_model(model_type: str) -> ModelRegistration:
-    """Look up a registered model by type string.
+def get_model(model_type: str) -> VllmSpec:
+    """A registered model's specification.
 
     Raises:
-        ValueError: If the model_type is not registered, with a list of available types.
+        ValueError: If no model is registered under the name, with the names that are.
     """
     if model_type not in _REGISTRY:
         available = ", ".join(sorted(_REGISTRY)) or "(none)"
         raise ValueError(
             f"Unknown model type: {model_type!r}.\n"
             f"  What: model type {model_type!r} is not registered in models/registry.py.\n"
-            "  Where: config/run_config.yml -> bootstrap.model.type (the single source that "
-            "selects the model); a typo or a retired model name here is the usual cause.\n"
+            "  Where: the variable model in the job's environment, or config/run_config.yml -> "
+            "bootstrap.model.type; a typo or a retired model name is the usual cause.\n"
             f"  Expected: one of the registered types: {available}\n"
-            "  How to fix: set bootstrap.model.type in config/run_config.yml to a registered "
-            "value (e.g. bootstrap:\\n  model:\\n    type: gemma4-31b-w4a16-vllm)."
+            "  How to fix: name a registered model, e.g. model=gemma4-31b-w4a16-vllm, or "
+            "bootstrap:\\n  model:\\n    type: gemma4-31b-w4a16-vllm in config/run_config.yml."
         )
     return _REGISTRY[model_type]
 
 
 def list_models() -> list[str]:
-    """Return sorted list of registered model type strings."""
+    """The registered models' names, sorted."""
     return sorted(_REGISTRY)
 
 
 def supports_data_parallel(model_type: str) -> bool:
-    """Check whether *model_type* can run one independent engine per GPU.
+    """Whether a model can run as one whole engine on each card.
 
-    False for models too large to replicate per GPU (a quantised 31B still wants
-    the whole card once KV cache and vision activations are counted). Unknown
-    types answer True: ``get_model()`` is the place that rejects them.
+    A name that is not registered answers True: ``get_model`` is the place that refuses it.
     """
-    reg = _REGISTRY.get(model_type)
-    return reg.supports_data_parallel if reg else True
+    spec = _REGISTRY.get(model_type)
+    return spec.supports_data_parallel if spec else True
 
-
-# ============================================================================
-# Declarative registrations via VllmSpec
-#
-# Each VllmSpec replaces ~120 lines of hand-written vLLM loader + creator.
-# ============================================================================
-
-from models.model_loader import VllmSpec, register_vllm_model  # noqa: E402
 
 # -- Gemma 4 31B -----------------------------------------------------------------
 # Google's own QAT W4A16 checkpoint (compressed-tensors), which vLLM loads natively:

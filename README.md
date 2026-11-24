@@ -116,7 +116,21 @@ throughout:
 - **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
 - **A key the code does not know is refused.** A misspelt key cannot sit in the file doing nothing.
 
-The fields of each document type are in `config/field_definitions.yaml`. The prompts are in `prompts/`.
+## Adding a document type
+
+A document type is a prompt and a block in the schema file. Nothing in Python names a type.
+
+1. **Its block**, under `document_types` in `config/field_definitions.yaml`: the fields its prompt asks for.
+   A block may also give other names the type goes by, a fixed completion budget, and a table whose rows
+   are lined up before scoring. The head of that file describes each.
+2. **Its prompt**, of the same name, under `prompts:` in `prompts/extraction_prompts.yaml`.
+3. **A rule that recognises it**, under `classification_evidence.rules` in
+   `prompts/document_type_detection.yaml`. If none of the questions asked tells the type apart, add a
+   question under `classification.questions` in the same file, and use its answer in the rule.
+
+A type with no prompt, a prompt with no type, a rule for a type that has no block, and a rule that uses a
+question nobody asks each stop the run with a message that says which. `docs/document_classification.md`
+has the detail.
 
 ## Adding a model
 

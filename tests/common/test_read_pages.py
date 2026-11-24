@@ -16,6 +16,7 @@ import yaml
 from PIL import Image
 
 from common.extraction_batching import plan_extraction_batches, read_batch_sizes
+from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
@@ -60,12 +61,9 @@ def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     orch._backend = backend  # type: ignore[assignment]
     orch._model_type_key = MODEL
     orch.debug = False
-    orch.field_list = ["DOCUMENT_TYPE", "TOTAL_AMOUNT"]
-    orch.document_field_lists = {"receipt": ["DOCUMENT_TYPE", "SUPPLIER_NAME", "TOTAL_AMOUNT"]}
     orch.gen_config = {"max_new_tokens_base": 500, "max_new_tokens_per_field": 50}
     orch.app_config = types.SimpleNamespace(
         get_token_budget=lambda name: {
-            "extract_bank": 4096,
             "fallback_base": 512,
             "fallback_per_field": 64,
         }[name]
@@ -103,8 +101,10 @@ def test_statements_are_one_call_with_the_statement_prompt_and_its_fixed_budget(
 
     replies = orchestrator(backend).read_pages([str(p) for p in pages], "BANK_STATEMENT")
 
-    schema_prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
-    assert backend.calls == [{"prompts": [schema_prompt] * 3, "max_tokens": 4096, "n": 3}]
+    statement_prompt = PromptCatalog().get_prompt(MODEL, "bank_statement")
+    fixed = get_field_schema().document_type("bank_statement").completion_tokens
+    assert fixed == 4096
+    assert backend.calls == [{"prompts": [statement_prompt] * 3, "max_tokens": fixed, "n": 3}]
     assert replies == [reply(1), reply(2), reply(3)]
 
 
@@ -114,7 +114,8 @@ def test_other_types_are_one_call_with_the_prompt_of_their_name_and_a_budget_by_
     replies = orchestrator(backend).read_pages([str(p) for p in pages], "RECEIPT")
 
     receipt_prompt = PromptCatalog().get_prompt(MODEL, "receipt")
-    assert backend.calls == [{"prompts": [receipt_prompt] * 3, "max_tokens": 500 + 3 * 50, "n": 3}]
+    fields = len(get_field_schema().document_type("receipt").fields)
+    assert backend.calls == [{"prompts": [receipt_prompt] * 3, "max_tokens": 500 + fields * 50, "n": 3}]
     assert len(replies) == 3
 
 
@@ -253,7 +254,7 @@ def test_a_group_writes_one_record_per_page_as_pages_alone_do(pages):
     for grouped, alone in zip(group_writer.records, alone_writer.records, strict=True):
         assert set(grouped) == set(alone)
         assert grouped["raw_response"] == alone["raw_response"]
-        assert grouped["prompt_used"] == alone["prompt_used"] == "unified_bank_single_pass"
+        assert grouped["prompt_used"] == alone["prompt_used"] == "bank_statement"
         assert grouped["error"] is None
     shares = {r["processing_time"] for r in group_writer.records}
     assert len(shares) == 1 and shares.pop() >= 0

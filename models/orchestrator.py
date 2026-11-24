@@ -22,7 +22,7 @@ from models.backends.vllm_backend import VllmBackend
 if TYPE_CHECKING:
     from common.settings import Settings
 
-# The one classification prompt, by its key in prompts/document_type_detection.yaml.
+# What a classification record says its page was read with.
 DETECTION_PROMPT = "detection"
 
 
@@ -163,7 +163,7 @@ class DocumentOrchestrator:
 
     def _detection_inputs(self) -> tuple[str, str, int]:
         """The classification prompt, its key and its completion budget."""
-        prompt = PromptCatalog().get_prompt("detection", DETECTION_PROMPT)
+        prompt = PromptCatalog().classification_prompt()
         return prompt, DETECTION_PROMPT, self.app_config.get_token_budget("classify")
 
     def _detection_result(self, response: str, detection_key: str) -> dict:
@@ -230,9 +230,9 @@ class DocumentOrchestrator:
         one type, and for a page on its own as a group of one, so that a page is asked the same way
         however it is grouped.
 
-        Two things differ by document type, and they are decided here and nowhere else: a bank
-        statement has its own prompt and a fixed completion budget; every other type has the prompt of
-        its name in the model's prompt file and a budget worked out from the number of its fields.
+        Nothing here names a document type. A type's prompt is the one of its name in the model's
+        prompt file. Its completion budget is the fixed one its block in the schema file gives, or
+        else is worked out from the number of its fields.
 
         Args:
             image_paths: The pages.
@@ -240,22 +240,26 @@ class DocumentOrchestrator:
 
         Returns:
             The replies as the model wrote them, in the order of the pages.
+
+        Raises:
+            ValueError: If the schema file has no block for the document type.
         """
         if not image_paths:
             return []
         kind = document_type.lower()
-        if kind == "bank_statement":
-            statements = [self.load_document_image(path) for path in image_paths]
-            prompt = PromptCatalog().get_prompt("bank", "schema_fallback_extraction")
-            budget = self.app_config.get_token_budget("extract_bank")
-            return self.ask(statements, [prompt] * len(statements), budget)
-
+        described = get_field_schema().document_type(kind)
+        if described is None:
+            known = ", ".join(get_field_schema().document_types)
+            raise ValueError(
+                f"What: the document type {document_type!r} has no block in the schema file.\n"
+                f"Where: config/field_definitions.yaml, key document_types.{kind}.\n"
+                f"Expected: one of {known}.\n"
+                f"How to fix: add a block for {kind!r} with its fields, and a prompt of the same name in "
+                f"the model's prompt file."
+            )
         pages = [self.load_document_image(path) for path in image_paths]
-        fields = self.document_field_lists.get(
-            kind, self.document_field_lists.get("invoice", self.field_list)
-        )
         prompt = PromptCatalog().get_prompt(self._model_type_key, kind)
-        budget = self._calculate_max_tokens(len(fields))
+        budget = described.completion_tokens or self._calculate_max_tokens(len(described.fields))
         return self.ask(pages, [prompt] * len(pages), budget)
 
     # -- Model info ------------------------------------------------------------

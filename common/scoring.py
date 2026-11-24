@@ -18,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .field_schema import get_field_schema
+from .field_schema import Table, get_field_schema
 
 logger = logging.getLogger(__name__)
 
@@ -412,71 +412,74 @@ def _score_list(read: list[str], truth: list[str], field_name: str) -> dict[str,
 # A page's score
 # ---------------------------------------------------------------------------------------------------
 
-_PAID = "TRANSACTION_AMOUNTS_PAID"
-_STATEMENT_DATES = "TRANSACTION_DATES"
-# The columns of a bank statement, which are lists of equal length, one entry a row.
-_STATEMENT_COLUMNS = (
-    "TRANSACTION_DATES",
-    "TRANSACTION_AMOUNTS_PAID",
-    "TRANSACTION_AMOUNTS_RECEIVED",
-    "LINE_ITEM_DESCRIPTIONS",
-    "ACCOUNT_BALANCE",
-)
+# A document type may have a table: list fields of equal length, one entry a row. Which fields those are,
+# and how the rows of the reply and the answer are lined up, is in the type's block in the schema file.
 
 
-def _column(data: dict[str, Any], field: str) -> list[str] | None:
-    """A statement column's entries, or None if it is absent or is not a list."""
+def _table_of(document_type: str) -> Table | None:
+    described = get_field_schema().document_type(document_type)
+    return described.table if described is not None else None
+
+
+def _column(data: dict[str, Any], field: str | None) -> list[str] | None:
+    """A table column's entries, or None if it is not named, is absent or is not a list."""
+    if field is None:
+        return None
     value = str(data.get(field, NOT_FOUND)).strip()
     if value.upper() == NOT_FOUND or "|" not in value:
         return None
     return _items(value)
 
 
-def _keep_rows(data: dict[str, Any], rows: list[int], of: int) -> dict[str, Any]:
-    """The statement columns with only the given rows, in the given order.
+def _keep_rows(data: dict[str, Any], table: Table, rows: list[int], of: int) -> dict[str, Any]:
+    """The table's columns with only the given rows, in the given order.
 
     A column whose length is not ``of`` cannot be lined up with the others and is left whole.
     """
     result = dict(data)
-    for field in _STATEMENT_COLUMNS:
+    for field in table.columns:
         entries = _column(data, field)
         if entries is not None and len(entries) == of:
             result[field] = " | ".join(entries[row] for row in rows)
     return result
 
 
-def _without_credit_rows(data: dict[str, Any], document_type: str) -> dict[str, Any]:
-    """A bank statement's columns without its credit rows.
+def _without_absent_rows(data: dict[str, Any], document_type: str) -> dict[str, Any]:
+    """A table's columns without the rows its type marks as absent.
 
-    The answer key holds every row and marks a credit with ``NOT_FOUND`` in the paid column. The prompt
-    asks for the paid column only, so the model gives the debit rows alone. Left as they are, the two
-    lists are out of step by the number of credits and every position is marked wrong. Each side has
-    its marked rows dropped; a side with none is returned as it is.
+    For a bank statement the answer key holds every row and marks a credit with ``NOT_FOUND`` in the
+    paid column, while the prompt asks for the debit rows alone. Left as they are, the two lists are out
+    of step by the number of credits and every position is marked wrong. Each side has its marked rows
+    dropped; a side with none is returned as it is. The column that carries the mark is the one the
+    type's table names in ``rows_absent_where_not_found_in``.
     """
-    paid = _column(data, _PAID) if document_type.lower() == "bank_statement" else None
-    if paid is None:
+    table = _table_of(document_type)
+    marked = _column(data, table.rows_absent_where_not_found_in) if table else None
+    if table is None or marked is None:
         return data
-    keep = [row for row, value in enumerate(paid) if value.upper() != NOT_FOUND]
+    keep = [row for row, value in enumerate(marked) if value.upper() != NOT_FOUND]
     # Nothing to drop, or everything: an empty list would score nothing against a full one.
-    if len(keep) == len(paid) or not keep:
+    if len(keep) == len(marked) or not keep:
         return data
-    return _keep_rows(data, keep, of=len(paid))
+    return _keep_rows(data, table, keep, of=len(marked))
 
 
 def _in_date_order(data: dict[str, Any], document_type: str) -> dict[str, Any]:
-    """A bank statement's columns with their rows in date order.
+    """A table's columns with their rows in date order.
 
     One side may list its rows as printed and the other by date. Putting both in date order before
     comparing position by position takes that difference away. A date that cannot be read sorts last.
+    The column of dates is the one the type's table names in ``rows_in_date_order_of``.
     """
-    dates = _column(data, _STATEMENT_DATES) if document_type.lower() == "bank_statement" else None
-    if dates is None:
+    table = _table_of(document_type)
+    dates = _column(data, table.rows_in_date_order_of) if table else None
+    if table is None or dates is None:
         return data
     parsed = [parse_date(date) or (9999, 99, 99) for date in dates]
     order = sorted(range(len(parsed)), key=lambda row: (parsed[row][2], parsed[row][1], parsed[row][0]))
     if order == list(range(len(order))):
         return data
-    return _keep_rows(data, order, of=len(order))
+    return _keep_rows(data, table, order, of=len(order))
 
 
 def _is_absent(value: Any) -> bool:
@@ -523,9 +526,9 @@ def score_page(
     names_of_the_page = ("filename", "image_name", "image_file", "file")
     truth = {name: value for name, value in answer.items() if name not in names_of_the_page}
 
-    # Credit rows go before the date ordering, so that the ordering sees lists already in step.
-    read = _in_date_order(_without_credit_rows(read, document_type), document_type)
-    truth = _in_date_order(_without_credit_rows(truth, document_type), document_type)
+    # Absent rows go before the date ordering, so that the ordering sees lists already in step.
+    read = _in_date_order(_without_absent_rows(read, document_type), document_type)
+    truth = _in_date_order(_without_absent_rows(truth, document_type), document_type)
 
     field_scores = {field: score_field(read.get(field, NOT_FOUND), truth[field], field) for field in truth}
     count = len(field_scores)

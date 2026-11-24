@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from common.config_schema import ConfigError
+
 _SECTION = "pipeline.sroie"
 
 _EXAMPLE = """\
@@ -21,7 +23,7 @@ pipeline:
     batch_size: 8"""
 
 
-class SroieConfigError(ValueError):
+class SroieConfigError(ConfigError):
     """The SROIE configuration block is missing or invalid."""
 
 

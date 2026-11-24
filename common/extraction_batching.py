@@ -21,6 +21,8 @@ Every document type can share a call, a bank statement included.
 from pathlib import Path
 from typing import Any
 
+from common.config_schema import ConfigError
+
 _SECTION = "pipeline.batching"
 
 _CLASSIFY_KEY = "classify"
@@ -35,7 +37,7 @@ pipeline:
     default: 2"""
 
 
-class BatchingConfigError(ValueError):
+class BatchingConfigError(ConfigError):
     """The pipeline.batching block is missing or invalid."""
 
 

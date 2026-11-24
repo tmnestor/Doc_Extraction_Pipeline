@@ -50,6 +50,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from common.config_schema import ConfigError
 from common.sheet_finder import (
     FinderParams,
     find_sheet_by_paper,
@@ -113,7 +114,7 @@ _KEYS: dict[str, type] = {
 }
 
 
-class PhotoSplitConfigError(ValueError):
+class PhotoSplitConfigError(ConfigError):
     """The photo split settings are missing or malformed."""
 
 

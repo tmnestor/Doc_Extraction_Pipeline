@@ -19,6 +19,8 @@ from typing import Any
 
 import yaml
 
+from common.config_schema import ConfigError
+
 CONFIG = Path(__file__).parent.parent / "config" / "field_definitions.yaml"
 
 _TYPE_KEYS = frozenset({"fields", "also_called", "completion_tokens", "table"})
@@ -48,7 +50,7 @@ _EXAMPLE = (
 )
 
 
-class FieldSchemaError(Exception):
+class FieldSchemaError(ConfigError):
     """``field_definitions.yaml`` is missing or cannot be used. The message says what, where and the fix."""
 
     def __init__(self, message: str, path: Path | None = None) -> None:

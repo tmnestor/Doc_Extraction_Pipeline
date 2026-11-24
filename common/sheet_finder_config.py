@@ -9,6 +9,7 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
+from common.config_schema import ConfigError
 from common.settings import read_settings_file, value_at
 from common.sheet_finder import FinderParams
 
@@ -25,7 +26,7 @@ pipeline:
       # ... and every other key listed in config/run_config.yml under pipeline.photo_split.finder"""
 
 
-class FinderConfigError(ValueError):
+class FinderConfigError(ConfigError):
     """The sheet finder's settings are missing or malformed."""
 
 

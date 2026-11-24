@@ -16,6 +16,8 @@ import copy
 from pathlib import Path
 from typing import Any
 
+from common.config_schema import ConfigError
+
 STAGE_OVERRIDES_KEY = "stage_overrides"
 
 # Stages that load their engine through Settings.for_stage(). A stage listed
@@ -48,7 +50,7 @@ inference:
                 default_output_length: 280"""
 
 
-class StageOverrideConfigError(ValueError):
+class StageOverrideConfigError(ConfigError):
     """A stage_overrides block is malformed."""
 
 

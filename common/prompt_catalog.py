@@ -17,6 +17,8 @@ from typing import Any
 
 import yaml
 
+from common.config_schema import ConfigError
+
 _DETECTION_FILE = "document_type_detection.yaml"
 ANSWER_KINDS = ("columns", "yes_no", "number")
 
@@ -118,7 +120,7 @@ class PromptCatalog:
         """The questions the classification prompt asks, in order, checked.
 
         Raises:
-            ValueError: If the ``classification`` block is missing or a question cannot be used.
+            ConfigError: If the ``classification`` block is missing or a question cannot be used.
         """
         path = self._dir / _DETECTION_FILE
         block = self._load_yaml(path).get("classification")
@@ -128,8 +130,8 @@ class PromptCatalog:
             "        Is there evidence that payment was completed? Answer YES or NO."
         )
 
-        def refuse(what: str, key: str, fix: str) -> ValueError:
-            return ValueError(
+        def refuse(what: str, key: str, fix: str) -> ConfigError:
+            return ConfigError(
                 f"What: {what}\nWhere: {path.absolute()} (key: {key}).\n"
                 f"Expected: a block like this, with one question of the kind `columns`:\n{example}\n"
                 f"How to fix: {fix}"
@@ -206,13 +208,13 @@ class PromptCatalog:
             Mapping of role name to its list of header keywords.
 
         Raises:
-            ValueError: If the ``column_roles`` block is missing or malformed.
+            ConfigError: If the ``column_roles`` block is missing or malformed.
         """
         path = self._dir / _DETECTION_FILE
         data = self._load_yaml(path)
         roles = data.get("column_roles")
         if not isinstance(roles, dict) or not roles:
-            raise ValueError(
+            raise ConfigError(
                 "Missing or empty 'column_roles' block in "
                 f"{path.absolute()} (key: column_roles).\n"
                 "Expected a non-empty mapping of role -> keyword list, e.g.:\n"
@@ -222,7 +224,7 @@ class PromptCatalog:
             )
         for role, keywords in roles.items():
             if not isinstance(keywords, list) or not keywords:
-                raise ValueError(
+                raise ConfigError(
                     f"Role '{role}' in 'column_roles' must be a non-empty list of "
                     f"keyword strings.\n"
                     f"Where: {path.absolute()} (key: column_roles.{role}).\n"
@@ -242,14 +244,14 @@ class PromptCatalog:
             Dict with keys ``rules`` (list) and ``default`` (str).
 
         Raises:
-            ValueError: If the ``classification_evidence`` block is missing or
+            ConfigError: If the ``classification_evidence`` block is missing or
                 structurally invalid.
         """
         path = self._dir / _DETECTION_FILE
         data = self._load_yaml(path)
         evidence = data.get("classification_evidence")
         if not isinstance(evidence, dict):
-            raise ValueError(
+            raise ConfigError(
                 "Missing 'classification_evidence' block in "
                 f"{path.absolute()} (key: classification_evidence).\n"
                 "Expected a mapping with 'rules' and 'default', e.g.:\n"
@@ -263,14 +265,14 @@ class PromptCatalog:
             )
         rules = evidence.get("rules")
         if not isinstance(rules, list) or not rules:
-            raise ValueError(
+            raise ConfigError(
                 "'classification_evidence.rules' must be a non-empty list.\n"
                 f"Where: {path.absolute()} (key: classification_evidence.rules).\n"
                 f"Found: {rules!r}.\n"
                 "Fix: add at least one rule with 'type' and a 'when' clause."
             )
         if "default" not in evidence:
-            raise ValueError(
+            raise ConfigError(
                 "'classification_evidence.default' is required.\n"
                 f"Where: {path.absolute()} (key: classification_evidence.default).\n"
                 "Expected 'none' (defer to keyword fallback) or a document-type "
@@ -296,7 +298,7 @@ class PromptCatalog:
         for i, rule in enumerate(rules):
             loc = f"classification_evidence.rules[{i}]"
             if not isinstance(rule, dict) or "type" not in rule or "when" not in rule:
-                raise ValueError(
+                raise ConfigError(
                     f"Each classification rule needs 'type' and 'when'.\n"
                     f"Where: {path.absolute()} ({loc}).\n"
                     f"Found: {rule!r}.\n"
@@ -304,7 +306,7 @@ class PromptCatalog:
                 )
             rtype = rule["type"]
             if not isinstance(rtype, str) or rtype.lower() not in supported:
-                raise ValueError(
+                raise ConfigError(
                     f"Rule type '{rtype}' is not a supported document type.\n"
                     f"Where: {path.absolute()} ({loc}.type).\n"
                     f"Allowed: {sorted(supported)}.\n"
@@ -313,7 +315,7 @@ class PromptCatalog:
                 )
             when = rule["when"]
             if not isinstance(when, dict) or not when:
-                raise ValueError(
+                raise ConfigError(
                     f"Rule 'when:' must be a non-empty mapping.\n"
                     f"Where: {path.absolute()} ({loc}.when).\n"
                     f"Found: {when!r}.\n"
@@ -321,7 +323,7 @@ class PromptCatalog:
                 )
             unknown_keys = set(when) - allowed_when_keys
             if unknown_keys:
-                raise ValueError(
+                raise ConfigError(
                     f"Unknown 'when:' key(s) {sorted(unknown_keys)}.\n"
                     f"Where: {path.absolute()} ({loc}.when).\n"
                     f"Allowed keys: {sorted(allowed_when_keys)}.\n"
@@ -331,7 +333,7 @@ class PromptCatalog:
             for role_key in ("any_roles", "all_roles"):
                 for role in when.get(role_key, []):
                     if role not in known_roles:
-                        raise ValueError(
+                        raise ConfigError(
                             f"Rule references unknown column role '{role}'.\n"
                             f"Where: {path.absolute()} ({loc}.when.{role_key}).\n"
                             f"Known roles: {sorted(known_roles)}.\n"
@@ -341,7 +343,7 @@ class PromptCatalog:
 
         default = evidence["default"]
         if isinstance(default, str) and default.lower() != "none" and default.lower() not in supported:
-            raise ValueError(
+            raise ConfigError(
                 f"classification_evidence.default '{default}' is not a supported type.\n"
                 f"Where: {path.absolute()} (key: classification_evidence.default).\n"
                 f"Allowed: 'none' or one of {sorted(supported)}.\n"
@@ -356,7 +358,7 @@ class PromptCatalog:
         read.
 
         Raises:
-            ValueError: Naming the prompts that belong to no type and the types that have no prompt.
+            ConfigError: Naming the prompts that belong to no type and the types that have no prompt.
         """
         from common.field_schema import get_field_schema
 
@@ -370,7 +372,7 @@ class PromptCatalog:
                 what.append(f"prompt(s) for no document type: {', '.join(strays)}")
             if unread:
                 what.append(f"document type(s) with no prompt: {', '.join(unread)}")
-            raise ValueError(
+            raise ConfigError(
                 f"What: {'; '.join(what)}.\n"
                 f"Where: {path.absolute()}, under the prompts: section, and config/field_definitions.yaml, "
                 f"under document_types.\n"

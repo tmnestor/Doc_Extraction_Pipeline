@@ -10,6 +10,8 @@ Nothing here imports the engine, so reading the registry costs nothing.
 from dataclasses import dataclass, field
 from typing import Any
 
+from common.config_schema import ConfigError
+
 
 @dataclass(frozen=True)
 class VllmSpec:
@@ -48,11 +50,11 @@ def get_model(model_type: str) -> VllmSpec:
     """A registered model's specification.
 
     Raises:
-        ValueError: If no model is registered under the name, with the names that are.
+        ConfigError: If no model is registered under the name, with the names that are.
     """
     if model_type not in _REGISTRY:
         available = ", ".join(sorted(_REGISTRY)) or "(none)"
-        raise ValueError(
+        raise ConfigError(
             f"Unknown model type: {model_type!r}.\n"
             f"  What: model type {model_type!r} is not registered in models/registry.py.\n"
             "  Where: the variable model in the job's environment, or config/run_config.yml -> "

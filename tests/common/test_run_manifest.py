@@ -9,6 +9,7 @@ measurement was also made at the wrong commit, and nothing in what came back sai
 Folder names, model names and commits are invented, except the one registered model the settings need.
 """
 
+import importlib
 import json
 import logging
 from datetime import datetime
@@ -231,7 +232,8 @@ class Called:
 @pytest.fixture
 def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
-    monkeypatch.setattr(starter, "_stage_run", lambda task: called)
+    for task in ("split", "classify", "extract", "clean", "evaluate", "sroie"):
+        monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
     return called
 
 

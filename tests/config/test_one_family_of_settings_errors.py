@@ -80,7 +80,7 @@ def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
             "What: margin_frac is 7.\nWhere: here\nExpected: a share\nHow to fix: so"
         )
 
-    monkeypatch.setattr(starter, "_stage_run", lambda task: refuses)
+    monkeypatch.setattr("stages.split.run", refuses)
     (tmp_path / "pages").mkdir()
     for name, value in {
         "KFP_TASK": "split",

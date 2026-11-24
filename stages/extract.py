@@ -23,6 +23,8 @@ from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
 from common.vllm_dp import RecordSink
 
+from common.stage_settings import StageSettings
+
 from .io import (
     Journal,
     StreamingJsonlWriter,
@@ -30,6 +32,7 @@ from .io import (
     failed,
     read_completed_images,
     read_jsonl,
+    start_afresh,
     take_out,
 )
 
@@ -365,3 +368,21 @@ def _plan_batches(classifications: list[dict[str, Any]], app_config: Any) -> lis
         batch_sizes,
     )
     return batches
+
+
+BANNER = "Stage 2: extract, the fields of each page (GPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the stage for a task, and give the line that says it is done."""
+    assert task.image_dir is not None
+    start_afresh(task.clear_previous_output, task.raw_extractions)
+    started = time.time()
+    run(
+        task.classifications,
+        task.image_dir,
+        task.raw_extractions,
+        model_type=task.model,
+        config_path=task.config_path,
+    )
+    return f"Extraction complete ({int(time.time() - started)}s)."

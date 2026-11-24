@@ -250,7 +250,7 @@ def test_a_stage_started_afresh_has_its_journal_deleted_with_its_output(
     out.mkdir()
     for name in ("classifications.jsonl", "classifications.jsonl.journal", "raw_extractions.jsonl.journal"):
         (out / name).write_text("{}\n")
-    monkeypatch.setattr(starter, "_stage_run", lambda task: lambda *args, **kwargs: None)
+    monkeypatch.setattr("stages.classify.run", lambda *args, **kwargs: None)
     environ = {
         "model": ONE_ENGINE,
         "image_dir": str(tmp_path / "pages"),

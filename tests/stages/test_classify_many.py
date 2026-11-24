@@ -148,6 +148,7 @@ def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
         "image_path",
         "image_name",
         "document_type",
+        "type_from",
         "confidence",
         "raw_response",
         "prompt_used",

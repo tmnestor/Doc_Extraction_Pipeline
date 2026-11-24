@@ -153,6 +153,7 @@ def run(
         carried_on=resuming,
         read_again=len(read_again),
     )
+    _say_how_the_types_were_reached(records)
     could_not = sum(1 for record in records if failed(record))
     if could_not:
         logger.warning(
@@ -163,6 +164,37 @@ def run(
         )
 
     return output_path
+
+
+def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
+    """Count the pages by how each came by its type, and warn of those given the fallback type.
+
+    A page given the fallback type has, in its record, a type like any other. Until 25 November 2026
+    nothing else in the record said so, and nothing counted such pages: a reply the rules could make
+    nothing of was silent.
+    """
+    reached: dict[str, int] = {}
+    for record in records:
+        how = record.get("type_from") or "not recorded"
+        reached[how] = reached.get(how, 0) + 1
+    logger.info(
+        "How the types were reached: %s",
+        ", ".join(f"{how} {count}" for how, count in sorted(reached.items())),
+    )
+    fallbacks = [
+        record["image_name"]
+        for record in records
+        if str(record.get("type_from", "")).startswith("fallback")
+    ]
+    if fallbacks:
+        logger.warning(
+            "%d of %d page(s) were given the fallback type, since no type could be worked out for them: "
+            "%s%s. Each record says why (type_from).",
+            len(fallbacks),
+            len(records),
+            ", ".join(fallbacks[:10]),
+            f" and {len(fallbacks) - 10} more" if len(fallbacks) > 10 else "",
+        )
 
 
 def check_settings(app_config: Any) -> None:
@@ -230,6 +262,8 @@ def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
         "image_path": image_path,
         "image_name": Path(image_path).name,
         "document_type": result["document_type"],
+        # How the type was reached: by a rule, by the file's default, or as the fallback type and why.
+        "type_from": result.get("type_from"),
         "confidence": result.get("confidence", 1.0),
         "raw_response": result.get("raw_response", ""),
         "prompt_used": result.get("prompt_used", "detection"),

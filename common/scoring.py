@@ -136,7 +136,9 @@ def _month_named(text: str) -> int | None:
 def parse_date(text: str) -> tuple[int, int, int] | None:
     """A date as ``(day, month, year)``, or None if it cannot be read.
 
-    Reads a leading day name ("Thu 04 Sep 2025"), month names, any separator, and two-digit years.
+    Reads a leading day name ("Thu 04 Sep 2025"), month names, any separator, and two-digit years. A date
+    whose first number has four digits is written year first ("2031-02-09", "2031 Feb 9") and is read as
+    year, month, day; in any other date the day comes before the month.
     """
     text = text.strip().lower()
     for day_name in _DAY_NAMES:
@@ -145,7 +147,12 @@ def parse_date(text: str) -> tuple[int, int, int] | None:
             break
     numbers = re.findall(r"\d+", text)
     month = _month_named(text)
-    if len(numbers) >= 3:
+    year_first = bool(numbers) and len(numbers[0]) == 4
+    if year_first and month and len(numbers) >= 2:
+        year, day = int(numbers[0]), int(numbers[1])
+    elif year_first and len(numbers) >= 3:
+        year, month, day = int(numbers[0]), int(numbers[1]), int(numbers[2])
+    elif len(numbers) >= 3:
         day, month, year = int(numbers[0]), int(numbers[1]), int(numbers[2])
     elif len(numbers) == 2 and month:
         day, year = int(numbers[0]), int(numbers[1])
@@ -158,8 +165,21 @@ def parse_date(text: str) -> tuple[int, int, int] | None:
     return (day, month, year)
 
 
+_YEAR_FIRST_RANGE = re.compile(
+    r"^(?P<start>\d{4}(?P<a>[-/.])\d{1,2}(?P=a)\d{1,2})\s*(?:-|to|\u2013|\u2014)\s*"
+    r"(?P<end>\d{4}(?P<b>[-/.])\d{1,2}(?P=b)\d{1,2})$",
+    re.IGNORECASE,
+)
+
+
 def _dates_in(text: str) -> list[tuple[int, int, int]]:
     """The dates of a single date or of a range ("1 February 2024 - 28 June 2024")."""
+    # A range of two year-first dates is found whole: its hyphens are also the hyphens of its dates, so
+    # the separators below cannot tell where one date ends.
+    year_first = _YEAR_FIRST_RANGE.match(text.strip())
+    if year_first:
+        ends = (parse_date(year_first.group("start")), parse_date(year_first.group("end")))
+        return [end for end in ends if end]
     dates: list[tuple[int, int, int]] = []
     for separator in (" - ", " to ", " \u2013 ", " \u2014 ", "-"):  # the last two: en and em dash
         if separator in text.lower():
@@ -196,7 +216,13 @@ def _date_parts(text: str) -> tuple[str | None, str | None, str | None] | None:
     day: str | None
     month: str | None
     year: str | None
-    if len(numbers) == 3:
+    # A first number of four digits is a year: the date is written year, month, day.
+    year_first = bool(numbers) and len(numbers[0]) == 4
+    if year_first and len(numbers) == 2 and month_text:
+        day, month, year = numbers[1], month_text, numbers[0]
+    elif year_first and len(numbers) == 3:
+        day, month, year = numbers[2], numbers[1], numbers[0]
+    elif len(numbers) == 3:
         day, month, year = numbers[0], numbers[1], numbers[2]
     elif len(numbers) == 2 and month_text:
         day, month, year = numbers[0], month_text, numbers[1]

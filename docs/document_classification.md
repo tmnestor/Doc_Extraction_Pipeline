@@ -341,8 +341,10 @@ type or a question, and a test fails if a type's name appears in it.
 2. Add a prompt of the same name under `prompts:` in
    `prompts/extraction_prompts.yaml`. A type without a prompt, or a prompt without
    a type, stops the run with a message naming it.
-3. If the type has fields that are money, dates or yes-or-no, list them under
-   `evaluation.field_types` in the schema file, so that they are scored as such.
+3. For each field no other type already has, add an entry under `fields:` in the
+   schema file. It says how a value of the field is tidied when a reply is
+   cleaned, whether the field is a list, and how it is compared with the answer.
+   A field with no entry stops the run with a message naming it.
 
 ### Case A: the questions already asked tell the type apart
 

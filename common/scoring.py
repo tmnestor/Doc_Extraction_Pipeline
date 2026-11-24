@@ -51,7 +51,8 @@ def load_answer_key(path: Path) -> dict[str, dict[str, Any]]:
         raise ValueError(
             f"Ground truth loaded from {path} but contains 0 records. Check file format and contents."
         )
-    kinds = Counter(answer.get("DOCUMENT_TYPE", "UNKNOWN") for answer in answers.values())
+    names_the_type = get_field_schema().document_type_field or ""
+    kinds = Counter(answer.get(names_the_type, "UNKNOWN") for answer in answers.values())
     logger.info("Answer key: %d pages from %s (%s)", len(answers), path, dict(sorted(kinds.items())))
     return answers
 
@@ -288,12 +289,11 @@ def _statement_item_matches(read: str, truth: str, field_name: str) -> bool:
     because this asks "is it the same row?", and two different payments to one payee share most of
     their letters.
     """
-    if "AMOUNT" in field_name:
+    kind = _scored_as(field_name)
+    if kind == "money":
         return _money_matches(read, truth)
-    if "DATE" in field_name:
+    if kind == "date":
         return _dates_match(read, truth)
-    if "BALANCE" in field_name:
-        return _money_matches(read, truth)
     read, truth = read.strip(), truth.strip()
     threshold = get_field_schema().get_threshold("transaction_text_similarity")
     return _text_similarity(read, truth) >= threshold or _words_match(read, truth)
@@ -308,12 +308,12 @@ def list_item_matches(read: str, truth: str, field_name: str) -> bool:
     read_absent, truth_absent = read.strip().upper() == NOT_FOUND, truth.strip().upper() == NOT_FOUND
     if read_absent or truth_absent:
         return read_absent and truth_absent
-    fields = get_field_schema()
-    if field_name in fields.transaction_list_fields:
+    if _row_by_row(field_name):
         return _statement_item_matches(read, truth, field_name)
-    if field_name in fields.monetary_fields:
+    kind = _scored_as(field_name)
+    if kind == "money":
         return _money_matches(read, truth)
-    if field_name in fields.date_fields:
+    if kind == "date":
         return _dates_match(read, truth)
     return _words_match(read, truth)
 
@@ -322,8 +322,25 @@ def list_item_matches(read: str, truth: str, field_name: str) -> bool:
 # A field's score
 # ---------------------------------------------------------------------------------------------------
 
-_SINGLE_AMOUNTS = ("GST_AMOUNT", "TOTAL_AMOUNT", "INVOICE_TOTAL", "SUBTOTAL")
-_IDENTIFIER_WORDS = ("ABN", "NUMBER", "ID", "REFERENCE", "BSB")
+# How a field is compared is its entry in the schema file. A name with no entry, which an answer key may
+# carry, is compared as text.
+
+
+def _scored_as(field_name: str) -> str:
+    entry = get_field_schema().field_named(field_name)
+    return entry.scored_as if entry else "text"
+
+
+def _single_value_scored_as(field_name: str) -> str:
+    entry = get_field_schema().field_named(field_name)
+    return entry.single_value_scored_as if entry else "text"
+
+
+def _row_by_row(field_name: str) -> bool:
+    entry = get_field_schema().field_named(field_name)
+    return bool(entry and entry.scored_row_by_row)
+
+
 _IDENTIFIER_LABEL = r"^(ABN|BSB|ACN|GST|TAX|ID|NUMBER|NO\.?|#)\s*:?\s*"
 
 
@@ -354,7 +371,6 @@ def score_field(read_value: Any, true_value: Any, field_name: str) -> dict[str, 
     Returns:
         ``f1_score``, ``precision`` and ``recall`` between 0 and 1, and the counts ``tp``, ``fp``, ``fn``.
     """
-    fields = get_field_schema()
     read = str(read_value).strip() if read_value else NOT_FOUND
     truth = str(true_value).strip() if true_value else NOT_FOUND
 
@@ -367,18 +383,19 @@ def score_field(read_value: Any, true_value: Any, field_name: str) -> dict[str, 
     if "|" in read or "|" in truth:
         return _score_list(_items(read), _items(truth), field_name)
 
-    if field_name in fields.transaction_list_fields:
+    if _row_by_row(field_name):
         return _right_or_wrong(_statement_item_matches(read, truth, field_name))
 
     read, truth = " ".join(read.split()), " ".join(truth.split())
-    if field_name in fields.boolean_fields:
+    kind = _single_value_scored_as(field_name)
+    if kind == "yes_no":
         read_flag, true_flag = _as_flag(read), _as_flag(truth)
         return _right_or_wrong(read_flag is not None and true_flag is not None and read_flag == true_flag)
-    if "DATE" in field_name.upper():
+    if kind == "date":
         return _in_part(_date_field_score(read, truth), counts_from=0)
-    if field_name in _SINGLE_AMOUNTS:
+    if kind == "money":
         return _right_or_wrong(_money_matches(read, truth))
-    if any(word in field_name.upper() for word in _IDENTIFIER_WORDS):
+    if kind == "identifier":
         # An identifier is right or wrong: its label, spaces, dashes and case are set aside first.
         read_id = re.sub(r"[\s\-]", "", re.sub(_IDENTIFIER_LABEL, "", read, flags=re.IGNORECASE))
         true_id = re.sub(r"[\s\-]", "", re.sub(_IDENTIFIER_LABEL, "", truth, flags=re.IGNORECASE))

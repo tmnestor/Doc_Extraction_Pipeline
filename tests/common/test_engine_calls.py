@@ -135,3 +135,36 @@ def test_the_time_of_a_failed_call_is_charged_to_the_items_tried_again(
     assert [outcome.seconds for outcome in shared] == [0.5, 0.5]
     # One tick for the failed call, halved, and one tick for each item's own call.
     assert [outcome.seconds for outcome in retried] == [1.5, 1.5]
+
+
+def test_a_setting_that_cannot_be_used_is_raised_and_the_requests_are_not_tried_again() -> None:
+    """It would fail each request the same way, and record a run of failed pages for one mistake."""
+    from common.config_schema import ConfigError
+
+    calls: list[list[str]] = []
+
+    def ask(group: list[str]) -> list[str]:
+        calls.append(list(group))
+        raise ConfigError("What: a rule cannot be used.")
+
+    with pytest.raises(ConfigError, match="a rule cannot be used"):
+        flat(in_engine_calls(groups_of(WORDS, 3), ask))
+
+    assert calls == [["quill", "feather", "ink"]]
+
+
+def test_a_setting_that_cannot_be_used_is_raised_from_a_request_tried_on_its_own() -> None:
+    from common.config_schema import ConfigError
+
+    calls: list[list[str]] = []
+
+    def ask(group: list[str]) -> list[str]:
+        calls.append(list(group))
+        if len(group) > 1:
+            raise RuntimeError("the call was too large")
+        raise ConfigError("What: a rule cannot be used.")
+
+    with pytest.raises(ConfigError):
+        flat(in_engine_calls(groups_of(WORDS, 3), ask))
+
+    assert calls == [["quill", "feather", "ink"], ["quill"]]

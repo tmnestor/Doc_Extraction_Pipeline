@@ -8,12 +8,13 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 """
 
 import logging
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
-
-from common.engine_calls import groups_of, in_engine_calls
+from common.config_schema import ConfigError
+from common.engine_calls import Outcome, groups_of, in_engine_calls
 from common.vllm_dp import RecordSink
 from common.extraction_batching import read_classify_batch_size
 
@@ -66,6 +67,7 @@ def run(
         cli_args["model_type"] = model_type
 
     app_cfg = Settings.load(cli_args, config_path=config_path).for_stage("classify")
+    check_settings(app_cfg)
     config = app_cfg
     # Discover images
     # Both filters are config-driven and MUST be passed: calling with the
@@ -150,6 +152,35 @@ def run(
     return output_path
 
 
+def check_settings(app_config: Any) -> None:
+    """Everything classifying reads that can be wrong, checked before any engine is started.
+
+    The pages to a call, the classification file (its questions, its column roles and its rules), and
+    the fallback type. Each is read again where it is used. Until 25 November 2026 that was the first
+    time: the pages to a call after the engine had started, and the classification file when the first
+    reply was turned into a type, inside the engine call. A mistake in a rule was then taken for a
+    failed call, and every page was given the fallback type.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    from common import classification
+    from common.field_schema import get_field_schema
+
+    read_classify_batch_size(app_config.raw, config_path=app_config.config_path)
+    classification.check()
+    fallback = app_config.classification_fallback_type
+    types = get_field_schema().document_types
+    if not isinstance(fallback, str) or fallback.lower() not in types:
+        raise ConfigError(
+            f"What: the fallback type {fallback!r} is not a document type, so a page given it could not "
+            f"be read by the extract stage.\n"
+            f"Where: {app_config.config_path} -> pipeline.classification.fallback_type\n"
+            f"Expected: a document type of the schema file, in either case: {', '.join(sorted(types))}.\n"
+            f"How to fix: set fallback_type to one of those, e.g. fallback_type: UNIVERSAL"
+        )
+
+
 def classify_pages(
     processor: Any, images: list[Path], app_config: Any, *, sink: RecordSink | None = None
 ) -> list[dict[str, Any]]:
@@ -207,11 +238,14 @@ def _classify_images(
     is tried again one page at a time, and a page that still fails is given the fallback type and
     carries its error, so that one page never ends the run (``common.engine_calls``).
 
+    Only asking the model is inside the call that may be tried again. A reply is turned into a type
+    afterwards, so that a reply the model has given is never asked for twice.
+
     Args:
         processor: The document processor (orchestrator).
         image_paths: Pages to classify, in order.
         batch_size: Pages per engine call. 1 means one call a page.
-        verbose: Passed through to the processor.
+        verbose: Whether each page's type is also printed as it is found.
         sink: Where to write each record as soon as it is made, if anywhere.
 
     Returns:
@@ -227,20 +261,35 @@ def _classify_images(
         )
 
     records: list[dict[str, Any]] = []
-    calls = in_engine_calls(
-        groups_of(image_paths, batch_size),
-        lambda pages: processor.detect_many(pages, verbose=verbose),
-        what="pages",
-    )
+    calls = in_engine_calls(groups_of(image_paths, batch_size), processor.ask_document_types, what="pages")
     for outcomes in calls:
         for outcome in outcomes:
-            result = outcome.reply if outcome.reply is not None else processor.unclassified(outcome.error)
+            result = _classified(processor, outcome)
             record = {**_record(outcome.item, result), "processing_time": outcome.seconds}
             records.append(record)
             if sink is not None:
                 sink.write(record)
-            # Tier A: always-on per-image progress.
-            logger.info(
-                "[%d/%d] %s -> %s", len(records), total, Path(outcome.item).name, result["document_type"]
-            )
+            name = Path(outcome.item).name
+            logger.info("[%d/%d] %s -> %s", len(records), total, name, result["document_type"])
+            if verbose:
+                sys.stdout.write(f"Detected document type: {name}: {result['document_type']}\n")
+                sys.stdout.flush()
     return records
+
+
+def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
+    """A page's classification: from the model's reply, or the fallback type with why there is none.
+
+    A setting that cannot be used is raised (``ConfigError``): it is the run's, not the page's. Anything
+    else that goes wrong in reading one reply is that page's, and is recorded on it with the reply.
+    """
+    if outcome.reply is None:
+        return processor.unclassified(outcome.error)
+    try:
+        return processor.classified(outcome.reply)
+    except ConfigError:
+        raise
+    except Exception as err:  # noqa: BLE001 - one reply that cannot be read must not end the run
+        why = f"{type(err).__name__}: {err}"
+        logger.error("The reply about %s could not be read (%s)", Path(outcome.item).name, why)
+        return {**processor.unclassified(why), "raw_response": outcome.reply}

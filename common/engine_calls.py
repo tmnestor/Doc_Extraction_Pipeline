@@ -7,12 +7,18 @@ with its error, so that it never ends the run. That is written here once.
 
 What is asked, how the requests are grouped and what a stage records are the stage's business. This
 module is given the groups and a function that makes one call.
+
+One kind of failure is never a page's: a setting that cannot be used (``ConfigError``). Trying the pages
+again one at a time would fail each of them the same way and record a run of failed pages where there
+was one mistake in a file. It is raised as it is, and ends the run with its reason.
 """
 
 import logging
 import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+
+from common.config_schema import ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +67,8 @@ def in_engine_calls[Item, Reply](
     """Make one engine call for each group, and give each group's outcomes as soon as it is done.
 
     A call that fails is tried again one request at a time. A request that still fails is given back
-    with its error and no reply. Nothing is raised for a failed call.
+    with its error and no reply. Nothing is raised for a failed call, but for one reason: a setting
+    that cannot be used.
 
     Args:
         groups: The requests, grouped as they are to be sent. An empty group is passed over.
@@ -70,6 +77,9 @@ def in_engine_calls[Item, Reply](
 
     Yields:
         For each group, in order, one outcome for each of its requests, in order.
+
+    Raises:
+        ConfigError: If making a call met a setting that cannot be used. It is not a page's failure.
     """
     for group in groups:
         if not group:
@@ -77,6 +87,8 @@ def in_engine_calls[Item, Reply](
         started = time.time()
         try:
             replies = _asked(ask, group)
+        except ConfigError:
+            raise
         except Exception as err:  # noqa: BLE001 - one call, or one request, must not end the run
             failed_for = time.time() - started
             if len(group) == 1:
@@ -103,6 +115,8 @@ def _alone[Item, Reply](
     started = time.time()
     try:
         (reply,) = _asked(ask, [item])
+    except ConfigError:
+        raise
     except Exception as err:  # noqa: BLE001 - recorded on the request, not raised
         logger.error("A request failed on its own (%s: %s)", type(err).__name__, err)
         return Outcome(item, None, str(err), already + time.time() - started)

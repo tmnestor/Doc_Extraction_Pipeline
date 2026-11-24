@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-
+from common.config_schema import ConfigError
 from common.engine_calls import in_engine_calls
 from common.vllm_dp import RecordSink
 
@@ -70,6 +70,7 @@ def run(
         cli_args["model_type"] = model_type
 
     app_cfg = Settings.load(cli_args, config_path=config_path)
+    check_settings(app_cfg, classifications)
 
     # What an earlier run had read before it stopped is added to the output first, in the order the
     # stage reads pages in, and is then carried on from like any other earlier output.
@@ -173,6 +174,39 @@ def run(
     )
     logger.info("Wrote %d extractions to %s", len(records), output_path)
     return output_path
+
+
+def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> None:
+    """Everything reading the pages' fields depends on that can be wrong, checked before any engine starts.
+
+    The pages to a call for each document type, and that every type the pages were given has a block
+    in the schema file. Each is read again where it is used. Until 25 November 2026 that was the first
+    time, after the engine had started, and a type with no block was recorded as a failed page for
+    every page of that type.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    from common.extraction_batching import read_batch_sizes
+    from common.field_schema import get_field_schema
+
+    read_batch_sizes(app_config.raw, config_path=app_config.config_path)
+    schema = get_field_schema()
+    not_read = {label.lower() for label in app_config.extraction_skip_labels}
+    given = {
+        str(c["document_type"]) for c in classifications if str(c["document_type"]).lower() not in not_read
+    }
+    unknown = sorted(kind for kind in given if schema.document_type(kind) is None)
+    if unknown:
+        raise ConfigError(
+            f"What: the classifications give page(s) the document type(s) {', '.join(unknown)}, which "
+            f"have no block in the schema file, so those pages cannot be read.\n"
+            f"Where: config/field_definitions.yaml, under document_types.\n"
+            f"Expected: one of {', '.join(schema.document_types)}.\n"
+            f"How to fix: give each type a block with its fields and a prompt of the same name in the "
+            f"model's prompt file, or name it under pipeline.extraction.skip_labels in "
+            f"{app_config.config_path} if its pages are not to be read."
+        )
 
 
 class _Collected:

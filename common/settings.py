@@ -378,6 +378,12 @@ class Settings:
         staged._stage = stage
         return staged
 
+    def on_one_card(self) -> "Settings":
+        """A copy for a process that sees one card only: the engine it starts is not split across cards."""
+        one_card = copy.copy(self)
+        one_card.num_gpus = 1
+        return one_card
+
     def get_vllm_config(self, model_type: str) -> dict[str, Any]:
         """The engine settings of a model: its own block over ``inference.vllm.defaults``.
 

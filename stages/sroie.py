@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
+from common.engine_calls import groups_of, in_engine_calls
 from common.sroie.config import SroieSettings
 from common.sroie.ground_truth import SroieRecord, load_sroie_split
 from common.sroie.prompt import SROIE_PROMPT
@@ -30,16 +31,11 @@ from common.sroie.report import (
     write_per_image_csv,
     write_summary_json,
 )
-from common.sroie.runner import benchmark_from_worker_responses, inference_seconds_from_responses
+from common.sroie.runner import benchmark_from_worker_responses
+from common.stage_timing import inference_seconds_from_records
 from common.sroie.scoring import MatchPolicy, score_records
 
 logger = logging.getLogger(__name__)
-
-
-# run_dp resolves this by dotted string in a subprocess, so a typo here
-# would only surface minutes into a GPU run. Named as a constant so a test
-# can import it and check it resolves.
-SROIE_WORKER_FN = "common.vllm_dp_workers.sroie_worker"
 
 
 def run(
@@ -63,15 +59,13 @@ def run(
         SroieDatasetError: If the split on disk is unusable.
     """
     from common.settings import Settings
-    from common.pipeline_ops import open_processor
-    from common.vllm_dp import resolve_dp_gpus, run_dp
+    from common.vllm_dp import read_on_the_cards
 
     cli_args: dict[str, object] = {}
     if model_type:
         cli_args["model_type"] = model_type
 
     app_cfg = Settings.load(cli_args, config_path=config_path)
-    config = app_cfg
     settings = _settings(app_cfg)
 
     records = load_sroie_split(settings.data_dir)
@@ -83,36 +77,22 @@ def run(
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # receipts are read by read_sroie; only where the engine is started differs.
     started = time.time()
-    engines = resolve_dp_gpus(config, config.model_type)
-    if engines:
-        responses = run_dp(
-            num_gpus=engines,
-            images=[record.image_path for record in records],
-            worker_fn=SROIE_WORKER_FN,
-            worker_kwargs={
-                "config_path": str(config_path) if config_path else None,
-                "cli_overrides": cli_args,
-            },
-            app_config=app_cfg,
-        )
-        wall_clock: float | None = time.time() - started
-        execution_mode = f"data-parallel ({engines} GPUs)"
-    else:
-        with open_processor(app_cfg) as processor:
-            started = time.time()
-            responses = read_sroie(processor, image_paths, app_cfg)
-        wall_clock = None
-        execution_mode = "single-engine"
+    read = read_on_the_cards(app_cfg, image_paths, read_sroie)
+    whole = time.time() - started
+    # The whole time is shown only with an engine on each card, where it and the model's time differ by
+    # the engines' starting.
+    wall_clock: float | None = whole if read.engines else None
 
-    # The model's time, apart from starting the engine: with an engine on each card, the slowest card's.
-    elapsed = inference_seconds_from_responses(responses, fallback=time.time() - started)
+    # The model's time, apart from starting the engine: the sum of the receipts' times, and with an
+    # engine on each card the slowest card's sum.
+    elapsed = inference_seconds_from_records(read.records, fallback=whole)
     return _finish(
         records=records,
-        result=benchmark_from_worker_responses(records, responses),
+        result=benchmark_from_worker_responses(records, read.records),
         settings=settings,
-        model_name=config.model_type,
+        model_name=app_cfg.model_type,
         elapsed=elapsed,
-        execution_mode=execution_mode,
+        execution_mode=read.arrangement,
         wall_clock=wall_clock,
     )
 
@@ -139,63 +119,43 @@ def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[
         app_config: The run's settings.
 
     Returns:
-        One record per receipt, in the order given: image_id, image_path, raw_response, error, elapsed.
+        One record per receipt, in the order given: image_id, image_path, raw_response, error,
+        processing_time.
     """
     from PIL import Image
 
     settings = _settings(app_config)
+
+    def ask(paths: list[str]) -> list[str]:
+        images = [Image.open(path).convert("RGB") for path in paths]
+        try:
+            return processor.ask(images, [SROIE_PROMPT] * len(images), settings.max_new_tokens)
+        finally:
+            for image in images:
+                image.close()
+
     records: list[dict[str, Any]] = []
     total = len(image_paths)
-
-    for start in range(0, total, settings.batch_size):
-        chunk = image_paths[start : start + settings.batch_size]
-        batch_start = time.time()
-
-        try:
-            images = [Image.open(p).convert("RGB") for p in chunk]
-            try:
-                responses = processor.ask(images, [SROIE_PROMPT] * len(images), settings.max_new_tokens)
-            finally:
-                for image in images:
-                    image.close()
-            if len(responses) != len(chunk):
-                raise ValueError(f"backend returned {len(responses)} responses for {len(chunk)} images")
-            errors: list[str | None] = [None] * len(chunk)
-        except Exception as err:  # noqa: BLE001 - a batch must not end the run
-            logger.warning("Batch of %d failed (%s): retrying one at a time", len(chunk), err)
-            responses, errors = [], []
-            for image_path in chunk:
-                try:
-                    with Image.open(image_path) as image:
-                        responses.extend(
-                            processor.ask(
-                                [image.convert("RGB")],
-                                [SROIE_PROMPT],
-                                settings.max_new_tokens,
-                            )
-                        )
-                    errors.append(None)
-                except Exception as inner:  # noqa: BLE001 - recorded, not raised
-                    logger.error("%s FAILED: %s", Path(image_path).stem, inner)
-                    responses.append("")
-                    errors.append(str(inner))
-
-        # Inside a call the requests overlap, so a receipt's own time is not separable: each is charged an
-        # equal share of the call.
-        share = (time.time() - batch_start) / len(chunk)
-        for image_path, response, error in zip(chunk, responses, errors, strict=True):
+    calls = in_engine_calls(groups_of(image_paths, settings.batch_size), ask, what="receipts")
+    for outcomes in calls:
+        for outcome in outcomes:
+            if outcome.error is not None:
+                logger.error("%s FAILED: %s", Path(outcome.item).stem, outcome.error)
             records.append(
                 {
-                    "image_id": Path(image_path).stem,
-                    "image_path": image_path,
-                    "raw_response": response,
-                    "error": error,
-                    "elapsed": share,
+                    "image_id": Path(outcome.item).stem,
+                    "image_path": outcome.item,
+                    "raw_response": outcome.reply if outcome.error is None else "",
+                    "error": outcome.error,
+                    "processing_time": outcome.seconds,
                 }
             )
-
         logger.info(
-            "[%d/%d] batch of %d in %.1fs", start + len(chunk), total, len(chunk), time.time() - batch_start
+            "[%d/%d] call of %d in %.1fs",
+            len(records),
+            total,
+            len(outcomes),
+            sum(outcome.seconds for outcome in outcomes),
         )
 
     return records

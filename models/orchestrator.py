@@ -107,24 +107,18 @@ class DocumentOrchestrator:
             sys.stdout.flush()
         return results
 
-    def detect_and_classify_document(self, image_path: str, verbose: bool = False) -> dict:
-        """Detect the document type of one page: a call of one, with a failure recorded, not raised.
+    def unclassified(self, error: str | None) -> dict:
+        """The classification of a page the model could not be asked about: the fallback type, with why.
 
-        A page that cannot be classified is given the fallback type and carries the error, so that
-        one page does not end the run.
+        The stage records it, so that one page does not end the run.
         """
-        try:
-            return self.detect_many([image_path], verbose=verbose)[0]
-        except Exception as e:  # noqa: BLE001 - recorded on the page, not raised
-            sys.stdout.write(f"DETECTION ERROR: {e}\n")
-            sys.stdout.flush()
-            return {
-                "document_type": self._fallback_type,
-                "confidence": 0.1,
-                "raw_response": "",
-                "prompt_used": "fallback_heuristic",
-                "error": str(e),
-            }
+        return {
+            "document_type": self._fallback_type,
+            "confidence": 0.1,
+            "raw_response": "",
+            "prompt_used": "fallback_heuristic",
+            "error": error or "",
+        }
 
     # -- Reading the fields of pages --------------------------------------------
 

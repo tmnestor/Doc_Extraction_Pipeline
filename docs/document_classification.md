@@ -43,7 +43,7 @@ If you want to adapt this to a new task, the pattern to copy is
 
 | Component | Path |
 |---|---|
-| Entry method `detect_and_classify_document()` | `models/orchestrator.py` |
+| Entry method `detect_many()` | `models/orchestrator.py` |
 | Evidence parser + rule evaluator | `common/classification.py` |
 | Classification prompt + evidence rules (`column_roles`, `classification_evidence`) | `prompts/document_type_detection.yaml` |
 | Pipeline stage (`KFP_TASK=classify`) | `stages/classify.py` |
@@ -55,32 +55,33 @@ If you want to adapt this to a new task, the pattern to copy is
 
 ```mermaid
 flowchart TD
-    A[Image file] --> B["detect_and_classify_document(image_path)"]
+    A[Image files] --> B["detect_many(image_paths)"]
     B --> C[Load detection prompt<br/>key = 'detection']
     C --> D["ask(images, prompts, max_tokens=150)<br/>one vLLM .chat() call for a group of pages"]
     D --> E[Raw model response text]
     E --> F{classification<br/>.document_type}
     F -->|answers found| G[Type from the rules]
     F -->|no answers found| H[The fallback type]
-    G --> I[document_type + confidence + column_mapping]
+    G --> I[document_type + confidence]
     H --> I
     I --> J[Downstream: type-specific<br/>extraction prompt]
 ```
 
-**The contract**: `detect_and_classify_document(image_path) -> dict`:
+**The contract**: `detect_many(image_paths) -> list[dict]`, one for each page:
 
 ```python
 {
     "document_type": "RECEIPT",      # canonical label (UPPERCASE)
-    "confidence": 1.0,               # 1.0 ok · 0.1 on exception
+    "confidence": 1.0,               # 1.0 ok · 0.1 for a page that could not be asked about
     "raw_response": "...",           # full model text, kept for audit
     "prompt_used": "detection",
-    "column_mapping": {...},         # present only for BANK_STATEMENT
 }
 ```
 
-On any exception it returns the configured `fallback_type` with
-`confidence: 0.1`: it never raises into the pipeline.
+`detect_many` does not catch a failure. The classify stage sends pages several to a call
+(`common/engine_calls.py`); a call that fails is tried again one page at a time, and a page that
+still fails is recorded with the configured `fallback_type`, `confidence: 0.1` and its error, so
+that one page never ends the run.
 
 ---
 

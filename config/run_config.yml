@@ -157,6 +157,11 @@ pipeline:
 
   processing:
     verbose: false             # true = the classify stage prints each page's type as it is detected
+    # A page that fails among pages that are answered is recorded with its error, and the stage goes
+    # on. When this many requests in a row have failed with none answered between them, the engine
+    # has stopped answering, or a setting makes every page fail, and the stage stops with its reason.
+    # What it had read is kept, and the next run carries on from there.
+    stop_after_failed_requests: 8
 
   # Completion budgets: the most tokens a reply may run to. The same for every model, so that a
   # comparison of two models is not one of two budgets: a model given fewer tokens can be cut off

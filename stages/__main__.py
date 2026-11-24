@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from common import run_manifest
+from common.engine_calls import StageStopped
 from common.stage_settings import ConfigError, StageSettings, resolve
 from stages.io import Journal
 
@@ -149,6 +150,9 @@ def main() -> int:
         run_task(resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH))
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
+        return 1
+    except StageStopped as err:
+        print(f"FATAL: the task was stopped part way.\n{err}")
         return 1
     return 0
 

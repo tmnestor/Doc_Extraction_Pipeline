@@ -73,6 +73,7 @@ def note_stage_timing(
     wall_clock: float,
     execution_mode: str,
     carried_on: bool,
+    read_again: int = 0,
 ) -> None:
     """Note what a stage has just spent. Never raises: the stage's work is already done.
 
@@ -85,6 +86,9 @@ def note_stage_timing(
         carried_on: Whether the stage carried on from an earlier run's output. Its time is then added
             to that run's row, so that the row covers every page the output holds. Otherwise the row is
             written anew.
+        read_again: How many of ``records`` are of pages the earlier run had recorded as failed, whose
+            records were taken out of the output. The earlier row counts them already, so they are
+            not counted twice; the time first spent on them stays in the row.
     """
     try:
         now = StageTiming(
@@ -107,7 +111,7 @@ def note_stage_timing(
                 wall_clock=before.wall_clock + now.wall_clock,
                 inference_seconds=before.inference_seconds + now.inference_seconds,
                 execution_mode=modes,
-                images=before.images + now.images,
+                images=before.images + now.images - read_again,
             )
         write_stage_timing(output_dir, now)
     except Exception as err:  # noqa: BLE001 - timing must not break the stage

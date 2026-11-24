@@ -15,12 +15,16 @@ import pytest
 import yaml
 from PIL import Image
 
+from common.engine_calls import EngineWatch
 from common.extraction_batching import plan_extraction_batches, read_batch_sizes
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
 from stages import extract as extract_stage
+
+# A watch that never stops a stage: these tests are not of an engine that has stopped answering.
+NEVER = EngineWatch(10_000)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
@@ -240,10 +244,10 @@ def test_statements_are_planned_into_shared_calls_like_any_type(pages):
 def test_a_group_writes_one_record_per_page_as_pages_alone_do(pages):
     group_writer, alone_writer = ListWriter(), ListWriter()
 
-    extract_stage._read_batch(group_writer, orchestrator(FakeBackend()), classified(pages))
+    extract_stage._read_batch(group_writer, orchestrator(FakeBackend()), classified(pages), NEVER)
     processor = orchestrator(FakeBackend())
     for one in classified(pages):
-        extract_stage._read_batch(alone_writer, processor, [one])
+        extract_stage._read_batch(alone_writer, processor, [one], NEVER)
 
     assert [r["image_name"] for r in group_writer.records] == [p.name for p in pages]
     assert [r["raw_response"] for r in group_writer.records] == [reply(1), reply(2), reply(3)]
@@ -259,7 +263,7 @@ def test_a_group_writes_one_record_per_page_as_pages_alone_do(pages):
 def test_a_record_names_the_prompt_of_its_type(pages):
     writer = ListWriter()
 
-    extract_stage._read_batch(writer, orchestrator(FakeBackend()), classified(pages, "RECEIPT"))
+    extract_stage._read_batch(writer, orchestrator(FakeBackend()), classified(pages, "RECEIPT"), NEVER)
 
     assert {r["prompt_used"] for r in writer.records} == {"receipt"}
 
@@ -268,7 +272,7 @@ def test_a_failed_group_is_read_again_one_page_at_a_time(pages, caplog):
     writer, backend = ListWriter(), FakeBackend(fail_groups=True)
 
     with caplog.at_level("WARNING"):
-        extract_stage._read_batch(writer, orchestrator(backend), classified(pages))
+        extract_stage._read_batch(writer, orchestrator(backend), classified(pages), NEVER)
 
     assert [call["n"] for call in backend.calls] == [1, 1, 1]
     assert [r["image_name"] for r in writer.records] == [p.name for p in pages]
@@ -279,7 +283,7 @@ def test_a_failed_group_is_read_again_one_page_at_a_time(pages, caplog):
 def test_a_page_that_fails_alone_is_recorded_as_an_error(pages):
     writer = ListWriter()
 
-    extract_stage._read_batch(writer, orchestrator(FakeBackend(fail_always=True)), classified(pages))
+    extract_stage._read_batch(writer, orchestrator(FakeBackend(fail_always=True)), classified(pages), NEVER)
 
     assert [r["image_name"] for r in writer.records] == [p.name for p in pages]
     assert [r["prompt_used"] for r in writer.records] == ["error"] * 3
@@ -289,7 +293,7 @@ def test_a_page_that_fails_alone_is_recorded_as_an_error(pages):
 def test_records_round_trip_as_json(pages):
     writer = ListWriter()
 
-    extract_stage._read_batch(writer, orchestrator(FakeBackend()), classified(pages))
+    extract_stage._read_batch(writer, orchestrator(FakeBackend()), classified(pages), NEVER)
 
     for record in writer.records:
         assert json.loads(json.dumps(record)) == record

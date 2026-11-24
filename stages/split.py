@@ -34,9 +34,9 @@ from pathlib import Path
 from typing import Any
 
 
-from common.engine_calls import Outcome, groups_of, in_engine_calls
+from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 
-from .io import append_jsonl, read_completed_images
+from .io import append_jsonl, failed, read_completed_images, take_out
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,9 @@ def apply_reply(
     return _record(photograph, "split", decision.reason, boxes, outputs, turns, rectifieds, reply, drifts)
 
 
-def _ask(processor: Any, photographs: list[Path], config: Any) -> Iterator[list[Outcome[Path, str]]]:
+def _ask(
+    processor: Any, photographs: list[Path], config: Any, watch: EngineWatch
+) -> Iterator[list[Outcome[Path, str]]]:
     """Put the photo split prompt to the model for each photograph, one engine call at a time.
 
     Photographs go ``batch_size`` to an engine call, and each call's outcomes are given as soon as it is
@@ -206,7 +208,7 @@ def _ask(processor: Any, photographs: list[Path], config: Any) -> Iterator[list[
         images = [processor.load_document_image(str(photograph)) for photograph in batch]
         return processor.ask(images, [config.prompt] * len(images), config.max_tokens)
 
-    return in_engine_calls(groups_of(photographs, config.batch_size), ask, what="photographs")
+    return in_engine_calls(groups_of(photographs, config.batch_size), ask, watch=watch, what="photographs")
 
 
 def run(
@@ -249,6 +251,20 @@ def run(
     images_dir = output_dir / IMAGES_DIR
     images_dir.mkdir(parents=True, exist_ok=True)
     records_path = output_dir / RECORDS_FILE
+
+    # A photograph the model could not be asked about by an earlier run is asked about again. Its
+    # record is taken out, and with it the image that run passed through in its place, which a
+    # photograph cut into several this time would otherwise leave beside the cuts.
+    asked_again = take_out(records_path, failed)
+    for record in asked_again:
+        for name in record.get("outputs", []):
+            if Path(name).name == name:
+                (images_dir / name).unlink(missing_ok=True)
+    if asked_again:
+        logger.info(
+            "%d photograph(s) an earlier run could not ask about will be asked about again",
+            len(asked_again),
+        )
 
     # Resume: photographs already recorded by an earlier, interrupted run are not asked about again.
     done = read_completed_images(records_path)
@@ -293,7 +309,8 @@ def run(
     records = []
     model_seconds = 0.0
     with open_processor(app_cfg) as processor:
-        for outcomes in _ask(processor, todo, split_config):
+        watch = EngineWatch(app_cfg.stop_after_failed_requests)
+        for outcomes in _ask(processor, todo, split_config, watch):
             model_seconds += sum(outcome.seconds for outcome in outcomes)
             for outcome in outcomes:
                 photograph = outcome.item

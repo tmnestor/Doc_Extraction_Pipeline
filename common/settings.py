@@ -146,6 +146,8 @@ class Settings:
     data_parallel_size: int | None
     # Whether each page's type is printed as it is classified, and whether what is sent to the model is kept.
     verbose: bool
+    # How many requests may fail in a row before a stage stops (common.engine_calls.EngineWatch).
+    stop_after_failed_requests: int
     trace_raw_prompts: bool
     trace_path: str | None
     # The order pages are read in, and the labels that are not read.
@@ -233,6 +235,7 @@ class Settings:
         )
 
         self.verbose = _need(raw, "pipeline.processing.verbose", path, "true or false")
+        self.stop_after_failed_requests = cls._failed_requests_allowed(raw, path)
         self.trace_raw_prompts, self.trace_path = cls._tracing(raw, path)
 
         self._vllm_config = _build_vllm_config(raw, path)
@@ -326,6 +329,22 @@ class Settings:
                 "How to fix: give both keys under 'inference.tracing'."
             )
         return enabled, None if _is_none(tracing["path"]) else str(tracing["path"])
+
+    @staticmethod
+    def _failed_requests_allowed(raw: dict[str, Any], path: Path) -> int:
+        """How many requests may fail in a row before a stage stops: a whole number of 1 or more."""
+        key = "pipeline.processing.stop_after_failed_requests"
+        value = _need(raw, key, path, "a whole number of requests, e.g. stop_after_failed_requests: 8")
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ConfigError(
+                f"What: {key} is {value!r}, not a whole number of 1 or more.\n"
+                f"Where: {path} -> {key}\n"
+                f"Expected: how many requests may fail in a row, with none answered between them, "
+                f"before a stage stops, e.g. stop_after_failed_requests: 8\n"
+                f"How to fix: set {key} to a whole number of 1 or more. 1 stops a stage at the first "
+                f"page that fails."
+            )
+        return value
 
     @staticmethod
     def _budgets(raw: dict[str, Any], path: Path) -> dict[str, int]:

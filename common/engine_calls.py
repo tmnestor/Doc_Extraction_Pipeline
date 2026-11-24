@@ -11,6 +11,12 @@ module is given the groups and a function that makes one call.
 One kind of failure is never a page's: a setting that cannot be used (``ConfigError``). Trying the pages
 again one at a time would fail each of them the same way and record a run of failed pages where there
 was one mistake in a file. It is raised as it is, and ends the run with its reason.
+
+And a page that fails is only its own failure while other pages are being answered. When request after
+request fails with none answered between them, the engine has stopped answering, or a setting makes
+every page fail. Going on would record every page left as failed, in seconds, and end as if the stage
+had done its work. An ``EngineWatch`` counts the failures in a row and stops the stage
+(``StageStopped``) at the number ``pipeline.processing.stop_after_failed_requests`` gives.
 """
 
 import logging
@@ -21,6 +27,52 @@ from dataclasses import dataclass
 from common.config_schema import ConfigError
 
 logger = logging.getLogger(__name__)
+
+
+class StageStopped(RuntimeError):
+    """A stage cannot usefully go on. The message says why, where to look and what was kept."""
+
+
+class EngineWatch:
+    """Counts the requests that fail one after another, and stops the stage when there are too many.
+
+    One watch is kept for the whole of a stage's reading by one engine, so that failures are counted
+    across its calls.
+    """
+
+    def __init__(self, limit: int) -> None:
+        """
+        Args:
+            limit: How many requests may fail in a row, with none answered between them, before the
+                stage is stopped (``pipeline.processing.stop_after_failed_requests``).
+        """
+        self._limit = limit
+        self._in_a_row = 0
+
+    def answered(self) -> None:
+        """A request was answered: the engine is answering."""
+        self._in_a_row = 0
+
+    def failed(self, error: str) -> None:
+        """A request failed on its own.
+
+        Raises:
+            StageStopped: If this is the last of ``limit`` requests to fail in a row.
+        """
+        self._in_a_row += 1
+        if self._in_a_row >= self._limit:
+            raise StageStopped(
+                f"What: {self._in_a_row} requests in a row failed and none was answered between them, "
+                f"so the stage has stopped. The last error: {error}\n"
+                f"Where: the engine, which has stopped answering, or a setting that makes every page "
+                f"fail (the context length, a completion budget). The number allowed is "
+                f"pipeline.processing.stop_after_failed_requests in config/run_config.yml.\n"
+                f"Expected: a page that fails among pages that are answered. That page is recorded with "
+                f"its error and the stage goes on.\n"
+                f"How to fix: read the last error above and the engine's own lines in the log. What "
+                f"the stage had read is kept: start it again and it carries on from there, and reads "
+                f"again the pages recorded as failed."
+            )
 
 
 @dataclass(frozen=True)
@@ -62,6 +114,7 @@ def in_engine_calls[Item, Reply](
     groups: Iterable[list[Item]],
     ask: Callable[[list[Item]], Sequence[Reply]],
     *,
+    watch: EngineWatch,
     what: str = "requests",
 ) -> Iterator[list[Outcome[Item, Reply]]]:
     """Make one engine call for each group, and give each group's outcomes as soon as it is done.
@@ -73,6 +126,7 @@ def in_engine_calls[Item, Reply](
     Args:
         groups: The requests, grouped as they are to be sent. An empty group is passed over.
         ask: Makes one call: given a group, returns a reply for each of its requests, in order.
+        watch: Counts the requests that fail one after another, across every call of the stage.
         what: What the requests are, for the log ("pages", "receipts").
 
     Yields:
@@ -80,6 +134,8 @@ def in_engine_calls[Item, Reply](
 
     Raises:
         ConfigError: If making a call met a setting that cannot be used. It is not a page's failure.
+        StageStopped: If as many requests failed in a row as the watch allows. The outcomes of the
+            group being tried are not given: its pages are not recorded, and are read by the next run.
     """
     for group in groups:
         if not group:
@@ -93,6 +149,7 @@ def in_engine_calls[Item, Reply](
             failed_for = time.time() - started
             if len(group) == 1:
                 logger.error("A request failed (%s: %s)", type(err).__name__, err)
+                watch.failed(str(err))
                 yield [Outcome(group[0], None, str(err), failed_for)]
                 continue
             logger.warning(
@@ -102,14 +159,15 @@ def in_engine_calls[Item, Reply](
                 type(err).__name__,
                 err,
             )
-            yield [_alone(ask, item, failed_for / len(group)) for item in group]
+            yield [_alone(ask, item, failed_for / len(group), watch) for item in group]
             continue
+        watch.answered()
         share = (time.time() - started) / len(group)
         yield [Outcome(item, reply, None, share) for item, reply in zip(group, replies, strict=True)]
 
 
 def _alone[Item, Reply](
-    ask: Callable[[list[Item]], Sequence[Reply]], item: Item, already: float
+    ask: Callable[[list[Item]], Sequence[Reply]], item: Item, already: float, watch: EngineWatch
 ) -> Outcome[Item, Reply]:
     """One request on its own, after the call it shared failed."""
     started = time.time()
@@ -119,7 +177,9 @@ def _alone[Item, Reply](
         raise
     except Exception as err:  # noqa: BLE001 - recorded on the request, not raised
         logger.error("A request failed on its own (%s: %s)", type(err).__name__, err)
+        watch.failed(str(err))
         return Outcome(item, None, str(err), already + time.time() - started)
+    watch.answered()
     return Outcome(item, reply, None, already + time.time() - started)
 
 

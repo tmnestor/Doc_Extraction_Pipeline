@@ -14,11 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from common.config_schema import ConfigError
-from common.engine_calls import Outcome, groups_of, in_engine_calls
+from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common.vllm_dp import RecordSink
 from common.extraction_batching import read_classify_batch_size
 
-from .io import Journal, append_jsonl, read_completed_images, write_jsonl
+from .io import Journal, append_jsonl, failed, read_completed_images, take_out, write_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,13 @@ def run(
         from common.stage_timing import note_recovered
 
         note_recovered(output_path.parent, stage="classify", records=recovered)
+    # A page an earlier run could not classify is asked about again: its record is taken out of the
+    # output, so that it is not among the pages already done.
+    read_again = take_out(output_path, failed)
+    if read_again:
+        logger.info(
+            "%d page(s) an earlier run could not classify will be asked about again", len(read_again)
+        )
     original_total = len(images)
     images, completed_count = _filter_already_classified(images, output_path)
     resuming = completed_count > 0
@@ -147,7 +154,16 @@ def run(
         wall_clock=wall_clock,
         execution_mode=read.arrangement,
         carried_on=resuming,
+        read_again=len(read_again),
     )
+    could_not = sum(1 for record in records if failed(record))
+    if could_not:
+        logger.warning(
+            "%d of %d page(s) could not be classified. Each is recorded with its error and the "
+            "fallback type, and is asked about again the next time the stage is run.",
+            could_not,
+            len(records),
+        )
 
     return output_path
 
@@ -208,6 +224,7 @@ def classify_pages(
         read_classify_batch_size(app_config.raw, config_path=app_config.config_path),
         app_config.verbose,
         sink,
+        watch=EngineWatch(app_config.stop_after_failed_requests),
     )
 
 
@@ -231,6 +248,8 @@ def _classify_images(
     batch_size: int,
     verbose: bool,
     sink: RecordSink | None = None,
+    *,
+    watch: EngineWatch,
 ) -> list[dict[str, Any]]:
     """Classify pages, ``batch_size`` to an engine call.
 
@@ -247,6 +266,8 @@ def _classify_images(
         batch_size: Pages per engine call. 1 means one call a page.
         verbose: Whether each page's type is also printed as it is found.
         sink: Where to write each record as soon as it is made, if anywhere.
+        watch: Counts the pages that fail one after another, and stops the stage when the engine has
+            stopped answering.
 
     Returns:
         One classification record per page, in input order, each with its share of its call's time.
@@ -261,7 +282,9 @@ def _classify_images(
         )
 
     records: list[dict[str, Any]] = []
-    calls = in_engine_calls(groups_of(image_paths, batch_size), processor.ask_document_types, what="pages")
+    calls = in_engine_calls(
+        groups_of(image_paths, batch_size), processor.ask_document_types, watch=watch, what="pages"
+    )
     for outcomes in calls:
         for outcome in outcomes:
             result = _classified(processor, outcome)

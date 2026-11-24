@@ -63,6 +63,7 @@ def with_a_permit_question(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> I
 
     schema = yaml.safe_load((REPO / "config" / "field_definitions.yaml").read_text())
     schema["document_types"]["parking_permit"] = {"fields": ["DOCUMENT_TYPE", "BAY_NUMBER"]}
+    schema["fields"]["BAY_NUMBER"] = {"cleaned_as": "identifier", "list": False, "scored_as": "text"}
     schema_path = tmp_path / "field_definitions.yaml"
     schema_path.write_text(yaml.safe_dump(schema, sort_keys=False))
     made = FieldSchema.from_yaml(schema_path)

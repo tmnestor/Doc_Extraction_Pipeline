@@ -1,8 +1,9 @@
-# What the pipeline knows about documents: the document types, and how fields are scored.
+# What the pipeline knows about documents: the document types, their fields, and the scoring thresholds.
 #
 # A DOCUMENT TYPE IS A BLOCK HERE AND A PROMPT OF THE SAME NAME in prompts/extraction_prompts.yaml.
-# Nothing in Python names a type. To add one, add its block and its prompt; to have pages classified
-# as it, add a rule to prompts/document_type_detection.yaml.
+# Nothing in Python names a type or a field. To add a type, add its block and its prompt, and an entry
+# under `fields:` for each field no other type already has; to have pages classified as it, add a rule
+# to prompts/document_type_detection.yaml.
 #
 # A type's block holds:
 #   fields             the fields its prompt asks for, which are the fields it is scored on
@@ -180,7 +181,82 @@ document_types:
       - JOURNEY_DISTANCES
       - JOURNEY_PURPOSES
 
-# How fields are scored.
+# The fields. Every field a document type names has an entry here, and nothing in Python names a field.
+#
+#   cleaned_as  how a value in a reply is tidied, so that one answer written two ways compares as the
+#               same. For a list it is how each entry is tidied.
+#                 text               markdown stars, doubled spaces and a trailing comma removed
+#                 money              "each" removed, a currency's name made "$", commas removed, "$" in front
+#                 amount_as_written  kept as text, with its sign and commas; in a list, two amounts with
+#                                    only a space between them are two entries
+#                 quantity           the "x" or "EACH" beside a count removed
+#                 date               spaces round the separators removed
+#                 day_month_year     written as DD/MM/YYYY, day before month
+#                 identifier         its label ("ABN 12 345...") removed, an 11-digit one without spaces
+#                 address            commas, and a telephone number or email address added to it, removed
+#                 document_type      settled to the type's own name, from any name it goes by
+#   list        true for a field that holds several entries, written with " | " between them
+#   scored_as   how a value is compared with the answer. A list is compared entry by entry.
+#                 text        one value earns its likeness to the answer, and nothing below a half;
+#                             an entry of a list is right if its words match
+#                 money       right if the amounts are equal, within the tolerance below
+#                 date        one date earns part credit for a near miss; an entry of a list is right
+#                             if it is the same day
+#                 yes_no      right if both say yes or both say no
+#                 identifier  right if the same once its label, spaces, dashes and case are set aside
+#   scored_row_by_row  optional, true for a list that is a column of a table. Each entry is compared
+#               as its kind and is right or wrong, and text must be nearly letter for letter the same,
+#               because the question is whether it is the same row
+#   single_value_scored_as  optional: how the field is compared when it holds one value and not a list,
+#               where that differs from scored_as
+#   also_written  optional: other spellings of the field's name that a reply may use
+#
+# Some entries are as the code has always treated these fields, when it went by their names, and look
+# wrong. They are left so that no result changes with this file; correcting one is a change to measure.
+#   IS_GST_INCLUDED, TOTAL_KILOMETERS   cleaned as money, because their names hold GST and TOTAL
+#   LINE_ITEM_PRICES, LINE_ITEM_TOTAL_PRICES   a single price is compared as text, not as money
+#   LOGBOOK_PERIOD_START, LOGBOOK_PERIOD_END   a single date is compared as text, not as a date
+fields:
+  DOCUMENT_TYPE:                {cleaned_as: document_type, list: false, scored_as: text}
+  BUSINESS_ABN:                 {cleaned_as: identifier, list: false, scored_as: identifier}
+  SUPPLIER_NAME:                {cleaned_as: text, list: false, scored_as: text}
+  BUSINESS_ADDRESS:             {cleaned_as: address, list: false, scored_as: text}
+  PAYER_NAME:                   {cleaned_as: text, list: false, scored_as: text}
+  PAYER_ADDRESS:                {cleaned_as: address, list: false, scored_as: text}
+  INVOICE_DATE:                 {cleaned_as: day_month_year, list: false, scored_as: date}
+  LINE_ITEM_DESCRIPTIONS:
+    {cleaned_as: text, list: true, scored_as: text, scored_row_by_row: true, also_written: [LINE_ITEM_DESCRIPTION]}
+  LINE_ITEM_QUANTITIES:         {cleaned_as: quantity, list: true, scored_as: text}
+  LINE_ITEM_PRICES:             {cleaned_as: money, list: true, scored_as: money, single_value_scored_as: text}
+  LINE_ITEM_TOTAL_PRICES:       {cleaned_as: money, list: true, scored_as: money, single_value_scored_as: text}
+  IS_GST_INCLUDED:              {cleaned_as: money, list: false, scored_as: yes_no}
+  GST_AMOUNT:                   {cleaned_as: money, list: false, scored_as: money}
+  TOTAL_AMOUNT:                 {cleaned_as: money, list: false, scored_as: money}
+  STATEMENT_DATE_RANGE:         {cleaned_as: date, list: false, scored_as: date}
+  TRANSACTION_DATES:            {cleaned_as: day_month_year, list: true, scored_as: date, scored_row_by_row: true}
+  TRANSACTION_AMOUNTS_PAID:     {cleaned_as: amount_as_written, list: true, scored_as: money, scored_row_by_row: true}
+  TRANSACTION_AMOUNTS_RECEIVED: {cleaned_as: amount_as_written, list: true, scored_as: money, scored_row_by_row: true}
+  ACCOUNT_BALANCE:              {cleaned_as: text, list: true, scored_as: money, scored_row_by_row: true}
+  PASSENGER_NAME:               {cleaned_as: text, list: false, scored_as: text}
+  TRAVEL_MODE:                  {cleaned_as: text, list: false, scored_as: text}
+  TRAVEL_ROUTE:                 {cleaned_as: text, list: false, scored_as: text}
+  TRAVEL_DATES:                 {cleaned_as: date, list: false, scored_as: date, scored_row_by_row: true}
+  VEHICLE_MAKE:                 {cleaned_as: text, list: false, scored_as: text}
+  VEHICLE_MODEL:                {cleaned_as: text, list: false, scored_as: text}
+  VEHICLE_REGISTRATION:         {cleaned_as: text, list: false, scored_as: text}
+  ENGINE_CAPACITY:              {cleaned_as: text, list: false, scored_as: text}
+  LOGBOOK_PERIOD_START:         {cleaned_as: date, list: false, scored_as: date, single_value_scored_as: text}
+  LOGBOOK_PERIOD_END:           {cleaned_as: date, list: false, scored_as: date, single_value_scored_as: text}
+  ODOMETER_START:               {cleaned_as: text, list: false, scored_as: text}
+  ODOMETER_END:                 {cleaned_as: text, list: false, scored_as: text}
+  TOTAL_KILOMETERS:             {cleaned_as: money, list: false, scored_as: text}
+  BUSINESS_KILOMETERS:          {cleaned_as: text, list: false, scored_as: text}
+  BUSINESS_USE_PERCENTAGE:      {cleaned_as: text, list: false, scored_as: text}
+  JOURNEY_DATES:                {cleaned_as: date, list: false, scored_as: date, scored_row_by_row: true}
+  JOURNEY_DISTANCES:            {cleaned_as: text, list: false, scored_as: text, scored_row_by_row: true}
+  JOURNEY_PURPOSES:             {cleaned_as: text, list: false, scored_as: text}
+
+# The scoring thresholds.
 evaluation:
   # Metric thresholds: single source of truth for common/scoring.py
   thresholds:
@@ -200,51 +276,3 @@ evaluation:
     # 0.857 ('BPAY VERRALL REF30033' vs 'BPAY VERRALL REF74032'). 0.90 sits in
     # the gap; anything at or below 0.86 credits the wrong row.
     transaction_text_similarity: 0.90
-
-  # Field type handling
-  field_types:
-    monetary:
-      - GST_AMOUNT
-      - TOTAL_AMOUNT
-      - LINE_ITEM_PRICES
-      - LINE_ITEM_TOTAL_PRICES
-      - TRANSACTION_AMOUNTS_PAID
-      - TRANSACTION_AMOUNTS_RECEIVED
-      - ACCOUNT_BALANCE
-      - RECEIPT_TOTAL
-      - BANK_TRANSACTION_DEBIT
-      - SHARE_OF_NET_INCOME
-      - FRANKING_CREDIT
-      - CAPITAL_GAIN_COMPONENT
-
-    boolean:
-      - IS_GST_INCLUDED
-
-    date:
-      - INVOICE_DATE
-      - STATEMENT_DATE_RANGE
-      - TRANSACTION_DATES
-      - LOGBOOK_PERIOD_START
-      - LOGBOOK_PERIOD_END
-      - JOURNEY_DATES
-      - RECEIPT_DATE
-      - BANK_TRANSACTION_DATE
-
-    # Transaction list fields - trigger type-aware matching (monetary/date/text)
-    #
-    # LINE_ITEM_DESCRIPTIONS added 2026-08-12. It is the third index-aligned
-    # column of the same bank register as TRANSACTION_DATES and
-    # TRANSACTION_AMOUNTS_PAID, and _TRANSACTION_SORT_GROUPS already reordered
-    # it as part of that register -- so its absence here meant the schema and
-    # the sorter disagreed about what the register is. Absent, it fell to
-    # Jaccard word-overlap at 0.75, which on a 3-word description fails on ANY
-    # single wrong word ((n-1)/(n+1) >= 0.75 needs n >= 7).
-    transaction_list:
-      - TRANSACTION_DATES
-      - TRANSACTION_AMOUNTS_PAID
-      - TRANSACTION_AMOUNTS_RECEIVED
-      - ACCOUNT_BALANCE
-      - LINE_ITEM_DESCRIPTIONS
-      - TRAVEL_DATES
-      - JOURNEY_DATES
-      - JOURNEY_DISTANCES

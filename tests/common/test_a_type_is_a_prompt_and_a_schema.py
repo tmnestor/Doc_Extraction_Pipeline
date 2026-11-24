@@ -31,9 +31,18 @@ def with_a_new_type(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **block) ->
         "fields": ["DOCUMENT_TYPE", "BAY_DATES", "BAY_FEES"],
         **block,
     }
-    schema["evaluation"]["field_types"]["date"].append("BAY_DATES")
-    schema["evaluation"]["field_types"]["monetary"].append("BAY_FEES")
-    schema["evaluation"]["field_types"]["transaction_list"] += ["BAY_DATES", "BAY_FEES"]
+    schema["fields"]["BAY_DATES"] = {
+        "cleaned_as": "day_month_year",
+        "list": True,
+        "scored_as": "date",
+        "scored_row_by_row": True,
+    }
+    schema["fields"]["BAY_FEES"] = {
+        "cleaned_as": "money",
+        "list": True,
+        "scored_as": "money",
+        "scored_row_by_row": True,
+    }
     schema_path = tmp_path / "field_definitions.yaml"
     schema_path.write_text(yaml.safe_dump(schema, sort_keys=False))
     made = FieldSchema.from_yaml(schema_path)
@@ -168,7 +177,8 @@ def test_every_shipped_type_has_a_prompt_and_every_prompt_a_type():
 )
 def test_a_block_that_cannot_be_used_is_refused_with_a_full_diagnostic(tmp_path, block, said):
     path = tmp_path / "field_definitions.yaml"
-    path.write_text(yaml.safe_dump({"document_types": {"permit": block}}))
+    entry = {"cleaned_as": "text", "list": False, "scored_as": "text"}
+    path.write_text(yaml.safe_dump({"document_types": {"permit": block}, "fields": {"A": entry}}))
 
     with pytest.raises(FieldSchemaError) as refused:
         FieldSchema.from_yaml(path)
@@ -176,7 +186,8 @@ def test_a_block_that_cannot_be_used_is_refused_with_a_full_diagnostic(tmp_path,
     message = str(refused.value)
     assert said in message
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-    assert str(path.absolute()) in message and "document_types.permit" in message
+    assert str(path.absolute()) in message
+    assert "document_types.permit" in message or "fields.B" in message
 
 
 def test_no_python_names_a_document_type():

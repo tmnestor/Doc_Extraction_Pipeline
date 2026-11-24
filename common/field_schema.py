@@ -7,8 +7,9 @@ A document type is a block in that file and a prompt of the same name. Nothing i
 what differs from one type to another (its fields, the other names it goes by, a fixed completion budget,
 a table whose rows are lined up before scoring) is asked of the schema.
 
-It also says which kind a field is for scoring (money, date, yes-or-no, a table's column) and what the
-scoring thresholds are.
+A field is an entry in the same file: how a value of it is tidied when a reply is cleaned, whether it
+is a list, and how it is compared with the answer when it is scored. Nothing in Python names a field
+either. The file also holds the scoring thresholds.
 """
 
 from dataclasses import dataclass, field
@@ -22,11 +23,28 @@ CONFIG = Path(__file__).parent.parent / "config" / "field_definitions.yaml"
 
 _TYPE_KEYS = frozenset({"fields", "also_called", "completion_tokens", "table"})
 _TABLE_KEYS = frozenset({"columns", "rows_absent_where_not_found_in", "rows_in_date_order_of"})
+_FIELD_KEYS = frozenset(
+    {"cleaned_as", "list", "scored_as", "scored_row_by_row", "single_value_scored_as", "also_written"}
+)
+CLEANED_AS = (
+    "text",
+    "money",
+    "amount_as_written",
+    "quantity",
+    "date",
+    "day_month_year",
+    "identifier",
+    "address",
+    "document_type",
+)
+SCORED_AS = ("text", "money", "date", "yes_no", "identifier")
 _EXAMPLE = (
     "document_types:\n"
     "  invoice:\n"
     "    also_called: [invoice, tax invoice]\n"
-    "    fields: [DOCUMENT_TYPE, SUPPLIER_NAME, TOTAL_AMOUNT]"
+    "    fields: [DOCUMENT_TYPE, SUPPLIER_NAME, TOTAL_AMOUNT]\n"
+    "fields:\n"
+    "  TOTAL_AMOUNT: {cleaned_as: money, list: false, scored_as: money}"
 )
 
 
@@ -50,6 +68,24 @@ class Table:
 
 
 @dataclass(frozen=True)
+class Field:
+    """What the schema file says of one field."""
+
+    name: str
+    # How a value is tidied when a reply is cleaned; for a list, how each entry is. One of CLEANED_AS.
+    cleaned_as: str
+    is_list: bool
+    # How a value is compared with the answer. One of SCORED_AS.
+    scored_as: str
+    # A list that is a column of a table: an entry is compared as what it is, row by row.
+    scored_row_by_row: bool
+    # How one value, not a list, is compared with the answer. scored_as unless the entry says otherwise.
+    single_value_scored_as: str
+    # Other spellings of the field's name that a reply may use.
+    also_written: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DocumentType:
     """What the schema file says of one document type."""
 
@@ -64,12 +100,10 @@ class DocumentType:
 class FieldSchema:
     """The field definitions, as the rest of the pipeline reads them."""
 
-    monetary_fields: frozenset[str]
-    date_fields: frozenset[str]
-    boolean_fields: frozenset[str]
-    transaction_list_fields: frozenset[str]
     # Every document type, by its own name in lower case, in the order of the file.
     document_types: dict[str, DocumentType] = field(repr=False)
+    # Every field, by its name.
+    fields: dict[str, Field] = field(repr=False)
     # Every name a document type goes by, in lower case, to the type's own name.
     aliases: dict[str, str] = field(repr=False)
     _thresholds: dict[str, float] = field(repr=False)
@@ -168,18 +202,94 @@ class FieldSchema:
             for other in names:
                 aliases[str(other).lower()] = name
 
+        fields = cls._fields(raw.get("fields"), document_types, refuse)
         evaluation = raw.get("evaluation", {})
-        kinds = evaluation.get("field_types", {})
         return cls(
-            monetary_fields=frozenset(kinds.get("monetary", [])),
-            date_fields=frozenset(kinds.get("date", [])),
-            boolean_fields=frozenset(kinds.get("boolean", [])),
-            transaction_list_fields=frozenset(kinds.get("transaction_list", [])),
             document_types=document_types,
+            fields=fields,
             aliases=aliases,
             _thresholds={name: float(value) for name, value in evaluation.get("thresholds", {}).items()},
             _path=path,
         )
+
+    @staticmethod
+    def _fields(raw: Any, document_types: dict[str, DocumentType], refuse: Any) -> dict[str, Field]:
+        """The `fields:` section, checked. Every field a type or a table names must have an entry."""
+        example = "fields:\n  TOTAL_AMOUNT: {cleaned_as: money, list: false, scored_as: money}"
+        if not isinstance(raw, dict) or not raw:
+            raise refuse(
+                "the field definitions file has no fields section.",
+                "fields",
+                f"an entry for each field, e.g.\n{example}",
+                "add a fields section with an entry for every field a document type names.",
+            )
+        fields: dict[str, Field] = {}
+        for name, entry in raw.items():
+            key = f"fields.{name}"
+            needed = ("cleaned_as", "list", "scored_as")
+            if not isinstance(entry, dict) or any(part not in entry for part in needed):
+                raise refuse(
+                    f"the field {name!r} does not say all of: {', '.join(needed)}.",
+                    key,
+                    f"each of them written out, e.g.\n{example}",
+                    f"give {name!r} all three. Nothing is assumed for a key left out.",
+                )
+            unknown = sorted(set(entry) - _FIELD_KEYS)
+            if unknown:
+                raise refuse(
+                    f"the field {name!r} has key(s) the pipeline does not know: {', '.join(unknown)}.",
+                    f"{key}.{unknown[0]}",
+                    f"only {', '.join(sorted(_FIELD_KEYS))}",
+                    "remove the key, or correct its spelling.",
+                )
+            for part, allowed in (
+                ("cleaned_as", CLEANED_AS),
+                ("scored_as", SCORED_AS),
+                ("single_value_scored_as", SCORED_AS),
+            ):
+                if part in entry and entry[part] not in allowed:
+                    raise refuse(
+                        f"the field {name!r} has {part}: {entry[part]!r}.",
+                        f"{key}.{part}",
+                        f"one of {', '.join(allowed)}",
+                        f"set {part} to one of those.",
+                    )
+            for part in ("list", "scored_row_by_row"):
+                if not isinstance(entry.get(part, False), bool):
+                    raise refuse(
+                        f"the field {name!r} has {part}: {entry[part]!r}.",
+                        f"{key}.{part}",
+                        "true or false",
+                        f"set {part} to true or false.",
+                    )
+            spellings = entry.get("also_written", [])
+            if not isinstance(spellings, list):
+                raise refuse(
+                    f"the other spellings of {name!r} are not a list.",
+                    f"{key}.also_written",
+                    "a list of names, e.g. also_written: [LINE_ITEM_DESCRIPTION]",
+                    "write the spellings as a list, or remove the key.",
+                )
+            fields[name] = Field(
+                name=name,
+                cleaned_as=entry["cleaned_as"],
+                is_list=entry["list"],
+                scored_as=entry["scored_as"],
+                scored_row_by_row=entry.get("scored_row_by_row", False),
+                single_value_scored_as=str(entry.get("single_value_scored_as", entry["scored_as"])),
+                also_written=tuple(str(spelling) for spelling in spellings),
+            )
+        for kind in document_types.values():
+            named = [*kind.fields, *(kind.table.columns if kind.table else ())]
+            missing = [name for name in named if name not in fields]
+            if missing:
+                raise refuse(
+                    f"the document type {kind.name!r} names field(s) with no entry: {', '.join(missing)}.",
+                    f"fields.{missing[0]}",
+                    f"an entry for each, e.g.\n{example}",
+                    f"add an entry for each under fields, or remove it from {kind.name!r}.",
+                )
+        return fields
 
     @staticmethod
     def _table(block: Any, name: str, key: str, refuse: Any) -> Table | None:
@@ -223,6 +333,17 @@ class FieldSchema:
     def document_type(self, name: str) -> DocumentType | None:
         """What the schema says of a document type, by its own name in either case; None if it has none."""
         return self.document_types.get(name.lower())
+
+    def field_named(self, name: str) -> Field | None:
+        """What the schema says of a field, by its name; None for a name that is no field."""
+        return self.fields.get(name)
+
+    @property
+    def document_type_field(self) -> str | None:
+        """The field in which a reply, or an answer, names its document type; None if no field does."""
+        return next(
+            (name for name, entry in self.fields.items() if entry.cleaned_as == "document_type"), None
+        )
 
     def get_all_doc_type_fields(self) -> dict[str, list[str]]:
         """The fields of every document type, by the type's name in lower case. A new dict each call."""

@@ -211,10 +211,11 @@ document_types:
 #               where that differs from scored_as
 #   also_written  optional: other spellings of the field's name that a reply may use
 #
-# Some entries are as the code has always treated these fields, when it went by their names, and look
-# wrong. They are left so that no result changes with this file; correcting one is a change to measure.
-#   IS_GST_INCLUDED, TOTAL_KILOMETERS   cleaned as money, because their names hold GST and TOTAL
-#   LINE_ITEM_PRICES, LINE_ITEM_TOTAL_PRICES   a single price is compared as text, not as money
+# Two fields of the vehicle logbook are as the code has always treated them, when it went by their
+# names, and look wrong. They are left until there is a set of logbooks to measure a correction on.
+#   TOTAL_KILOMETERS   cleaned as money, because its name holds TOTAL, so its thousands comma is
+#                      removed, while BUSINESS_KILOMETERS is cleaned as text and keeps its comma.
+#                      Neither is right: what both want is a plain number, which is not yet a kind
 #   LOGBOOK_PERIOD_START, LOGBOOK_PERIOD_END   a single date is compared as text, not as a date
 fields:
   DOCUMENT_TYPE:                {cleaned_as: document_type, list: false, scored_as: text}
@@ -227,9 +228,9 @@ fields:
   LINE_ITEM_DESCRIPTIONS:
     {cleaned_as: text, list: true, scored_as: text, scored_row_by_row: true, also_written: [LINE_ITEM_DESCRIPTION]}
   LINE_ITEM_QUANTITIES:         {cleaned_as: quantity, list: true, scored_as: text}
-  LINE_ITEM_PRICES:             {cleaned_as: money, list: true, scored_as: money, single_value_scored_as: text}
-  LINE_ITEM_TOTAL_PRICES:       {cleaned_as: money, list: true, scored_as: money, single_value_scored_as: text}
-  IS_GST_INCLUDED:              {cleaned_as: money, list: false, scored_as: yes_no}
+  LINE_ITEM_PRICES:             {cleaned_as: money, list: true, scored_as: money}
+  LINE_ITEM_TOTAL_PRICES:       {cleaned_as: money, list: true, scored_as: money}
+  IS_GST_INCLUDED:              {cleaned_as: text, list: false, scored_as: yes_no}
   GST_AMOUNT:                   {cleaned_as: money, list: false, scored_as: money}
   TOTAL_AMOUNT:                 {cleaned_as: money, list: false, scored_as: money}
   STATEMENT_DATE_RANGE:         {cleaned_as: date, list: false, scored_as: date}

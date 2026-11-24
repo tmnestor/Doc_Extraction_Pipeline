@@ -106,6 +106,17 @@ def check() -> None:
         ) from err
 
 
+# How a page came by its type. A page given the fallback type looks, by its type alone, like any other
+# page of that type: these say which it is, so that the pages a run could not really classify can be
+# counted.
+BY_A_RULE = "rule"  # a rule of the classification file fitted the reply's answers
+BY_THE_DEFAULT = "default"  # the answers were read and no rule fitted: the file's default type
+FALLBACK_NO_ANSWERS = "fallback_no_answers"  # the reply held no answers that could be read
+FALLBACK_NO_RULE = "fallback_no_rule"  # the answers were read, no rule fitted, and the file has no default
+FALLBACK_NOT_ASKED = "fallback_not_asked"  # the model could not be asked, or its reply not read at all
+REACHED_BY = (BY_A_RULE, BY_THE_DEFAULT, FALLBACK_NO_ANSWERS, FALLBACK_NO_RULE, FALLBACK_NOT_ASKED)
+
+
 def document_type(reply: str, fallback_type: str) -> str:
     """The document type a classification reply stands for.
 
@@ -113,12 +124,26 @@ def document_type(reply: str, fallback_type: str) -> str:
         reply: The model's reply to the classification prompt.
         fallback_type: The type of a page whose reply says nothing that can be read.
     """
-    from_answers = _type_from_answers(reply)
-    return from_answers if from_answers is not None else fallback_type
+    return typed(reply, fallback_type)[0]
 
 
-def _type_from_answers(reply: str) -> str | None:
-    """The type the rules give the reply's answers, or None if it has no answers or no rule fits."""
+def typed(reply: str, fallback_type: str) -> tuple[str, str]:
+    """The document type a classification reply stands for, and how it was reached.
+
+    Args:
+        reply: The model's reply to the classification prompt.
+        fallback_type: The type of a page whose reply says nothing that can be read.
+
+    Returns:
+        The type, and one of ``BY_A_RULE``, ``BY_THE_DEFAULT``, ``FALLBACK_NO_ANSWERS`` and
+        ``FALLBACK_NO_RULE``.
+    """
+    from_answers, how = _type_from_answers(reply)
+    return (from_answers if from_answers is not None else fallback_type), how
+
+
+def _type_from_answers(reply: str) -> tuple[str | None, str]:
+    """The type the rules give the reply's answers, or None if it has no answers or no rule fits; and how."""
     asked, roles, evidence = _settings()
     text = _THOUGHT_TAG.sub("", _THOUGHTS_UNFINISHED.sub("", _THOUGHTS.sub("", reply))).strip()
 
@@ -129,7 +154,7 @@ def _type_from_answers(reply: str) -> str | None:
     else:
         by_position = _answers_by_position(text, asked)
         if by_position is None:
-            return None
+            return None, FALLBACK_NO_ANSWERS
         columns, flags = by_position
 
     if columns.upper() == "NONE":
@@ -146,9 +171,11 @@ def _type_from_answers(reply: str) -> str | None:
     )
     for rule in evidence["rules"]:
         if _rule_fits(rule["when"], present, flags):
-            return rule["type"]
+            return rule["type"], BY_A_RULE
     default = evidence["default"]
-    return None if isinstance(default, str) and default.lower() == "none" else default
+    if isinstance(default, str) and default.lower() == "none":
+        return None, FALLBACK_NO_RULE
+    return default, BY_THE_DEFAULT
 
 
 def _bare(value: str) -> str:

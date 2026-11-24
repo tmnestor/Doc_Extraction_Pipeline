@@ -101,10 +101,25 @@ What the record of a failed page holds:
 | Task | The record | What the later tasks do with it |
 |---|---|---|
 | `split` | `error`, and the reason "the model could not be asked". The photograph is passed through as it is | `classify` reads the photograph whole |
-| `classify` | `error`, and the fallback type (`pipeline.classification.fallback_type`) | `extract` reads the page as that type |
+| `classify` | `error`, the fallback type (`pipeline.classification.fallback_type`), and `type_from: fallback_not_asked` | `extract` reads the page as that type |
 | `extract` | `error`, an empty reply, and `prompt_used: error` | `clean` passes the error on with no fields. `evaluate` counts the page under "Failed Extraction" and leaves it out of the mean, and gives the mean again with each failed page as 0 |
 
 A task that ends with failed pages says how many in its last lines, and exits with code 0.
+
+A page can also be given the fallback type with no failure at all: the model answered, and the rules
+could make nothing of the answer. Its record has no `error`. Every classification record therefore says
+how its type was reached, in `type_from`:
+
+| `type_from` | The type is |
+|---|---|
+| `rule` | the type of the first rule of the classification file that fitted the reply's answers |
+| `default` | the file's default type: the answers were read and no rule fitted |
+| `fallback_no_answers` | the fallback type: the reply held no answers that could be read |
+| `fallback_no_rule` | the fallback type: no rule fitted, and the file has no default |
+| `fallback_not_asked` | the fallback type: the model could not be asked, or its reply not read |
+
+`classify` counts its pages by these, and warns of those given the fallback type, by name. Such a page is
+not read again by the next run unless it also failed: the model has answered, and would answer the same.
 
 ### When the task is next run
 

@@ -85,9 +85,11 @@ class DocumentOrchestrator:
         return self.ask(images, [prompt] * len(images), self.app_config.get_token_budget("classify"))
 
     def classified(self, reply: str) -> dict:
-        """The classification of a page, from the model's reply about it."""
+        """The classification of a page, from the model's reply about it, and how its type was reached."""
+        kind, how = classification.typed(reply, self._fallback_type)
         return {
-            "document_type": classification.document_type(reply, self._fallback_type),
+            "document_type": kind,
+            "type_from": how,
             "confidence": 1.0,
             "raw_response": reply,
             "prompt_used": DETECTION_PROMPT,
@@ -100,6 +102,7 @@ class DocumentOrchestrator:
         """
         return {
             "document_type": self._fallback_type,
+            "type_from": classification.FALLBACK_NOT_ASKED,
             "confidence": 0.1,
             "raw_response": "",
             "prompt_used": "fallback_heuristic",

@@ -34,6 +34,8 @@ from pathlib import Path
 from typing import Any
 
 
+from common.engine_calls import Outcome, groups_of, in_engine_calls
+
 from .io import append_jsonl, read_completed_images
 
 logger = logging.getLogger(__name__)
@@ -192,16 +194,24 @@ def apply_reply(
     return _record(photograph, "split", decision.reason, boxes, outputs, turns, rectifieds, reply, drifts)
 
 
-def _ask(processor: Any, photographs: list[Path], config: Any) -> list[str]:
-    """Put the photo split prompt to the model for each photograph, replies in the same order."""
-    replies: list[str] = []
-    step = config.batch_size
-    for start in range(0, len(photographs), step):
-        batch = photographs[start : start + step]
-        images = [processor.load_document_image(str(p)) for p in batch]
-        replies.extend(processor.ask(images, [config.prompt] * len(images), config.max_tokens))
-        logger.info("Asked about %d/%d photographs", min(start + step, len(photographs)), len(photographs))
-    return replies
+def _ask(processor: Any, photographs: list[Path], config: Any) -> list[Outcome[Path, str]]:
+    """Put the photo split prompt to the model for each photograph, outcomes in the same order.
+
+    Photographs go ``batch_size`` to an engine call. A call that fails is tried again one photograph at a
+    time, and a photograph that still fails comes back with its error and no reply
+    (``common.engine_calls``).
+    """
+
+    def ask(batch: list[Path]) -> list[str]:
+        images = [processor.load_document_image(str(photograph)) for photograph in batch]
+        return processor.ask(images, [config.prompt] * len(images), config.max_tokens)
+
+    asked: list[Outcome[Path, str]] = []
+    calls = in_engine_calls(groups_of(photographs, config.batch_size), ask, what="photographs")
+    for outcomes in calls:
+        asked.extend(outcomes)
+        logger.info("Asked about %d/%d photographs", len(asked), len(photographs))
+    return asked
 
 
 def run(
@@ -274,11 +284,10 @@ def run(
     if model_type is not None:
         cli_args["model_type"] = model_type
     app_cfg = Settings.load(cli_args, config_path=config_path)
-    config = app_cfg
 
     with open_processor(app_cfg) as processor:
         start = time.time()
-        replies = _ask(processor, todo, split_config)
+        asked = _ask(processor, todo, split_config)
         elapsed = time.time() - start
         logger.info(
             "Split questions complete: %d photographs in %.1fs (%.2fs/photograph)",
@@ -295,8 +304,14 @@ def run(
         finder = finder_params_from(finder_section, config_path=resolved_config)
 
     records = []
-    for number, (photograph, reply) in enumerate(zip(todo, replies, strict=True), start=1):
-        record = apply_reply(photograph, reply, images_dir, split_config, finder)
+    for number, outcome in enumerate(asked, start=1):
+        photograph = outcome.item
+        record = apply_reply(photograph, outcome.reply or "", images_dir, split_config, finder)
+        if outcome.error is not None:
+            # The model could not be asked about this photograph, in a shared call or alone. It is
+            # treated as one the model said nothing clear about, and says why.
+            record["reason"] = f"the model could not be asked: {outcome.error}"
+            record["error"] = outcome.error
         records.append(record)
         logger.info(
             "[%d/%d] %s -> %s (%s)", number, len(todo), photograph.name, record["action"], record["reason"]

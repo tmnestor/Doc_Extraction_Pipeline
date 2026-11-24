@@ -85,7 +85,7 @@ def test_detect_many_gives_each_page_the_result_the_single_call_gives(pages):
     one_backend, many_backend = FakeBackend(), FakeBackend()
     one = orchestrator(one_backend)
 
-    singles = [one.detect_and_classify_document(page) for page in pages]
+    singles = [one.detect_many([page])[0] for page in pages]
     many = orchestrator(many_backend).detect_many(pages)
 
     assert many == singles
@@ -168,11 +168,14 @@ def test_a_page_that_fails_alone_is_given_the_fallback_type_and_carries_the_erro
         def chat(self, images, prompts, max_tokens) -> list[str]:
             raise RuntimeError("engine refused the page")
 
-    result = orchestrator(Refuses()).detect_and_classify_document(pages[0])  # type: ignore[arg-type]
+    processor = orchestrator(Refuses())  # type: ignore[arg-type]
 
-    assert result["document_type"] == "INVOICE"
-    assert result["error"] == "engine refused the page"
-    assert result["prompt_used"] == "fallback_heuristic"
+    (record,) = classify_stage._classify_images(processor, pages[:1], batch_size=1, verbose=False)
+
+    assert record["document_type"] == "INVOICE"
+    assert record["error"] == "engine refused the page"
+    assert record["prompt_used"] == "fallback_heuristic"
+    assert record["confidence"] == 0.1 and record["raw_response"] == ""
 
 
 # --- the config -----------------------------------------------------------------

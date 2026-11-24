@@ -6,7 +6,7 @@ so that partial output survives crashes (critical at 10K images).
 
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 
 def write_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
@@ -33,17 +33,6 @@ def append_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
         for record in records:
             f.write(json.dumps(record, default=str) + "\n")
     return len(records)
-
-
-class RecordSink(Protocol):
-    """Anything a stage can write its records to, one at a time.
-
-    The one-engine stage writes to a file as it goes (`StreamingJsonlWriter`). A worker on the two-engine
-    path collects its records and hands them back. Naming what the two have in common lets the stage's own
-    functions serve both.
-    """
-
-    def write(self, record: dict[str, Any]) -> None: ...
 
 
 class StreamingJsonlWriter:

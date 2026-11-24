@@ -3,7 +3,7 @@
 Until 21 November 2026 each stage held its reading twice: once in the stage, for one engine, and once in the
 worker module, for an engine on each card. A rule changed in one copy and missed in the other made the
 quantised 12B four times slower than it needed to be, and nothing failed. Now a stage has one function that
-reads pages (`classify_pages`, `extract_pages`), and the worker module only starts an engine on a card and
+reads pages (`classify_pages`, `extract_pages`), and `common.vllm_dp` only starts an engine on a card and
 calls it.
 
 The page content below is invented for these tests and appears in no evaluation set.
@@ -24,7 +24,7 @@ sys.path.insert(0, str(HERE.parent / "reference"))
 
 from model_inputs import InProcessContext, test_config  # noqa: E402
 
-from common import vllm_dp, vllm_dp_workers  # noqa: E402
+from common import vllm_dp  # noqa: E402
 from common.settings import Settings  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.extract import extract_pages  # noqa: E402
@@ -55,10 +55,6 @@ class StandIn:
         self.calls.append(("classify", [Path(p).name for p in image_paths]))
         return [self._type(p) for p in image_paths]
 
-    def detect_and_classify_document(self, image_path: str, verbose: bool = False) -> dict[str, Any]:
-        self.calls.append(("classify", [Path(image_path).name]))
-        return self._type(image_path)
-
     def read_pages(self, image_paths: list[str], document_type: str) -> list[str]:
         self.calls.append(("extract", [Path(p).name for p in image_paths]))
         if document_type.upper() == "BANK_STATEMENT":
@@ -80,11 +76,13 @@ class Bench:
         self.folder.mkdir()
         self.overrides = {"data_dir": str(self.folder), "output_dir": str(folder / "out")}
         self.processor = StandIn()
+        self.opened_with: list[Any] = []
         monkeypatch.setattr(vllm_dp.mp, "get_context", lambda method=None: InProcessContext)
         monkeypatch.setattr("common.pipeline_ops.open_processor", self._open)
 
     @contextlib.contextmanager
     def _open(self, app_config: Any) -> Iterator[StandIn]:
+        self.opened_with.append(app_config)
         yield self.processor
 
     def pages(self, count: int, kinds: tuple[str, ...] = KINDS) -> list[Path]:
@@ -117,16 +115,18 @@ class Bench:
             else:
                 found = extract_pages(self.processor, self.classified(pages), app_config)
         else:
-            kwargs: dict[str, Any] = {"config_path": str(self.config_path), "cli_overrides": self.overrides}
-            if stage == "extract":
-                kwargs["classifications"] = self.classified(pages)
-            found = vllm_dp.run_dp(
-                num_gpus=engines,
-                images=pages,
-                worker_fn=f"common.vllm_dp_workers.{stage}_worker",
-                worker_kwargs=kwargs,
-                app_config=Settings.load(dict(self.overrides), config_path=self.config_path),
-            )
+            app_config = Settings.load(dict(self.overrides), config_path=self.config_path)
+            if stage == "classify":
+                found = vllm_dp.run_dp(
+                    num_gpus=engines,
+                    items=pages,
+                    read=classify_pages,
+                    settings=app_config.for_stage("classify"),
+                )
+            else:
+                found = vllm_dp.run_dp(
+                    num_gpus=engines, items=self.classified(pages), read=extract_pages, settings=app_config
+                )
         return [{k: v for k, v in record.items() if k not in MEASUREMENTS} for record in found]
 
     def calls(self, stage: str, pages: list[Path], *, engines: int) -> list[tuple[str, list[str]]]:
@@ -142,18 +142,77 @@ def bench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Bench:
 STAGES = ("classify", "extract")
 
 
-def test_the_worker_module_knows_nothing_about_documents() -> None:
-    source = Path(vllm_dp_workers.__file__).read_text()
-    imported = {
-        alias.name
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
+def test_the_module_that_starts_engines_knows_nothing_about_documents_or_stages() -> None:
+    source = Path(vllm_dp.__file__).read_text()
+    imported_from = {
+        node.module or "" for node in ast.walk(ast.parse(source)) if isinstance(node, ast.ImportFrom)
     }
 
-    assert {"classify_pages", "extract_pages"} <= imported
+    # It is handed a stage's reading function; it does not import one.
+    assert not any(module.split(".")[0] == "stages" for module in imported_from)
     for word in ("bank", "receipt", "invoice", "batch_size", "prompt"):
         assert word not in source.lower(), word
+
+
+def test_an_engine_on_a_card_is_started_with_the_settings_the_stage_hands_over(bench: Bench) -> None:
+    """The stage's own engine settings, and one card: nothing is read again for a worker."""
+    pages = bench.pages(2)
+    staged = Settings.load(dict(bench.overrides), config_path=bench.config_path).for_stage("classify")
+
+    vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=staged)
+
+    assert len(bench.opened_with) == 2
+    assert all(opened._stage == "classify" and opened.num_gpus == 1 for opened in bench.opened_with)
+    # The stage's own settings are not changed by making a card's copy.
+    assert staged.num_gpus != 1 or staged is not bench.opened_with[0]
+
+
+def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
+    """A worker's process is given the reading function by name and the rest by value.
+
+    The tests start a card's worker in this process, which pickles nothing, so this is the only place a
+    setting or a function that could not cross would be found before a run on the cards.
+    """
+    import pickle
+
+    from stages.sroie import read_sroie
+
+    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path).for_stage("classify")
+    crossed = pickle.loads(pickle.dumps(settings.on_one_card()))
+
+    assert (crossed.model_type, crossed.num_gpus, crossed._stage) == (settings.model_type, 1, "classify")
+    assert crossed.get_vllm_config(crossed.model_type) == settings.get_vllm_config(settings.model_type)
+    assert crossed.raw == settings.raw and crossed.model_path == settings.model_path
+    for read in (classify_pages, extract_pages, read_sroie):
+        assert pickle.loads(pickle.dumps(read)) is read
+    pages = bench.pages(1)
+    assert pickle.loads(pickle.dumps((pages, bench.classified(pages)))) == (pages, bench.classified(pages))
+
+
+def test_one_engine_writes_as_it_reads_and_engines_on_cards_write_when_they_finish(
+    bench: Bench, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Sink:
+        def __init__(self) -> None:
+            self.records: list[dict[str, Any]] = []
+
+        def write(self, record: dict[str, Any]) -> None:
+            self.records.append(record)
+
+    pages = bench.pages(2)
+    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path)
+    names = [page.name for page in pages]
+
+    for engines in (None, 2):
+        monkeypatch.setattr(vllm_dp, "resolve_dp_gpus", lambda config, model_type, n=engines: n)
+        sink = Sink()
+
+        read = vllm_dp.read_on_the_cards(settings, bench.classified(pages), extract_pages, sink=sink)
+
+        assert read.engines == engines
+        assert read.arrangement == ("data-parallel (2 GPUs)" if engines else "single-engine")
+        assert [record["image_name"] for record in read.records] == names
+        assert [record["image_name"] for record in sink.records] == names
 
 
 @pytest.mark.parametrize("stage", STAGES)
@@ -196,11 +255,7 @@ def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: 
 
     one = classify_pages(bench.processor, pages, app_config.for_stage("classify"))
     two = vllm_dp.run_dp(
-        num_gpus=2,
-        images=pages,
-        worker_fn="common.vllm_dp_workers.classify_worker",
-        worker_kwargs={"config_path": str(bench.config_path), "cli_overrides": bench.overrides},
-        app_config=app_config,
+        num_gpus=2, items=pages, read=classify_pages, settings=app_config.for_stage("classify")
     )
 
     assert all(record["processing_time"] >= 0.0 and "gpu_id" not in record for record in one)

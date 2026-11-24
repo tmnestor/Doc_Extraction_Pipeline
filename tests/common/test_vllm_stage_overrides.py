@@ -230,5 +230,6 @@ def test_the_shipped_classify_values_move_together():
 def test_the_classify_stage_and_its_worker_load_through_the_staged_config():
     assert "classify" in STAGES
     assert '.for_stage("classify")' in (REPO_ROOT / "stages/classify.py").read_text()
-    worker = (REPO_ROOT / "common/vllm_dp_workers.py").read_text()
-    assert 'stage="classify"' in worker and ".for_stage(stage)" in worker
+    # An engine on a card is started with the settings the stage hands over, staged copy and all: see
+    # tests/common/test_one_path.py. Nothing reads the settings again for a worker.
+    assert "Settings.load" not in (REPO_ROOT / "common/vllm_dp.py").read_text()

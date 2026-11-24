@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
+from common.engine_calls import groups_of, in_engine_calls
 from common.extraction_batching import read_classify_batch_size
 
 from .io import append_jsonl, read_completed_images, write_jsonl
@@ -55,7 +56,6 @@ def run(
     """
     from common.settings import Settings
     from stages.io import discover_images
-    from common.pipeline_ops import open_processor
 
     cli_args: dict[str, Any] = {
         "data_dir": str(image_dir),
@@ -105,24 +105,10 @@ def run(
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by classify_pages; only where the engine is started differs.
     from common.stage_timing import inference_seconds_from_records
-    from common.vllm_dp import resolve_dp_gpus, run_dp
+    from common.vllm_dp import read_on_the_cards
 
     started = time.time()
-    engines = resolve_dp_gpus(config, config.model_type)
-    if engines:
-        records = run_dp(
-            num_gpus=engines,
-            images=images,
-            worker_fn="common.vllm_dp_workers.classify_worker",
-            worker_kwargs={
-                "config_path": str(config_path) if config_path else None,
-                "cli_overrides": cli_args,
-            },
-            app_config=app_cfg,
-        )
-    else:
-        with open_processor(app_cfg) as processor:
-            records = classify_pages(processor, images, app_cfg)
+    records = read_on_the_cards(app_cfg, images, classify_pages).records
 
     elapsed = inference_seconds_from_records(records, fallback=time.time() - started)
     logger.info(
@@ -173,7 +159,7 @@ def classify_pages(processor: Any, images: list[Path], app_config: Any) -> list[
 
 
 def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
-    return {
+    record = {
         "image_path": image_path,
         "image_name": Path(image_path).name,
         "document_type": result["document_type"],
@@ -181,18 +167,19 @@ def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
         "raw_response": result.get("raw_response", ""),
         "prompt_used": result.get("prompt_used", "detection"),
     }
+    if result.get("error"):
+        record["error"] = result["error"]
+    return record
 
 
 def _classify_images(
     processor: Any, image_paths: list[str], batch_size: int, verbose: bool
 ) -> list[dict[str, Any]]:
-    """Classify pages, several to an engine call when the backend allows it.
+    """Classify pages, ``batch_size`` to an engine call.
 
-    A page is one independent model call. With a batch size above 1 and a
-    backend that can share an engine call, each batch is submitted together so
-    the engine runs the pages concurrently; each request is built as the
-    one-at-a-time call builds it. A batch that fails is retried one page at a
-    time, so a single bad page costs its batch only the concurrency.
+    A page is one independent request, so the engine runs the pages of a call at once. A call that fails
+    is tried again one page at a time, and a page that still fails is given the fallback type and
+    carries its error, so that one page never ends the run (``common.engine_calls``).
 
     Args:
         processor: The document processor (orchestrator).
@@ -204,45 +191,26 @@ def _classify_images(
         One classification record per page, in input order.
     """
     total = len(image_paths)
-    share = batch_size > 1
-    step = batch_size if share else 1
-    if share:
+    if batch_size > 1:
         logger.info(
             "Classification batching: %d pages in %d calls (%d a call)",
             total,
-            -(-total // step),
-            step,
+            -(-total // batch_size),
+            batch_size,
         )
 
     records: list[dict[str, Any]] = []
-    for start in range(0, total, step):
-        batch = image_paths[start : start + step]
-        results = None
-        if share:
-            try:
-                results = processor.detect_many(batch, verbose=verbose)
-            except Exception as err:  # noqa: BLE001 - any batch failure falls back to single calls
-                logger.warning(
-                    "Classify batch of %d failed (%s: %s); retrying one at a time",
-                    len(batch),
-                    type(err).__name__,
-                    err,
-                )
-        if results is None:
-            results = []
-            for offset, image_path in enumerate(batch):
-                logger.info(
-                    "Sending image %d/%d to engine: %s", start + offset + 1, total, Path(image_path).name
-                )
-                results.append(processor.detect_and_classify_document(image_path, verbose=verbose))
-        for offset, (image_path, result) in enumerate(zip(batch, results, strict=True)):
-            records.append(_record(image_path, result))
+    calls = in_engine_calls(
+        groups_of(image_paths, batch_size),
+        lambda pages: processor.detect_many(pages, verbose=verbose),
+        what="pages",
+    )
+    for outcomes in calls:
+        for outcome in outcomes:
+            result = outcome.reply if outcome.reply is not None else processor.unclassified(outcome.error)
+            records.append(_record(outcome.item, result))
             # Tier A: always-on per-image progress.
             logger.info(
-                "[%d/%d] %s -> %s",
-                start + offset + 1,
-                total,
-                Path(image_path).name,
-                result["document_type"],
+                "[%d/%d] %s -> %s", len(records), total, Path(outcome.item).name, result["document_type"]
             )
     return records

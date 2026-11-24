@@ -20,14 +20,10 @@ from pathlib import Path
 from typing import Any
 
 
-from .io import (
-    RecordSink,
-    StreamingJsonlWriter,
-    append_jsonl,
-    read_completed_images,
-    read_jsonl,
-    write_jsonl,
-)
+from common.engine_calls import in_engine_calls
+from common.vllm_dp import RecordSink
+
+from .io import StreamingJsonlWriter, read_completed_images, read_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +90,6 @@ def run(
     """
     from common.settings import Settings
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
-    from common.pipeline_ops import open_processor
 
     # Read classifications
     classifications = read_jsonl(classifications_path)
@@ -125,7 +120,6 @@ def run(
         cli_args["model_type"] = model_type
 
     app_cfg = Settings.load(cli_args, config_path=config_path)
-    config = app_cfg
     # -- Phase 4: filter out skip-labels before extraction -----------------------
     classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
     if skipped:
@@ -168,33 +162,16 @@ def run(
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by extract_pages; only where the engine is started differs.
     from common.stage_timing import inference_seconds_from_records
-    from common.vllm_dp import resolve_dp_gpus, run_dp
+    from common.vllm_dp import read_on_the_cards
 
     stage_started = time.time()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    engines = resolve_dp_gpus(config, config.model_type)
-    if engines:
-        records = run_dp(
-            num_gpus=engines,
-            images=[Path(c["image_path"]) for c in classifications],
-            worker_fn="common.vllm_dp_workers.extract_worker",
-            worker_kwargs={
-                "config_path": str(config_path) if config_path else None,
-                "cli_overrides": cli_args,
-                "classifications": classifications,
-            },
-            app_config=app_cfg,
-        )
-        # The workers hand their records back when they finish. Append when resuming, or when skipped
-        # pages were written above: write_jsonl starts the file again and would drop either.
-        write_fn = append_jsonl if (completed or skipped) else write_jsonl
-        write_fn(output_path, records)
-        execution_mode = f"data-parallel ({engines} GPUs)"
-    else:
-        # One engine writes each record as it is made, so a run that stops part way can be resumed.
-        with open_processor(app_cfg) as processor, StreamingJsonlWriter(output_path) as writer:
-            records = extract_pages(processor, classifications, app_cfg, sink=writer)
-        execution_mode = "single-engine"
+    # The file is added to, never begun again: it may hold an earlier run's pages, or the skipped pages
+    # written above. One engine writes each record as it is made, so a run that stops part way can be
+    # carried on; with an engine on each card the records are written when the cards have finished.
+    with StreamingJsonlWriter(output_path) as writer:
+        read = read_on_the_cards(app_cfg, classifications, extract_pages, sink=writer)
+    records, execution_mode = read.records, read.arrangement
 
     wall_clock = time.time() - stage_started
     # The model's time, apart from starting the engine: the sum of the pages' times, and with an engine on
@@ -284,58 +261,37 @@ def _read_batch(writer: RecordSink, processor: Any, batch: list[dict[str, Any]])
     """Read a group of pages of one document type in one engine call, and write a record for each.
 
     A group that fails is read again one page at a time, so a single bad page costs its group only the
-    shared call. A page that fails on its own is recorded with its error, so that it never ends the run.
+    shared call. A page that fails on its own is recorded with its error, so that it never ends the run
+    (``common.engine_calls``).
     """
     from common import prompt_trace
 
     kind = batch[0]["document_type"]
-    started = time.time()
-    try:
-        if len(batch) == 1:
-            # Names the page in the trace of what was sent to the model, when that trace is switched on.
-            with prompt_trace.trace_context(
-                image_name=batch[0]["image_name"],
-                pipeline="information_extraction",
-                label=f"extract_{kind.lower()}",
-            ):
-                replies = processor.read_pages([batch[0]["image_path"]], kind)
-        else:
-            replies = processor.read_pages([c["image_path"] for c in batch], kind)
-        if len(replies) != len(batch):
-            raise ValueError(
-                f"backend returned {len(replies)} replies for {len(batch)} pages; "
-                f"matching by position is unsafe"
-            )
-    except Exception as err:  # noqa: BLE001 - one group, or one page, must not end the run
-        if len(batch) > 1:
-            logger.warning("Batch of %d %s failed (%s); retrying one at a time", len(batch), kind, err)
-            for classification in batch:
-                _read_batch(writer, processor, [classification])
-            return
-        logger.error("Error extracting %s: %s", batch[0]["image_name"], err)
-        writer.write(
-            _record(
-                batch[0],
-                raw_response="",
-                processing_time=time.time() - started,
-                prompt_used="error",
-                error=str(err),
-            )
-        )
-        return
 
-    # Inside a shared call the requests overlap, so each page is charged an equal share of its time.
-    share = (time.time() - started) / len(batch)
-    for classification, reply in zip(batch, replies, strict=True):
-        writer.write(
-            _record(
-                classification,
-                raw_response=reply,
-                processing_time=share,
-                prompt_used=_prompt_name(kind),
-                error=None,
+    def ask(pages: list[dict[str, Any]]) -> list[str]:
+        if len(pages) > 1:
+            return processor.read_pages([page["image_path"] for page in pages], kind)
+        # Names the page in the trace of what was sent to the model, when that trace is switched on.
+        with prompt_trace.trace_context(
+            image_name=pages[0]["image_name"],
+            pipeline="information_extraction",
+            label=f"extract_{kind.lower()}",
+        ):
+            return processor.read_pages([pages[0]["image_path"]], kind)
+
+    for outcomes in in_engine_calls([batch], ask, what=kind):
+        for outcome in outcomes:
+            if outcome.error is not None:
+                logger.error("Error extracting %s: %s", outcome.item["image_name"], outcome.error)
+            writer.write(
+                _record(
+                    outcome.item,
+                    raw_response=outcome.reply if outcome.error is None else "",
+                    processing_time=outcome.seconds,
+                    prompt_used=_prompt_name(kind) if outcome.error is None else "error",
+                    error=outcome.error,
+                )
             )
-        )
 
 
 def _plan_batches(classifications: list[dict[str, Any]], app_config: Any) -> list[list[dict[str, Any]]]:

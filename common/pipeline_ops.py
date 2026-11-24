@@ -5,7 +5,6 @@ document processor built on it.
 import contextlib
 import logging
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -19,28 +18,24 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-def load_prompt_config(model_type: str) -> dict[str, Any]:
-    """Where the classification prompt is. The model's extraction prompts are checked on the way."""
+def check_prompts(model_type: str) -> None:
+    """Stop the run unless the model has an extraction prompt for every document type."""
     try:
         PromptCatalog().check_extraction_prompts(model_type)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]FATAL: {e}[/red]")
         raise SystemExit(1) from None
-    return {
-        "detection_file": str(Path(__file__).parent.parent / "prompts" / "document_type_detection.yaml"),
-        "detection_key": "detection",
-    }
 
 
 def load_pipeline_configs(
     model_type: str,
-) -> tuple[dict[str, Any], list[str], dict[str, list[str]]]:
-    """Load prompt configuration and build universal field list.
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Check the model's prompts and build the universal field list.
 
     Returns:
-        Tuple of (prompt_config, sorted universal_fields, field_definitions).
+        Tuple of (sorted universal_fields, field_definitions).
     """
-    prompt_config = load_prompt_config(model_type)
+    check_prompts(model_type)
     field_definitions = get_field_schema().get_all_doc_type_fields()
 
     all_fields: set[str] = set()
@@ -53,7 +48,7 @@ def load_pipeline_configs(
         console.print("[yellow]Expected: document_fields section with field lists[/yellow]")
         raise SystemExit(1) from None
 
-    return prompt_config, universal_fields, field_definitions
+    return universal_fields, field_definitions
 
 
 def load_model(config: Settings, *, app_config: Any | None = None):
@@ -83,14 +78,13 @@ def open_processor(app_config: Any) -> Iterator[Any]:
         The document processor.
     """
     config = app_config
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
+    universal_fields, field_definitions = load_pipeline_configs(config.model_type)
     logger.info("Loading model: %s", config.model_type)
     with load_model(config, app_config=app_config) as (model, tokenizer):
         yield create_processor(
             model,
             tokenizer,
             config,
-            prompt_config,
             universal_fields,
             field_definitions,
             app_config=app_config,
@@ -101,7 +95,6 @@ def create_processor(
     model,
     tokenizer,
     config: Settings,
-    prompt_config: dict[str, Any],
     universal_fields: list[str],
     field_definitions: dict[str, list[str]],
     *,
@@ -117,7 +110,6 @@ def create_processor(
         model,
         tokenizer,
         config,
-        prompt_config,
         universal_fields,
         field_definitions,
         app_config=app_config,

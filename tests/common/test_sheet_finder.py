@@ -276,10 +276,12 @@ def test_a_misspelt_setting_is_refused_not_ignored() -> None:
 
 def test_a_config_without_the_section_or_the_file_is_refused(tmp_path: Path) -> None:
     empty = tmp_path / "run_config.yml"
-    empty.write_text("pipeline: {}\n")
+    without_the_section = yaml.safe_load(RUN_CONFIG.read_text())
+    del without_the_section["pipeline"]["photo_split"]["finder"]
+    empty.write_text(yaml.safe_dump(without_the_section))
 
     for path, said in ((empty, "missing or is not a mapping"), (tmp_path / "absent.yml", "does not exist")):
-        with pytest.raises(FinderConfigError) as raised:
+        with pytest.raises(ValueError) as raised:
             load_finder_params(path)
         message = str(raised.value)
         assert said in message and str(path.resolve()) in message

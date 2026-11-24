@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from common.stage_settings import TASKS, SettingsError, StageSettings, log_dir, resolve
+from common.stage_settings import TASKS, ConfigError, StageSettings, log_dir, resolve
 from stages import __main__ as starter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -92,7 +92,7 @@ def test_the_settings_file_is_used_when_a_variable_is_unset_empty_or_none(unset:
 
 @pytest.mark.parametrize("task", ["", "run_info_extract", "trust"])
 def test_a_task_that_is_not_one_of_the_six_is_refused(task: str) -> None:
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve(task, USUAL, RUN_CONFIG)
 
     assert_diagnostic(str(raised.value), "KFP_TASK", *TASKS)
@@ -104,7 +104,7 @@ def test_a_missing_image_folder_is_refused_naming_the_variable_and_the_key(tmp_p
     )
     environ = {k: v for k, v in USUAL.items() if k != "image_dir"}
 
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("classify", environ, path)
 
     assert_diagnostic(
@@ -116,7 +116,7 @@ def test_a_missing_image_folder_is_refused_naming_the_variable_and_the_key(tmp_p
     "key", ["/data/pages/ground_truth.csv", "/data/pages/ground_truth", "answers.json"]
 )
 def test_an_answer_key_that_is_not_json_lines_stops_evaluate_before_any_work(key: str) -> None:
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("evaluate", {**USUAL, "ground_truth": key}, RUN_CONFIG)
 
     assert_diagnostic(
@@ -142,7 +142,7 @@ def test_the_answer_key_is_needed_to_evaluate_and_not_to_classify(tmp_path: Path
     )
 
     assert resolve("classify", USUAL, path).ground_truth is None
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("evaluate", USUAL, path)
     assert_diagnostic(
         str(raised.value), "ground_truth", "pipeline.information_extraction.input.ground_truth"
@@ -178,7 +178,7 @@ def test_starting_afresh_is_asked_for_by_name(given: str | None, expected: bool)
 
 
 def test_any_other_answer_to_starting_afresh_is_refused() -> None:
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("classify", {**USUAL, "CLEAR_PREV_OUTPUT": "yes"}, RUN_CONFIG)
 
     assert_diagnostic(str(raised.value), "CLEAR_PREV_OUTPUT", "true", "false")
@@ -186,13 +186,13 @@ def test_any_other_answer_to_starting_afresh_is_refused() -> None:
 
 def test_the_benchmark_may_be_cut_short_by_a_whole_number() -> None:
     assert resolve("sroie", {**USUAL, "sroie_max_images": "40"}, RUN_CONFIG).sroie_max_images == 40
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("sroie", {**USUAL, "sroie_max_images": "forty"}, RUN_CONFIG)
     assert_diagnostic(str(raised.value), "sroie_max_images")
 
 
 def test_a_variable_under_the_old_prefix_is_refused() -> None:
-    with pytest.raises(SettingsError) as raised:
+    with pytest.raises(ConfigError) as raised:
         resolve("classify", {**USUAL, OLD_PREFIX + "LOG_DIR": "/somewhere"}, RUN_CONFIG)
 
     assert_diagnostic(str(raised.value), OLD_PREFIX + "LOG_DIR", "DOC_EXTRACT_LOG_DIR")

@@ -144,6 +144,10 @@ KNOWN_KEYS: frozenset[str] = frozenset(
 )
 
 
+class ConfigError(ValueError):
+    """The settings cannot be used. The message says what, where, what is expected and the fix."""
+
+
 def leaf_paths(raw: dict[str, Any], prefix: str = "") -> list[str]:
     """The dotted path of every leaf in a settings mapping. An empty mapping is itself a leaf."""
     paths: list[str] = []
@@ -177,7 +181,7 @@ def check_known_keys(raw: dict[str, Any], *, config_path: Path) -> None:
         config_path: Where it was loaded from, for the message.
 
     Raises:
-        ValueError: Naming every unknown key, where it is, what is expected and how to mend it.
+        ConfigError: Naming every unknown key, where it is, what is expected and how to mend it.
     """
     unknown = [path for path in leaf_paths(raw) if not is_known(path)]
     if not unknown:
@@ -186,7 +190,7 @@ def check_known_keys(raw: dict[str, Any], *, config_path: Path) -> None:
     section = unknown[0].rsplit(".", 1)[0]
     examples = sorted(key for key in KNOWN_KEYS if key.startswith(f"{section}."))[:6]
     expected = "\n".join(f"    {key}" for key in examples) or "    (no setting is known under that section)"
-    raise ValueError(
+    raise ConfigError(
         f"What: the settings file holds {len(unknown)} key(s) the pipeline does not know:\n{listed}\n"
         f"Where: {config_path} -> {unknown[0]}\n"
         f"Expected: only keys declared in common/config_schema.py. Under '{section}' these are known:\n"

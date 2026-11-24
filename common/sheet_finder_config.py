@@ -9,8 +9,7 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from common.settings import read_settings_file, value_at
 from common.sheet_finder import FinderParams
 
 SECTION = "pipeline.photo_split.finder"
@@ -125,17 +124,8 @@ def load_finder_params(config_path: Path) -> FinderParams:
         The parameters.
 
     Raises:
-        FinderConfigError: The file does not exist or its finder section is missing or malformed.
+        common.settings.ConfigError: The file does not exist.
+        FinderConfigError: Its finder section is missing or malformed.
     """
-    if not config_path.is_file():
-        raise _fail(
-            "the config file does not exist",
-            key="",
-            config_path=config_path,
-            fix="pass the path of the run config, e.g. config/run_config.yml",
-        )
-    raw = yaml.safe_load(config_path.read_text()) or {}
-    section = raw
-    for part in SECTION.split("."):
-        section = section.get(part) if isinstance(section, dict) else None
+    section = value_at(read_settings_file(config_path), SECTION, None)
     return finder_params_from(section, config_path=config_path)

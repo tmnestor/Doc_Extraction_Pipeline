@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
 from PIL import Image
 
 from common import classification
@@ -23,6 +22,9 @@ from models.backends.vllm_backend import VllmBackend
 if TYPE_CHECKING:
     from common.settings import Settings
 
+# The one classification prompt, by its key in prompts/document_type_detection.yaml.
+DETECTION_PROMPT = "detection"
+
 
 class DocumentOrchestrator:
     """Asks the model about pages, for the stages."""
@@ -32,7 +34,6 @@ class DocumentOrchestrator:
         backend: VllmBackend,
         *,
         field_list: list[str],
-        prompt_config: dict[str, Any],
         field_definitions: dict[str, list[str]] | None = None,
         debug: bool = False,
         verbose: bool = False,
@@ -54,11 +55,6 @@ class DocumentOrchestrator:
         # Field configuration
         self.field_list = field_list
         self.field_count = len(field_list)
-
-        self.prompt_config: dict[str, Any] = prompt_config
-        missing = {"detection_file", "detection_key"} - set(self.prompt_config)
-        if missing:
-            raise ValueError(f"prompt_config missing required keys: {missing}")
 
         # The type of a page whose classification reply cannot be read.
         self._fallback_type = self.app_config.classification_fallback_type
@@ -167,10 +163,8 @@ class DocumentOrchestrator:
 
     def _detection_inputs(self) -> tuple[str, str, int]:
         """The classification prompt, its key and its completion budget."""
-        detection_key = self.prompt_config["detection_key"]
-        detection = yaml.safe_load(Path(self.prompt_config["detection_file"]).read_text())
-        prompt = detection["prompts"][detection_key]["prompt"]
-        return prompt, detection_key, self.app_config.get_token_budget("classify")
+        prompt = PromptCatalog().get_prompt("detection", DETECTION_PROMPT)
+        return prompt, DETECTION_PROMPT, self.app_config.get_token_budget("classify")
 
     def _detection_result(self, response: str, detection_key: str) -> dict:
         """The classification record of one reply."""

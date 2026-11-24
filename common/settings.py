@@ -12,12 +12,13 @@ refused too (``common.config_schema``).
 """
 
 import copy
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from common.config_schema import check_known_keys
+from common.config_schema import ConfigError, check_known_keys
 from common.vllm_stage_overrides import STAGES, apply_stage_overrides, validate_stage_overrides
 
 DEFAULT_CONFIG = Path(__file__).parent.parent / "config" / "run_config.yml"
@@ -25,37 +26,39 @@ _SECONDARY_SORTS = ("none", "image_area_asc", "image_area_desc")
 _ABSENT = object()
 
 
-class ConfigError(ValueError):
-    """The settings cannot be used. The message says what, where, what is expected and the fix."""
-
-
 def read_settings_file(path: Path) -> dict[str, Any]:
     """The settings file as a mapping, with every key checked to be one the pipeline knows.
 
+    The one place the file is read: the task's own settings and the run's settings both come from here.
+
     Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If it holds a key the pipeline does not know.
+        ConfigError: If the file does not exist, or holds a key the pipeline does not know.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-    raw = yaml.safe_load(path.read_text())
+    if not path.is_file():
+        raise ConfigError(
+            f"What: the settings file does not exist.\n"
+            f"Where: {path.resolve()}\n"
+            f"Expected: the pipeline's settings file, config/run_config.yml in the repository.\n"
+            f"How to fix: run the entry script from the repository's own folder."
+        )
+    raw = yaml.safe_load(path.read_text()) or {}
     check_known_keys(raw, config_path=path.resolve())
     return raw
 
 
-def _at(raw: dict[str, Any], key: str) -> Any:
-    """The value at a dotted key, or ``_ABSENT`` if any part of the path is missing."""
+def value_at(raw: Mapping[str, Any], key: str, absent: Any = _ABSENT) -> Any:
+    """The value at a dotted key, or ``absent`` if any part of the path is missing."""
     value: Any = raw
     for part in key.split("."):
-        if not isinstance(value, dict) or part not in value:
-            return _ABSENT
+        if not isinstance(value, Mapping) or part not in value:
+            return absent
         value = value[part]
     return value
 
 
 def _need(raw: dict[str, Any], key: str, path: Path, example: str) -> Any:
     """The value at a dotted key, which must be there (it may be null where null means something)."""
-    value = _at(raw, key)
+    value = value_at(raw, key)
     if value is _ABSENT:
         raise ConfigError(
             f"What: the required key '{key}' is missing.\n"
@@ -231,10 +234,9 @@ class Settings:
             config_path: The settings file, or None for the shipped one.
 
         Raises:
-            ConfigError: If a needed key is missing or a value cannot be used.
-            FileNotFoundError: If the settings file does not exist.
-            ValueError: If the file holds a key the pipeline does not know, or a per-model block
-                under a name no model has.
+            ConfigError: If the settings file does not exist, holds a key the pipeline does not know,
+                lacks a needed key, or has a value that cannot be used.
+            ValueError: If a per-model block is under a name no model has.
         """
         path = config_path or DEFAULT_CONFIG
         raw = read_settings_file(path)
@@ -243,8 +245,8 @@ class Settings:
         self.config_path, self.raw, self._stage = path, raw, None
 
         folders = "pipeline.information_extraction"
-        data_dir = given.get("data_dir") or _at(raw, f"{folders}.input.dir")
-        output_dir = given.get("output_dir") or _at(raw, f"{folders}.output.dir")
+        data_dir = given.get("data_dir") or value_at(raw, f"{folders}.input.dir")
+        output_dir = given.get("output_dir") or value_at(raw, f"{folders}.output.dir")
         if data_dir in (None, _ABSENT) or output_dir in (None, _ABSENT):
             missing = "image_dir" if data_dir in (None, _ABSENT) else "output"
             key = f"{folders}.input.dir" if missing == "image_dir" else f"{folders}.output.dir"
@@ -338,7 +340,7 @@ class Settings:
         A path set for one model is never used for another, and no other model's folder is tried.
         """
         explicit = _need(raw, "bootstrap.model.path", path, "null, to use default_paths")
-        if explicit and model_type == _at(raw, "bootstrap.model.type"):
+        if explicit and model_type == value_at(raw, "bootstrap.model.type"):
             folder = Path(explicit)
             if not folder.exists():
                 raise ConfigError(
@@ -348,7 +350,7 @@ class Settings:
                     f"How to fix: correct bootstrap.model.path, or set it to null."
                 )
             return folder
-        default_paths = _at(raw, "bootstrap.model.default_paths")
+        default_paths = value_at(raw, "bootstrap.model.default_paths")
         listed = default_paths.get(model_type) if isinstance(default_paths, dict) else None
         if not listed or not (Path(listed) / "config.json").exists():
             raise ConfigError(

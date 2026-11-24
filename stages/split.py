@@ -227,10 +227,10 @@ def run(
         common.photo_split.PhotoSplitConfigError: The photo split settings are missing or malformed.
     """
     from common.photo_split import photo_split_config_from
-    from common.settings import read_settings_file
+    from common.settings import DEFAULT_CONFIG, read_settings_file
     from stages.io import discover_images
 
-    resolved_config = config_path or Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
+    resolved_config = config_path or DEFAULT_CONFIG
     raw_config = read_settings_file(resolved_config)
     split_config = photo_split_config_from(raw_config, config_path=resolved_config)
 

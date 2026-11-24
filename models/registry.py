@@ -20,8 +20,8 @@ class ModelRegistration:
     Attributes:
         model_type: The name a task asks for, e.g. "gemma4-31b-w4a16-vllm".
         loader: Callable(Settings) -> ContextManager[(model, tokenizer)].
-        processor_creator: Callable(model, tokenizer, config, prompt_config,
-                           universal_fields, field_definitions) -> DocumentProcessor.
+        processor_creator: Callable(model, tokenizer, config, universal_fields,
+                           field_definitions) -> DocumentProcessor.
         prompt_file: Extraction prompt YAML filename, e.g. "extraction_prompts.yaml".
         description: Human-readable description for help text.
     """

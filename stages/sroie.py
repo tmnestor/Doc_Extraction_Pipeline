@@ -72,7 +72,7 @@ def run(
 
     app_cfg = Settings.load(cli_args, config_path=config_path)
     config = app_cfg
-    settings = _settings(app_cfg.config_path)
+    settings = _settings(app_cfg)
 
     records = load_sroie_split(settings.data_dir)
     if max_images is not None:
@@ -117,13 +117,9 @@ def run(
     )
 
 
-def _settings(config_path: Path | None) -> SroieSettings:
-    """The pipeline.sroie block of the run's settings file."""
-    from common.settings import read_settings_file
-
-    resolved = config_path or Path(__file__).parent.parent / "config" / "run_config.yml"
-    raw_config = read_settings_file(resolved)
-    return SroieSettings.from_raw(raw_config, config_path=resolved)
+def _settings(app_config: Any) -> SroieSettings:
+    """The pipeline.sroie block of the run's settings, which are already read."""
+    return SroieSettings.from_raw(app_config.raw, config_path=app_config.config_path)
 
 
 def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[dict[str, Any]]:
@@ -147,7 +143,7 @@ def read_sroie(processor: Any, image_paths: list[str], app_config: Any) -> list[
     """
     from PIL import Image
 
-    settings = _settings(app_config.config_path)
+    settings = _settings(app_config)
     records: list[dict[str, Any]] = []
     total = len(image_paths)
 

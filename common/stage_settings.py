@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+from common.settings import ConfigError, read_settings_file, value_at
 
 TASKS = ("split", "classify", "extract", "clean", "evaluate", "sroie")
 
@@ -34,10 +34,6 @@ _IMAGE_DIR = ("image_dir", "pipeline.information_extraction.input.dir")
 _GROUND_TRUTH = ("ground_truth", "pipeline.information_extraction.input.ground_truth")
 _OUTPUT = ("output", "pipeline.information_extraction.output.dir")
 _LOG_DIR = ("DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir")
-
-
-class SettingsError(ValueError):
-    """A task's settings cannot be worked out. The message says what, where, what is expected and the fix."""
 
 
 @dataclass(frozen=True)
@@ -88,21 +84,8 @@ def _set(environ: Mapping[str, str], name: str) -> str | None:
 
 
 def _from_file(raw: Mapping[str, Any], key: str) -> str | None:
-    value: Any = raw
-    for part in key.split("."):
-        value = value.get(part) if isinstance(value, Mapping) else None
+    value = value_at(raw, key, None)
     return None if value is None or value == "" else str(value)
-
-
-def _load(config_path: Path) -> Mapping[str, Any]:
-    if not config_path.is_file():
-        raise SettingsError(
-            f"What: the settings file does not exist.\n"
-            f"Where: {config_path.resolve()}\n"
-            f"Expected: the pipeline's settings file, config/run_config.yml in the repository.\n"
-            f"How to fix: run the entry script from the repository's own folder."
-        )
-    return yaml.safe_load(config_path.read_text()) or {}
 
 
 def _value(
@@ -118,7 +101,7 @@ def _value(
     variable, key = source
     value = _set(environ, variable) or _from_file(raw, key)
     if value is None and needed_by is not None:
-        raise SettingsError(
+        raise ConfigError(
             f"What: the task {needed_by!r} needs {variable}, and it is set nowhere.\n"
             f"Where: the environment variable {variable}, or the key {key} in {config_path.resolve()}.\n"
             f"Expected: {example}\n"
@@ -130,7 +113,7 @@ def _value(
 def _refuse_old_names(environ: Mapping[str, str]) -> None:
     old = sorted(name for name in environ if name.startswith(_OLD_PREFIX))
     if old:
-        raise SettingsError(
+        raise ConfigError(
             f"What: variable(s) set under a prefix this pipeline no longer reads: {', '.join(old)}.\n"
             f"Where: the environment of this job (the pipeline manifest, or the command that started it).\n"
             f"Expected: DOC_EXTRACT_LOG_DIR, DOC_EXTRACT_CONDA_ENV, DOC_EXTRACT_GPU_MEMORY_UTILIZATION.\n"
@@ -143,7 +126,7 @@ def log_dir(environ: Mapping[str, str], config_path: Path) -> Path:
     _refuse_old_names(environ)
     found = _value(
         environ,
-        _load(config_path),
+        read_settings_file(config_path),
         config_path,
         _LOG_DIR,
         needed_by="every task",
@@ -165,19 +148,19 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         The task's settings.
 
     Raises:
-        SettingsError: If the task is not one of ``TASKS``, a setting it needs is set nowhere, or a
+        ConfigError: If the task is not one of ``TASKS``, a setting it needs is set nowhere, or a
             value cannot be read.
     """
     _refuse_old_names(environ)
     if task not in TASKS:
-        raise SettingsError(
+        raise ConfigError(
             f"What: KFP_TASK is {task!r}, which is not a task of this pipeline.\n"
             f"Where: the environment variable KFP_TASK.\n"
             f"Expected: one of {', '.join(TASKS)}.\n"
             f"How to fix: set KFP_TASK to one of those, e.g. KFP_TASK=classify model=<a registered model> "
             f"image_dir=<folder> output=<folder> bash entrypoint.sh"
         )
-    raw = _load(config_path)
+    raw = read_settings_file(config_path)
 
     def value(source: tuple[str, str], needed: bool, example: str) -> str | None:
         return _value(
@@ -197,7 +180,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
     assert model is not None and output is not None
     if task == "evaluate" and ground_truth is not None and Path(ground_truth).suffix != ".jsonl":
         variable, key = _GROUND_TRUTH
-        raise SettingsError(
+        raise ConfigError(
             f"What: the answer key {ground_truth!r} is not a JSON lines file. That is the one format read.\n"
             f"Where: the environment variable {variable}, or the key {key} in {config_path.resolve()}.\n"
             f"Expected: a file ending .jsonl with one answer a line, each holding the page's file name "
@@ -224,7 +207,7 @@ def _start_afresh(environ: Mapping[str, str]) -> bool:
     """
     given = (_set(environ, "CLEAR_PREV_OUTPUT") or "false").lower()
     if given not in ("true", "false"):
-        raise SettingsError(
+        raise ConfigError(
             f"What: CLEAR_PREV_OUTPUT is {given!r}.\n"
             f"Where: the environment variable CLEAR_PREV_OUTPUT.\n"
             f"Expected: true (delete this stage's earlier output and start again) or false (carry on from "
@@ -239,7 +222,7 @@ def _whole_number(environ: Mapping[str, str], variable: str) -> int | None:
     if given is None:
         return None
     if not given.isdigit() or int(given) < 1:
-        raise SettingsError(
+        raise ConfigError(
             f"What: {variable} is {given!r}.\n"
             f"Where: the environment variable {variable}.\n"
             f"Expected: a whole number of 1 or more, e.g. {variable}=40. Unset means all of them.\n"
@@ -255,7 +238,7 @@ def main() -> int:
         return 2
     try:
         print(log_dir(os.environ, Path(sys.argv[1])))
-    except SettingsError as err:
+    except ConfigError as err:
         print(f"FATAL: the log folder cannot be worked out.\n{err}")
         return 1
     return 0

@@ -218,7 +218,6 @@ def build_vllm_processor_creator(spec: VllmSpec):
         model,
         tokenizer_or_processor,
         config,
-        prompt_config,
         universal_fields,
         field_definitions,
         *,
@@ -237,7 +236,6 @@ def build_vllm_processor_creator(spec: VllmSpec):
         return DocumentOrchestrator(
             backend=backend,
             field_list=universal_fields,
-            prompt_config=prompt_config,
             field_definitions=field_definitions,
             debug=config.debug,
             verbose=config.verbose,

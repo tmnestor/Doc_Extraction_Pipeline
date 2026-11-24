@@ -21,7 +21,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from common.stage_settings import SettingsError, StageSettings, resolve
+from common.stage_settings import ConfigError, StageSettings, resolve
 
 logger = logging.getLogger("stages")
 
@@ -134,7 +134,7 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH)
-    except SettingsError as err:
+    except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
         return 1
     run_task(settings)

@@ -56,8 +56,12 @@ def test_the_cleaner_reads_every_other_date_as_it_did(written: str, meant: str) 
 
 
 def test_a_year_first_date_that_is_no_day_of_the_year_is_not_guessed_at() -> None:
-    """The 13th month and the 31st of February: read as before, never as year, month, day."""
-    assert reply_fields._as_day_month_year("2031-13-01") == "13/01/2031"
+    """The 13th month and the 31st of February are left as written.
+
+    Read with the day first, the 13th month used to come out as the 13th of January: a guess, and a
+    wrong one for a date written year first.
+    """
+    assert reply_fields._as_day_month_year("2031-13-01") == "2031-13-01"
     assert reply_fields._as_day_month_year("2031-02-31") == "2031-02-31"
 
 

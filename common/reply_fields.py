@@ -15,7 +15,6 @@ entry is treated as one piece of text.
 Every field asked for comes back; one the reply does not give is ``NOT_FOUND``. Nothing here calls a model.
 """
 
-import datetime
 import json
 import re
 from typing import Any
@@ -367,43 +366,24 @@ def _tidied(fields: dict[str, str]) -> dict[str, str]:
     return fields
 
 
-# A date written year first: 2031-02-09, 2031/2/9, 2031.02.09, with or without a time after it, and the
-# same run together, 20310209. The separator must be the same both times.
-_YEAR_FIRST = re.compile(r"^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})(?!\d)")
-_YEAR_FIRST_RUN_TOGETHER = re.compile(r"^((?:19|20)\d{2})(\d{2})(\d{2})$")
-
-
-def _year_first(date: str) -> str | None:
-    """A date written year, month, day as DD/MM/YYYY; None if it is not written so, or is no real day."""
-    found = _YEAR_FIRST.match(date)
-    parts = (
-        (found.group(1), found.group(3), found.group(4))
-        if found
-        else (run.groups() if (run := _YEAR_FIRST_RUN_TOGETHER.match(date)) else None)
-    )
-    if parts is None:
-        return None
-    try:
-        return datetime.date(int(parts[0]), int(parts[1]), int(parts[2])).strftime("%d/%m/%Y")
-    except ValueError:
-        return None
+# A date that begins with its year: 2031-02-09, 2031/2/9, 2031.02.09, 2031 Feb 9, with or without a time
+# after it, and the same run together, 20310209.
+_BEGINS_WITH_ITS_YEAR = re.compile(r"^(?:19|20)\d{2}(?:\D|\d{4}$)")
 
 
 def _as_day_month_year(date: str) -> str:
     """A date as DD/MM/YYYY, or as it was if it cannot be read.
 
-    A date that begins with its year is read as year, month, day. In any other date the day comes before
-    the month. The year-first reading is tried first: read with the day first, 2031-02-09 comes out as the
-    second of September, and nothing says so.
+    The reading is dateutil's. It is told that the day comes before the month, except for a date that
+    begins with its year, which is written year, month, day: told the day comes first, dateutil reads
+    2031-02-09 as the second of September, and nothing says so.
     """
     if not date or date == NOT_FOUND:
         return date
     text = date.split("(")[0].strip()
-    year_first = _year_first(text)
-    if year_first is not None:
-        return year_first
+    day_first = _BEGINS_WITH_ITS_YEAR.match(text) is None
     try:
-        return date_parser.parse(text, dayfirst=True).strftime("%d/%m/%Y")
+        return date_parser.parse(text, dayfirst=day_first).strftime("%d/%m/%Y")
     except (ValueError, TypeError, date_parser.ParserError):
         return date
 

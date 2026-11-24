@@ -366,12 +366,24 @@ def _tidied(fields: dict[str, str]) -> dict[str, str]:
     return fields
 
 
+# A date that begins with its year: 2031-02-09, 2031/2/9, 2031.02.09, 2031 Feb 9, with or without a time
+# after it, and the same run together, 20310209.
+_BEGINS_WITH_ITS_YEAR = re.compile(r"^(?:19|20)\d{2}(?:\D|\d{4}$)")
+
+
 def _as_day_month_year(date: str) -> str:
-    """A date as DD/MM/YYYY, or as it was if it cannot be read. Day comes before month."""
+    """A date as DD/MM/YYYY, or as it was if it cannot be read.
+
+    The reading is dateutil's. It is told that the day comes before the month, except for a date that
+    begins with its year, which is written year, month, day: told the day comes first, dateutil reads
+    2031-02-09 as the second of September, and nothing says so.
+    """
     if not date or date == NOT_FOUND:
         return date
+    text = date.split("(")[0].strip()
+    day_first = _BEGINS_WITH_ITS_YEAR.match(text) is None
     try:
-        return date_parser.parse(date.split("(")[0].strip(), dayfirst=True).strftime("%d/%m/%Y")
+        return date_parser.parse(text, dayfirst=day_first).strftime("%d/%m/%Y")
     except (ValueError, TypeError, date_parser.ParserError):
         return date
 

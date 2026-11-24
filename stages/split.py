@@ -38,7 +38,8 @@ from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 
 from common.stage_settings import StageSettings
 
-from .io import append_jsonl, failed, read_completed_images, take_out
+from .io import append_jsonl, read_completed_images, take_out
+from .records import failed
 
 logger = logging.getLogger(__name__)
 

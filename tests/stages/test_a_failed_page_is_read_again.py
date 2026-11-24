@@ -31,7 +31,8 @@ from common.settings import Settings
 from common.stage_timing import read_stage_timings
 from stages import __main__ as starter
 from stages import split
-from stages.io import failed, read_jsonl, take_out
+from stages.io import read_jsonl, take_out
+from stages.records import failed
 
 BOTH = [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD]
 

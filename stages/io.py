@@ -217,11 +217,6 @@ def take_out(path: Path, read_again: Callable[[dict[str, Any]], bool]) -> list[d
     return taken
 
 
-def failed(record: dict[str, Any]) -> bool:
-    """Whether a record is of a page the stage could not read."""
-    return bool(record.get("error"))
-
-
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read all records from a JSONL file."""
     records: list[dict[str, Any]] = []

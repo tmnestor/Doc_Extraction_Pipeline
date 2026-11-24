@@ -20,10 +20,10 @@ from common.extraction_batching import read_classify_batch_size
 
 from common.stage_settings import StageSettings
 
+from . import records as records_of
 from .io import (
     Journal,
     append_jsonl,
-    failed,
     read_completed_images,
     start_afresh,
     take_out,
@@ -109,7 +109,7 @@ def run(
         note_recovered(output_path.parent, stage="classify", records=recovered)
     # A page an earlier run could not classify is asked about again: its record is taken out of the
     # output, so that it is not among the pages already done.
-    read_again = take_out(output_path, failed)
+    read_again = take_out(output_path, records_of.failed)
     if read_again:
         logger.info(
             "%d page(s) an earlier run could not classify will be asked about again", len(read_again)
@@ -164,7 +164,7 @@ def run(
         read_again=len(read_again),
     )
     _say_how_the_types_were_reached(records)
-    could_not = sum(1 for record in records if failed(record))
+    could_not = sum(1 for record in records if records_of.failed(record))
     if could_not:
         logger.warning(
             "%d of %d page(s) could not be classified. Each is recorded with its error and the "
@@ -267,22 +267,6 @@ def classify_pages(
     )
 
 
-def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
-    record = {
-        "image_path": image_path,
-        "image_name": Path(image_path).name,
-        "document_type": result["document_type"],
-        # How the type was reached: by a rule, by the file's default, or as the fallback type and why.
-        "type_from": result.get("type_from"),
-        "confidence": result.get("confidence", 1.0),
-        "raw_response": result.get("raw_response", ""),
-        "prompt_used": result.get("prompt_used", "detection"),
-    }
-    if result.get("error"):
-        record["error"] = result["error"]
-    return record
-
-
 def _classify_images(
     processor: Any,
     image_paths: list[str],
@@ -329,7 +313,7 @@ def _classify_images(
     for outcomes in calls:
         for outcome in outcomes:
             result = _classified(processor, outcome)
-            record = {**_record(outcome.item, result), "processing_time": outcome.seconds}
+            record = records_of.classified(outcome.item, result, outcome.seconds)
             records.append(record)
             if sink is not None:
                 sink.write(record)
@@ -356,7 +340,7 @@ def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
     except Exception as err:  # noqa: BLE001 - one reply that cannot be read must not end the run
         why = f"{type(err).__name__}: {err}"
         logger.error("The reply about %s could not be read (%s)", Path(outcome.item).name, why)
-        return {**processor.unclassified(why), "raw_response": outcome.reply}
+        return processor.unclassified(why, reply=outcome.reply)
 
 
 BANNER = "Stage 1: classify, the document type of each page (GPU)"

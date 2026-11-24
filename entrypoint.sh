@@ -73,7 +73,7 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # too small for NCCL's SHM transport under tensor parallelism: after ~11
 # images the SHM region fills and NCCL silently deadlocks. The fix is to
 # increase /dev/shm in the KFP pod spec (emptyDir medium=Memory, 8Gi+).
-# Setting NCCL_SHM_DISABLE=1 does NOT work: on G5 instances without
+# Setting NCCL_SHM_DISABLE=1 does NOT work: on cards without
 # NVLink, disabling SHM leaves NCCL with no viable intra-node transport
 # and it fails immediately with "unhandled system error".
 
@@ -122,10 +122,6 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 log() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
-
-# Prominent stage banner: mirrors the top-level run banner so each phase of a
-# multi-stage pipeline stands out in the logs. Leads with a blank line for
-# separation; pass the stage label (e.g. "Phase 1/5: classify (GPU)").
 
 # ---- Cleanup Trap ---- #
 # `trap ... EXIT` runs this code whenever the script exits, whether it
@@ -179,8 +175,8 @@ export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 # and its JIT shells out to the SYSTEM toolkit at /usr/local/cuda-12.4, which is too
 # old for a flag flashinfer emits:
 #     nvcc fatal : Unknown option '--compress-mode=size'   (needs nvcc >= 12.8)
-# Measured 2026-09-21 loading Qwen3.8-27B-FP8 at tp=2; setting this to 0 was the
-# difference between a dead engine and ENGINE OK.
+# Measured on 21 September 2026: setting this to 0 was the difference between an
+# engine that would not start and one that did.
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
 # Suppress verbose INFO logging from vLLM engine, transformers, and tokenizers.
@@ -201,7 +197,7 @@ log "---------------------------------------"
 log ""
 
 # ---- GPU Health Check ---- #
-# Verify GPUs are accessible and healthy before loading ~16GB models onto them.
+# Verify GPUs are accessible and healthy before a model is loaded onto them.
 # Catches ECC errors, fallen-off-bus GPUs, and driver mismatches early:
 # much cheaper than discovering mid-inference after a 60s model load.
 log "GPU environment:"

@@ -159,6 +159,36 @@ def test_a_rule_may_only_use_a_question_that_is_asked(tmp_path) -> None:
             0, {"type": "RECEIPT", "when": {"permit": True}}
         )
 
-    with pytest.raises(ValueError, match="Unknown 'when:' key") as refused:
+    with pytest.raises(ValueError, match="key\\(s\\) that are not known") as refused:
         broken(tmp_path, change).get_classification_evidence()
-    assert "classification.questions" in str(refused.value)
+    assert "classification.questions" in str(refused.value) and "permit" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "spoil",
+    [
+        lambda detection: detection.pop("column_roles"),
+        lambda detection: detection["column_roles"].update(debit=[]),
+        lambda detection: detection.pop("classification_evidence"),
+        lambda detection: detection["classification_evidence"].update(rules=[]),
+        lambda detection: detection["classification_evidence"].pop("default"),
+        lambda detection: detection["classification_evidence"]["rules"].insert(0, {"type": "RECEIPT"}),
+        lambda detection: detection["classification_evidence"]["rules"][0].update(type="RECIEPT"),
+        lambda detection: detection["classification_evidence"]["rules"][0].update(when={}),
+        lambda detection: detection["classification_evidence"]["rules"][0].update(when={"permit": True}),
+        lambda detection: detection["classification_evidence"]["rules"][0].update(
+            when={"any_roles": ["ledger"]}
+        ),
+        lambda detection: detection["classification_evidence"].update(default="LEDGER"),
+    ],
+)
+def test_every_fault_in_the_roles_and_the_rules_says_what_where_what_is_expected_and_the_fix(
+    tmp_path, spoil
+) -> None:
+    """Until 25 November 2026 these said Where, Allowed and Fix, and not what was wrong or expected."""
+    with pytest.raises(ValueError) as refused:
+        broken(tmp_path, spoil).get_classification_evidence()
+
+    message = str(refused.value)
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:")), message
+    assert "document_type_detection.yaml" in message and "(key: " in message

@@ -1,7 +1,8 @@
-"""Unified prompt loading -- single entry point for all YAML prompt access.
+"""The prompts, read from the YAML files of ``prompts/``: the one place they are read.
 
-Consolidates SimplePromptLoader, ConfigLoader, and inline YAML parsing
-behind a single class with cached file reads.
+A model's extraction prompts are in the file its registration names, one prompt for each document type.
+The classification prompt, with the column roles and the rules that turn its answers into a type, is in
+``document_type_detection.yaml``.
 
 Usage:
     from common.prompt_catalog import PromptCatalog
@@ -33,14 +34,10 @@ class Question:
 
 
 class PromptCatalog:
-    """Unified prompt loading -- single entry point for all YAML prompt access.
+    """The prompts of one folder of YAML files.
 
-    All YAML files live in one directory (``prompts/``).  Namespaces map to
-    filenames: ``"detection"`` -> ``document_type_detection.yaml``,
-    or any registered model_type ->
-    its ``VllmSpec.prompt_file``.
-
-    Files are parsed once and cached per instance.
+    A registered model's name stands for the file its registration names (``VllmSpec.prompt_file``).
+    A file is parsed once for each instance.
 
     Args:
         prompts_dir: Directory containing all prompt YAML files.
@@ -75,20 +72,12 @@ class PromptCatalog:
 
     # -- Entry point 1: Load a single prompt -----------------------------------
 
-    def get_prompt(
-        self,
-        namespace: str,
-        key: str,
-        *,
-        format_args: dict[str, str] | None = None,
-    ) -> str:
+    def get_prompt(self, namespace: str, key: str) -> str:
         """Load a prompt string by namespace and key.
 
         Args:
             namespace: A registered model_type, which maps to its prompt_file.
             key: Prompt key within the YAML file's ``prompts`` section.
-            format_args: Optional dict for ``str.format()`` on the template.
-                Used by bank prompts with placeholders like ``{balance_col}``.
 
         Returns:
             The prompt text string, ready to send to the model.
@@ -106,13 +95,7 @@ class PromptCatalog:
             available = sorted(prompts.keys())
             raise KeyError(f"Prompt '{key}' not found in {filename}. Available: {', '.join(available)}")
 
-        entry = prompts[key]
-        # Normalize: extraction YAMLs use "prompt", bank uses "template"
-        text = entry.get("prompt") or entry.get("template", "")
-
-        if format_args:
-            text = text.format(**format_args)
-        return text
+        return prompts[key]["prompt"]
 
     # -- Entry point 2: the classification questions and rules ----------------
 
@@ -199,6 +182,13 @@ class PromptCatalog:
             )
         return opening + "\n\n" + "\n\n".join(parts) + "\n"
 
+    def _refuse(self, what: str, key: str, expected: str, fix: str) -> ConfigError:
+        """A fault in the classification file, with what is wrong, where, what is expected and the fix."""
+        path = (self._dir / _DETECTION_FILE).absolute()
+        return ConfigError(
+            f"What: {what}\nWhere: {path} (key: {key}).\nExpected: {expected}\nHow to fix: {fix}"
+        )
+
     def get_column_roles(self) -> dict[str, list[str]]:
         """Load semantic column-role -> header-keyword lists from detection YAML.
 
@@ -210,27 +200,22 @@ class PromptCatalog:
         Raises:
             ConfigError: If the ``column_roles`` block is missing or malformed.
         """
-        path = self._dir / _DETECTION_FILE
-        data = self._load_yaml(path)
-        roles = data.get("column_roles")
+        roles = self._load_yaml(self._dir / _DETECTION_FILE).get("column_roles")
+        example = "column_roles:\n  debit:\n    - debit\n    - withdrawal"
         if not isinstance(roles, dict) or not roles:
-            raise ConfigError(
-                "Missing or empty 'column_roles' block in "
-                f"{path.absolute()} (key: column_roles).\n"
-                "Expected a non-empty mapping of role -> keyword list, e.g.:\n"
-                "  column_roles:\n"
-                "    debit:\n      - debit\n      - withdrawal\n"
-                "Fix: add the column_roles: section to document_type_detection.yaml."
+            raise self._refuse(
+                "the classification file has no column_roles block, or an empty one.",
+                "column_roles",
+                f"a mapping of each role to the words a column heading may use for it, e.g.\n{example}",
+                "add the column_roles: section to document_type_detection.yaml.",
             )
         for role, keywords in roles.items():
             if not isinstance(keywords, list) or not keywords:
-                raise ConfigError(
-                    f"Role '{role}' in 'column_roles' must be a non-empty list of "
-                    f"keyword strings.\n"
-                    f"Where: {path.absolute()} (key: column_roles.{role}).\n"
-                    f"Found: {keywords!r}.\n"
-                    f"Fix: give '{role}' at least one keyword, e.g. "
-                    f"`{role}:\n  - <header keyword>`."
+                raise self._refuse(
+                    f"the column role {role!r} has no list of words: {keywords!r}.",
+                    f"column_roles.{role}",
+                    f"a list of at least one word a heading may use, e.g.\n{example}",
+                    f"give {role!r} at least one word, or remove the role.",
                 )
         return roles
 
@@ -247,42 +232,37 @@ class PromptCatalog:
             ConfigError: If the ``classification_evidence`` block is missing or
                 structurally invalid.
         """
-        path = self._dir / _DETECTION_FILE
-        data = self._load_yaml(path)
-        evidence = data.get("classification_evidence")
+        evidence = self._load_yaml(self._dir / _DETECTION_FILE).get("classification_evidence")
+        example = (
+            "classification_evidence:\n  rules:\n    - type: BANK_STATEMENT\n"
+            "      when: { any_roles: [debit, credit, balance] }\n  default: none"
+        )
         if not isinstance(evidence, dict):
-            raise ConfigError(
-                "Missing 'classification_evidence' block in "
-                f"{path.absolute()} (key: classification_evidence).\n"
-                "Expected a mapping with 'rules' and 'default', e.g.:\n"
-                "  classification_evidence:\n"
-                "    rules:\n"
-                "      - type: BANK_STATEMENT\n"
-                "        when: { any_roles: [debit, credit, balance] }\n"
-                "    default: none\n"
-                "Fix: add the classification_evidence: section to "
-                "document_type_detection.yaml."
+            raise self._refuse(
+                "the classification file has no classification_evidence block.",
+                "classification_evidence",
+                f"a block with the rules and a default, e.g.\n{example}",
+                "add the classification_evidence: section to document_type_detection.yaml.",
             )
         rules = evidence.get("rules")
         if not isinstance(rules, list) or not rules:
-            raise ConfigError(
-                "'classification_evidence.rules' must be a non-empty list.\n"
-                f"Where: {path.absolute()} (key: classification_evidence.rules).\n"
-                f"Found: {rules!r}.\n"
-                "Fix: add at least one rule with 'type' and a 'when' clause."
+            raise self._refuse(
+                f"classification_evidence.rules is not a list of at least one rule: {rules!r}.",
+                "classification_evidence.rules",
+                f"a list of rules, each with a type and a when clause, e.g.\n{example}",
+                "add at least one rule with a type and a when clause.",
             )
         if "default" not in evidence:
-            raise ConfigError(
-                "'classification_evidence.default' is required.\n"
-                f"Where: {path.absolute()} (key: classification_evidence.default).\n"
-                "Expected 'none' (defer to keyword fallback) or a document-type "
-                "string (e.g. INVOICE).\n"
-                "Fix: add `default: none` under classification_evidence."
+            raise self._refuse(
+                "classification_evidence has no default, the type of a page no rule fits.",
+                "classification_evidence.default",
+                "none, to give such a page the fallback type, or a document type, e.g. default: INVOICE",
+                "add default: none under classification_evidence.",
             )
-        self._validate_evidence_references(evidence, rules, path)
+        self._validate_evidence_references(evidence, rules)
         return evidence
 
-    def _validate_evidence_references(self, evidence: dict[str, Any], rules: list, path: Path) -> None:
+    def _validate_evidence_references(self, evidence: dict[str, Any], rules: list) -> None:
         """Cross-reference rules against column_roles and supported types.
 
         Ensures every referenced role exists, every `when:` uses known keys,
@@ -294,60 +274,61 @@ class PromptCatalog:
         supported = set(get_field_schema().document_types)
         asked = {q.label.lower() for q in self.get_classification_questions() if q.answer == "yes_no"}
         allowed_when_keys = {"any_roles", "all_roles"} | asked
+        types = ", ".join(sorted(supported))
 
         for i, rule in enumerate(rules):
             loc = f"classification_evidence.rules[{i}]"
             if not isinstance(rule, dict) or "type" not in rule or "when" not in rule:
-                raise ConfigError(
-                    f"Each classification rule needs 'type' and 'when'.\n"
-                    f"Where: {path.absolute()} ({loc}).\n"
-                    f"Found: {rule!r}.\n"
-                    "Fix: e.g. `- type: RECEIPT\n    when: { paid: true }`."
+                raise self._refuse(
+                    f"a classification rule lacks its type or its when clause: {rule!r}.",
+                    loc,
+                    "a rule with both, e.g.\n    - type: RECEIPT\n      when: { paid: true }",
+                    "give the rule a type and a when clause.",
                 )
             rtype = rule["type"]
             if not isinstance(rtype, str) or rtype.lower() not in supported:
-                raise ConfigError(
-                    f"Rule type '{rtype}' is not a supported document type.\n"
-                    f"Where: {path.absolute()} ({loc}.type).\n"
-                    f"Allowed: {sorted(supported)}.\n"
-                    "Fix: use one of the supported types, or give the new type a "
-                    "block in config/field_definitions.yaml (document_types)."
+                raise self._refuse(
+                    f"the rule type {rtype!r} is not a document type.",
+                    f"{loc}.type",
+                    f"a document type of the schema file, in either case: {types}.",
+                    "correct the type, or give a new type a block in config/field_definitions.yaml "
+                    "(document_types).",
                 )
             when = rule["when"]
             if not isinstance(when, dict) or not when:
-                raise ConfigError(
-                    f"Rule 'when:' must be a non-empty mapping.\n"
-                    f"Where: {path.absolute()} ({loc}.when).\n"
-                    f"Found: {when!r}.\n"
-                    "Fix: add a condition, e.g. `when: { any_roles: [debit] }`."
+                raise self._refuse(
+                    f"the when clause of the rule for {rtype} is not a mapping with a condition: {when!r}.",
+                    f"{loc}.when",
+                    "at least one condition, e.g. when: { any_roles: [debit] }",
+                    "add a condition to the rule.",
                 )
             unknown_keys = set(when) - allowed_when_keys
             if unknown_keys:
-                raise ConfigError(
-                    f"Unknown 'when:' key(s) {sorted(unknown_keys)}.\n"
-                    f"Where: {path.absolute()} ({loc}.when).\n"
-                    f"Allowed keys: {sorted(allowed_when_keys)}.\n"
-                    "Fix: remove the unknown key, correct the spelling, or add a yes_no "
-                    "question with that label under classification.questions."
+                raise self._refuse(
+                    f"the when clause of the rule for {rtype} has key(s) that are not known: "
+                    f"{sorted(unknown_keys)}.",
+                    f"{loc}.when",
+                    f"only these keys: {sorted(allowed_when_keys)}.",
+                    "remove the key, correct its spelling, or add a yes_no question with that label "
+                    "under classification.questions.",
                 )
             for role_key in ("any_roles", "all_roles"):
                 for role in when.get(role_key, []):
                     if role not in known_roles:
-                        raise ConfigError(
-                            f"Rule references unknown column role '{role}'.\n"
-                            f"Where: {path.absolute()} ({loc}.when.{role_key}).\n"
-                            f"Known roles: {sorted(known_roles)}.\n"
-                            f"Fix: add '{role}' under column_roles, or use a "
-                            "known role name."
+                        raise self._refuse(
+                            f"the rule for {rtype} names a column role that does not exist: {role!r}.",
+                            f"{loc}.when.{role_key}",
+                            f"one of the roles under column_roles: {sorted(known_roles)}.",
+                            f"add {role!r} under column_roles, or name a role that is there.",
                         )
 
         default = evidence["default"]
         if isinstance(default, str) and default.lower() != "none" and default.lower() not in supported:
-            raise ConfigError(
-                f"classification_evidence.default '{default}' is not a supported type.\n"
-                f"Where: {path.absolute()} (key: classification_evidence.default).\n"
-                f"Allowed: 'none' or one of {sorted(supported)}.\n"
-                "Fix: set `default: none` or a supported document type."
+            raise self._refuse(
+                f"classification_evidence.default is {default!r}, which is not a document type.",
+                "classification_evidence.default",
+                f"none, or a document type of the schema file: {types}.",
+                "set default: none, or a document type.",
             )
 
     def check_extraction_prompts(self, model_type: str) -> None:

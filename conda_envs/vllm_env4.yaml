@@ -1,149 +1,38 @@
-# ---------------------------------------------------------------------------
-# Conda environment for vLLM 0.29.0 -- Gemma 4 31B vs Qwen 3.8 27B comparison
-# ---------------------------------------------------------------------------
-# WHY THIS ENV EXISTS
-#   The comparison needs ONE engine serving BOTH models, so that any measured
-#   difference is model-plus-quantisation and not model-plus-engine. vllm_env3
-#   (vllm==0.25.1) cannot provide it: Qwen/Qwen3.8-27B-FP8 is
-#   Qwen3_5ForConditionalGeneration / model_type qwen3_5, and Qwen3.5-family
-#   support did not land until vLLM 0.27.0 (2026-08-10). Anything older fails
-#   at engine load with "Model architectures ['Qwen3_5ForConditionalGeneration']
-#   are not supported for now" -- an error unrelated to this repo.
+# The conda environment both models run in: vLLM 0.29.0.
 #
-#   Registered model types served by this env:
-#     gemma4-31b-w4a16-vllm    google/gemma-4-31B-it-qat-w4a16-ct
-#     qwen38-27b-fp8-vllm      Qwen/Qwen3.8-27B-FP8
-#   Design doc: plans/2026-09-22-gemma4-31b-vs-qwen38-27b-design.md
-#
-# ⚠️  DO NOT RUN THE INTERNVL PRODUCTION PATH IN THIS ENV.
-#   Same reason as vllm_env3, one major version further on: vLLM 0.29.0 wants
-#   transformers>=5.10.4, and ensure_corrected_tokenizer()'s
-#   AutoTokenizer(..., fix_mistral_regex=True) is not verified on transformers
-#   5.x. A degraded tokenizer mis-splits runs of whitespace and digits, which is
-#   exactly the bank-statement amount column the 91.8% baseline rests on -- and
-#   InternVL would LOAD rather than fail, so the damage would be silent. Use
-#   vllm_env2 for InternVL, vllm_env3 for the Gemma 12B, this env only for the
-#   two models named above.
-#
-# TARGET STACK (exact pins taken from the v0.29.0 tag's requirements/cuda.txt
-# and the published wheel metadata -- not guessed, not carried over):
-#   vLLM        0.29.0
-#   torch       2.13.0    \
-#   torchvision 0.28.0    |  exact == pins; must install together from the
-#   torchaudio  2.11.0    /  same CUDA build or vLLM will fail to load
-#   flashinfer-python  0.6.18   (pinned ==, transitive from vLLM)
-#   flashinfer-cubin   DELIBERATELY ABSENT: see the block below
-#   compressed-tensors 0.17.0   (the Gemma W4A16 path; UNCHANGED from
-#                                vllm_env3, so that loader is not a new variable)
-#   transformers       >=5.10.4
-#   Python      3.12      (hard requirement -- prod runs 3.12, and
-#                          models/registry.py uses PEP 695 `type` statements)
-#
-#   VERIFIED ON THE SANDBOX 2026-09-22. Every pin resolved exactly as written:
-#     vllm 0.29.0, torch 2.13.0+cu130, torchvision 0.28.0+cu130,
-#     torchaudio 2.11.0+cu130, flashinfer-python 0.6.18.
-#   The CUDA 13.0 runtime is confirmed, not assumed: torch reports cuda 13.0.
-#   Arch check passed: BOTH Qwen3_5ForConditionalGeneration and
-#   Gemma4ForConditionalGeneration are registered, so one engine really does
-#   serve both models and the comparison carries no engine confound.
-#   One correction was needed to get here: flashinfer-cubin==0.6.18 does not
-#   exist on PyPI and failed the build: see the flashinfer block below.
-#
-# VERSION CHOICE
-#   0.28.0 (2026-08-26) is the MINIMUM stable release that both carries
-#   Qwen3.5-family support and postdates the Qwen3.8 checkpoints (published
-#   2026-08-13), and its notes name Qwen3.8 directly.
-#   0.29.0 (2026-09-09) is chosen over it for one reason: it carries a Gemma 4
-#   CUDA-graph fix ("Gemma4 MTP under CUDA graphs", #53884). This benchmark runs
-#   with enforce_eager: false because CUDA graphs were worth ~22% on the 12B, so
-#   a Gemma-4 CUDA-graph fix is directly on the path being measured.
-#   ⚠️  0.29.0 was 13 days old when this file was written. If it misbehaves,
-#   FALL BACK TO 0.28.0 rather than forward to a nightly -- and change the pin
-#   for BOTH models together, because the whole point of this env is that they
-#   share an engine.
-#
-# HARDWARE -- both models are FORCED to tensor parallelism here
-#   Sandbox: 2x NVIDIA L4 (Ada sm_89, 24 GiB each, ~22.5 GiB usable)
-#     gemma-4-31B-it-qat-w4a16-ct  23,265,352,448 B = 21.67 GiB
-#     Qwen3.8-27B-FP8              27,781,427,952 B = 25.87 GiB
-#   BOTH exceed a single card, so neither can hold one whole engine per GPU.
-#   Each runs as ONE engine sharded tp=2 across the pair, over PCIe with no
-#   NVLink -- so throughput from this env is pessimistic for both models and is
-#   not what either would do on one adequate card. Say so when quoting it.
-#   The registry marks both supports_data_parallel=False; without that the DP
-#   fast path starts two whole engines per model and OOMs at load.
-#
-# ⚠️  QWEN FP8 ON ADA IS THE UNVERIFIED PART
-#   The Qwen checkpoint is block-scaled FP8, block size 128, and these cards are
-#   Ada sm_89. Whether a blockwise-FP8 GEMM kernel exists for sm_89 on this
-#   build is the single biggest risk in the comparison, and it shows up as a
-#   no-kernel or unsupported-quantisation error at engine load, not as a slow
-#   run. Load Qwen FIRST (see VERIFY below) before building anything on it.
-#
-# CUDA  -- ⚠️ CUDA 13 BUILD, same major as vllm_env3
-#   requirements/cuda.txt at the v0.29.0 tag pins nvidia-cutlass-dsl[cu13] and
-#   humming-kernels[cu13], so this is a CUDA 13 stack like vllm_env3's
-#   torch 2.11.0+cu130 -- NOT a fresh major jump from that env.
-#     - L4 / L40S boxes: driver 580 supports CUDA 13.0 -> OK.
-#     - A10G (prod, sm_86): driver NOT verified. Check `nvidia-smi` there before
-#       assuming this env can run in prod.
-#
-#   Do NOT add --index-url here: data engineering policy forbids extra indexes
-#   (same rule as vllm_env2.yaml and vllm_env3.yaml).
-#
-# Flash-Attention
-#   Deliberately NOT installed separately -- vLLM bundles its own flash-attn
-#   kernels and FlashInfer is the default/recommended attention backend.
-#
-# ⚠️  flashinfer-cubin IS NOT PINNED HERE, UNLIKE vllm_env3 -- and that is correct
-#   Attempting `flashinfer-cubin==0.6.18` FAILS the env build outright:
-#     ERROR: Could not find a version that satisfies the requirement
-#     flashinfer-cubin==0.6.18 (from versions: ... 0.6.13)
-#   The reason is in vLLM's own requirements/cuda.txt, verbatim:
-#     "# flashinfer-cubin is not on PyPI since 0.6.14; setup.py excludes it from"
-#     "--extra-index-url https://flashinfer.ai/whl/"
-#   So from 0.6.14 onward the package is published ONLY on flashinfer.ai's index.
-#   vllm_env3 could pin flashinfer-cubin==0.6.13 precisely because 0.6.13 was the
-#   last PyPI release; that is a difference in the PACKAGE, not in our approach.
-#
-#   Three options, and why this one:
-#     - Add --extra-index-url https://flashinfer.ai/whl/  -> FORBIDDEN. Data
-#       engineering policy bars extra indexes (same rule as vllm_env2/env3).
-#     - Pin flashinfer-cubin==0.6.13 against flashinfer-python==0.6.18 -> a
-#       version MISMATCH between pre-compiled kernels and the runtime that loads
-#       them. Rejected: wrong kernels are a silent-wrong-answer risk, which is
-#       the worst failure class this pipeline has.
-#     - Omit it -> CHOSEN. vLLM's setup.py already excludes it from the install
-#       requirements and flashinfer-python does not list it in requires_dist, so
-#       omitting it is the SUPPORTED configuration, not a workaround.
-#
-#   COST: FlashInfer JIT-compiles its kernels on first use instead of loading
-#   pre-compiled cubins, so the FIRST engine start in this env is slow. That is
-#   startup, not inference, and the benchmark reports engine startup separately
-#   from inference time, so it does not contaminate the throughput comparison.
-#   BUT: warm both models the same way before quoting throughput, or whichever
-#   model is measured first silently pays the whole JIT bill.
-#   The compile cache lives under the user's cache dir. That is writable on the
-#   sandbox; it is NOT writable in prod, where only output.dir is -- so if this
-#   env is ever promoted, the JIT cache location has to be dealt with first.
-#
-# Changes from vllm_env3.yaml (0.25.1):
-#   - vllm        0.25.1 -> 0.29.0
-#   - torch       2.11.0 -> 2.13.0 (torchvision 0.26.0 -> 0.28.0;
-#                                   torchaudio STAYS at 2.11.0 -- that is what
-#                                   the 0.29.0 tag pins, not an oversight)
-#   - flashinfer-python  0.6.13 -> 0.6.18
-#   - flashinfer-cubin   0.6.13 -> DROPPED (left PyPI at 0.6.14; see above)
-#   - transformers >=5.5.3 -> >=5.10.4
-#   - compressed-tensors UNCHANGED at 0.17.0
-#
-# USAGE
 #   conda env create -f conda_envs/vllm_env4.yaml
 #   conda activate vllm_env4
-#   pip freeze > vllm-0.29.0-frozen-requirements.txt   # <-- give this to
-#                                                      #     data engineering
 #
-# VERIFY (everything except the last three lines works on a CPU-only node)
+# entrypoint.sh starts every task in it (DOC_EXTRACT_CONDA_ENV names another).
+#
+# The pins
+#   Every pin is the one requirements/cuda.txt gives at the v0.29.0 tag of vLLM, and each resolved as
+#   written when the environment was built on the sandbox (22 September 2026): vllm 0.29.0,
+#   torch 2.13.0+cu130, torchvision 0.28.0+cu130, torchaudio 2.11.0+cu130, flashinfer-python 0.6.18.
+#   torch, torchvision and torchaudio are pinned exactly and must install together from one CUDA
+#   build, or vLLM will not load. torchaudio at 2.11.0 is what that tag pins, not an oversight.
+#   Python is 3.12: the code uses the type statement.
+#
+# CUDA 13
+#   The stack is built for CUDA 13.0, and torch reports cuda 13.0 on the sandbox. The L4 cards there,
+#   on driver 580, support it. Check nvidia-smi on any other cards before assuming they do.
+#
+# No other package index
+#   Do not add --index-url or --extra-index-url. Everything here installs from PyPI.
+#
+# flashinfer-cubin is absent, and that is the supported arrangement
+#   The pre-compiled FlashInfer kernels left PyPI at 0.6.14, and are published since only on
+#   flashinfer.ai's own index. Pinning the last PyPI release, 0.6.13, against flashinfer-python
+#   0.6.18 would pair kernels with a runtime of another version. vLLM's own setup leaves the package
+#   out of its requirements, so leaving it out here is what vLLM supports.
+#   The cost: FlashInfer compiles its kernels the first time they are used, so the first engine start
+#   in a new environment is slow. That is start-up and not reading, and a stage reports the two apart.
+#   The compiled kernels are kept under the user's cache folder, which must be writable.
+#   entrypoint.sh sets VLLM_USE_FLASHINFER_SAMPLER=0 for a related reason, given there.
+#
+# flash-attn is not installed separately: vLLM brings its own attention kernels.
+#
+# To check an environment, on a node with or without cards:
 #   python -c "
 #   import vllm, torch, torchvision, torchaudio, flashinfer
 #   print('vllm       ', vllm.__version__)
@@ -151,19 +40,11 @@
 #   print('torchvision', torchvision.__version__)
 #   print('torchaudio ', torchaudio.__version__)
 #   print('flashinfer ', flashinfer.__version__)
-#   from vllm.model_executor.models.registry import ModelRegistry as R
-#   archs = set(R.get_supported_archs())
-#   for name in ('Qwen3_5ForConditionalGeneration',
-#                'Gemma4ForConditionalGeneration'):
-#       print(f'{name}: {\"OK\" if name in archs else \"MISSING\"}')
-#   from vllm import _custom_ops
-#   print('custom ops loaded OK')
-#   print('devices:', torch.cuda.device_count())
+#   print('cards      ', torch.cuda.device_count())
 #   "
-#   BOTH architectures MUST print OK. If Gemma4ForConditionalGeneration is
-#   missing, the same-engine premise of the comparison has failed and the
-#   design needs revisiting -- do not quietly run the two models on two engines.
-# ---------------------------------------------------------------------------
+#
+# How this file came to these pins, and the comparison it was first built for, is in the decisions
+# notes kept with the evaluation.
 
 name: vllm_env4
 channels:
@@ -174,9 +55,8 @@ dependencies:
   - libstdcxx-ng>=12      # provides CXXABI_1.3.15+ for ICU/sqlite3
 
   - pip:
-      # Torch family -- installed from plain PyPI, versions taken verbatim from
-      # requirements/cuda.txt at the v0.29.0 tag. Do not add --index-url here;
-      # data engineering policy forbids extra indexes.
+      # The torch family, from PyPI, at the versions requirements/cuda.txt gives at the
+      # v0.29.0 tag. Do not add --index-url here: no other index is to be used.
       - torch==2.13.0
       - torchvision==0.28.0
       - torchaudio==2.11.0
@@ -185,37 +65,15 @@ dependencies:
       # though transitive) so an accidental later `pip install --upgrade` of
       # flashinfer cannot silently break vLLM.
       # flashinfer-cubin is NOT here: it left PyPI at 0.6.14 and vLLM excludes
-      # it from its own requirements. See the flashinfer block in the header.
+      # it from its own requirements. See the header.
       - vllm==0.29.0
       - flashinfer-python==0.6.18
 
-      # The Gemma W4A16 loader. Pinned explicitly and deliberately held at the
-      # version vllm_env3 resolved, so the quantisation path is not a second
-      # variable alongside the engine bump.
+      # The loader of the Gemma W4A16 checkpoints, pinned explicitly so that a later
+      # upgrade of another package cannot move the quantisation path
+      # under a run.
       - compressed-tensors==0.17.0
 
-      # Analysis / visualization -- not vllm deps, needed for our pipeline
+      # For analysis and charts: not needed by vLLM.
       - pandas
       - seaborn
-
-# ---------------------------------------------------------------------------
-# NOTE ON THESE PINS
-#   Derived from requirements/cuda.txt at the vllm v0.29.0 tag, then CONFIRMED
-#   against a real install on the sandbox (2026-09-22): every remaining pin
-#   resolved exactly as written, and the CUDA runtime is 13.0 as expected rather
-#   than the 12.x that would have needed a driver recheck.
-#
-#   The ONE pin that did not survive contact was flashinfer-cubin, which the
-#   release tag pins at 0.6.18 but which has not been published to PyPI since
-#   0.6.14. Reading a version out of a release tag is not the same as knowing it
-#   installs: the same lesson vllm_env3 recorded, in a new shape.
-#
-#   ARCH CHECK PASSED on the sandbox 2026-09-22:
-#     Qwen3_5ForConditionalGeneration  OK
-#     Gemma4ForConditionalGeneration   OK
-#   Both present in one engine, which is the entire reason this env exists.
-#
-#   Reproduction proof (destroy and recreate from this file) is outstanding for
-#   vllm_env3 too and should be done for both together:
-#     conda env remove -n vllm_env4 && conda env create -f conda_envs/vllm_env4.yaml
-# ---------------------------------------------------------------------------

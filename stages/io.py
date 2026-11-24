@@ -6,7 +6,7 @@ so that partial output survives crashes (critical at 10K images).
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 
 def write_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
@@ -33,6 +33,17 @@ def append_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
         for record in records:
             f.write(json.dumps(record, default=str) + "\n")
     return len(records)
+
+
+class RecordSink(Protocol):
+    """Anything a stage can write its records to, one at a time.
+
+    The one-engine stage writes to a file as it goes (`StreamingJsonlWriter`). A worker on the two-engine
+    path collects its records and hands them back. Naming what the two have in common lets the stage's own
+    functions serve both.
+    """
+
+    def write(self, record: dict[str, Any]) -> None: ...
 
 
 class StreamingJsonlWriter:
@@ -87,18 +98,6 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def count_jsonl(path: Path) -> int:
-    """Count records in a JSONL file without loading them all into memory."""
-    if not path.exists():
-        return 0
-    count = 0
-    with path.open() as f:
-        for line in f:
-            if line.strip():
-                count += 1
-    return count
-
-
 def read_completed_images(path: Path) -> set[str]:
     """Read image names from a partial JSONL output for resumption.
 
@@ -119,3 +118,56 @@ def read_completed_images(path: Path) -> set[str]:
                 except json.JSONDecodeError:
                     pass  # Skip corrupted trailing line from crash
     return completed
+
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp"}
+
+
+def discover_images(
+    data_dir: Path,
+    document_types: list[str] | None = None,
+    max_images: int | None = None,
+) -> list[Path]:
+    """Discover images in a data directory, applying the configured selection.
+
+    Both filters live HERE and not at the call sites. Until 21 September 2026 the stages
+    called this with the folder alone and so ignored them: asking for 12 images processed
+    all 165 while the YAML read as applied. Keeping the selection inside the discovery
+    function means a caller cannot omit it.
+
+    Args:
+        data_dir: Directory to scan for images.
+        document_types: Keep only images whose filename contains one of these
+            (case-insensitive). ``None`` keeps every type.
+        max_images: Keep at most this many, applied AFTER sorting and type
+            filtering so the subset is deterministic and representative.
+            ``None`` means no limit.
+
+    Returns:
+        Images sorted by lowercase filename, filtered and truncated as requested.
+    """
+    images: list[Path] = []
+
+    for ext in IMAGE_EXTENSIONS:
+        images.extend(data_dir.glob(f"*{ext}"))
+        images.extend(data_dir.glob(f"*{ext.upper()}"))
+
+    # Sort by filename for reproducibility
+    images = sorted(images, key=lambda p: p.name.lower())
+
+    # Filter by document type if specified (based on filename patterns)
+    if document_types:
+        filtered = []
+        type_patterns = [t.lower() for t in document_types]
+        for img in images:
+            name_lower = img.name.lower()
+            if any(pattern in name_lower for pattern in type_patterns):
+                filtered.append(img)
+        images = filtered
+
+    # Truncate LAST: a limit applied before the type filter would eat images the
+    # filter was going to discard, and silently return fewer than requested.
+    if max_images is not None:
+        images = images[:max_images]
+
+    return images

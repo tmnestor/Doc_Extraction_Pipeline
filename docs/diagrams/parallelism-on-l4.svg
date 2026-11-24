@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1920" height="1080" viewBox="0 0 1920 1080">
+<title>Data, tensor and pipeline parallel on AWS L4 GPUs</title>
+<desc>Three panels compare how each approach places one model across the four 24 GB L4 cards of a g6.12xlarge: data parallel copies the model, tensor parallel splits every layer, and pipeline parallel splits the model by layers. A decision strip recommends data parallel when the model fits on one card.</desc>
+<rect x="0" y="0" width="1920" height="1080" fill="#FFFFFF"/>
+<text x="48" y="60" font-family="Arial" font-size="46" font-weight="bold" fill="#1F2933" text-anchor="start">On 24 GB L4 cards, model size decides how you parallelise</text>
+<text x="48" y="100" font-family="Arial" font-size="26" font-weight="normal" fill="#1F2933" text-anchor="start">AWS g6.12xlarge: 4 × L4, 24 GB each. VRAM is not pooled, and the cards talk only over PCIe (64 GB/s), with no NVLink.</text>
+<text x="48" y="134" font-family="Arial" font-size="24" font-weight="normal" fill="#52606D" text-anchor="start">Each grid is one model: rows are layers, columns are slices of each layer's weights. Coloured cells are what that card holds.</text>
+<rect x="48" y="150" width="592" height="754" rx="10" fill="#FFFFFF" stroke="#0B6AA8" stroke-width="3"/>
+<rect x="48" y="150" width="592" height="62" rx="10" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="48" y="190" width="592" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<text x="72" y="193" font-family="Arial" font-size="33" font-weight="bold" fill="#FFFFFF" text-anchor="start">Data parallel</text>
+<text x="616" y="192" font-family="Arial" font-size="25" font-weight="normal" fill="#FFFFFF" text-anchor="end">Copy the whole model</text>
+<rect x="60" y="288" width="568" height="244" rx="8" fill="#F3F5F7" stroke="#9AA5B1" stroke-width="2"/>
+<text x="344.0" y="522" font-family="Arial" font-size="19" font-weight="normal" fill="#52606D" text-anchor="middle">one g6.12xlarge instance</text>
+<rect x="73.0" y="226" width="542.0" height="46" rx="6" fill="#FFFFFF" stroke="#0B6AA8" stroke-width="2"/>
+<text x="344.0" y="257" font-family="Arial" font-size="22" font-weight="bold" fill="#1F2933" text-anchor="middle">Load balancer: 4 engines, 4 request queues</text>
+<rect x="73.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="128.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="79.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="104.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="129.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="154.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="79.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="104.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="129.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="154.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="79.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="104.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="129.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="154.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="79.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="104.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="129.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="154.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="217.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="272.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="223.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="248.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="273.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="298.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="223.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="248.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="273.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="298.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="223.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="248.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="273.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="298.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="223.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="248.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="273.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="298.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="361.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="416.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="367.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="392.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="417.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="442.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="367.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="392.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="417.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="442.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="367.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="392.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="417.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="442.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="367.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="392.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="417.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="442.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="505.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="560.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="511.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="536.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="561.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="586.5" y="341" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="511.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="536.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="561.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="586.5" y="366" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="511.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="536.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="561.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="586.5" y="391" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="511.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="536.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="561.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<rect x="586.5" y="416" width="22" height="22" rx="0" fill="#0B6AA8" stroke="none" stroke-width="0"/>
+<line x1="128.0" y1="272" x2="128.0" y2="293" stroke="#0B6AA8" stroke-width="3"/>
+<polygon points="128.0,306 119.0,292.5 137.0,292.5" fill="#0B6AA8"/>
+<line x1="272.0" y1="272" x2="272.0" y2="293" stroke="#0B6AA8" stroke-width="3"/>
+<polygon points="272.0,306 263.0,292.5 281.0,292.5" fill="#0B6AA8"/>
+<line x1="416.0" y1="272" x2="416.0" y2="293" stroke="#0B6AA8" stroke-width="3"/>
+<polygon points="416.0,306 407.0,292.5 425.0,292.5" fill="#0B6AA8"/>
+<line x1="560.0" y1="272" x2="560.0" y2="293" stroke="#0B6AA8" stroke-width="3"/>
+<polygon points="560.0,306 551.0,292.5 569.0,292.5" fill="#0B6AA8"/>
+<text x="344.0" y="493" font-family="Arial" font-size="21" font-weight="bold" fill="#0B6AA8" text-anchor="middle">No traffic between cards</text>
+<text x="72" y="564" font-family="Arial" font-size="21" font-weight="bold" fill="#0B6AA8" text-anchor="start">Largest model</text>
+<text x="72" y="595" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Must fit on one card: under 24 GB,</text>
+<text x="72" y="626" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">including its KV cache</text>
+<text x="72" y="658" font-family="Arial" font-size="21" font-weight="bold" fill="#0B6AA8" text-anchor="start">Speed</text>
+<text x="72" y="689" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Throughput up to 4×, one per card.</text>
+<text x="72" y="720" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Each request runs no faster.</text>
+<text x="72" y="752" font-family="Arial" font-size="21" font-weight="bold" fill="#0B6AA8" text-anchor="start">Across instances</text>
+<text x="72" y="783" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Easiest: add instances behind</text>
+<text x="72" y="814" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">a load balancer</text>
+<rect x="72" y="848" width="544" height="42" rx="6" fill="#F3F5F7" stroke="none" stroke-width="0"/>
+<text x="344.0" y="877" font-family="Courier New" font-size="25" font-weight="bold" fill="#1F2933" text-anchor="middle">--data-parallel-size 4</text>
+<rect x="664" y="150" width="592" height="754" rx="10" fill="#FFFFFF" stroke="#7B2F8E" stroke-width="3"/>
+<rect x="664" y="150" width="592" height="62" rx="10" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="664" y="190" width="592" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<text x="688" y="193" font-family="Arial" font-size="33" font-weight="bold" fill="#FFFFFF" text-anchor="start">Tensor parallel</text>
+<text x="1232" y="192" font-family="Arial" font-size="25" font-weight="normal" fill="#FFFFFF" text-anchor="end">Split every layer</text>
+<rect x="676" y="288" width="568" height="244" rx="8" fill="#F3F5F7" stroke="#9AA5B1" stroke-width="2"/>
+<text x="960.0" y="522" font-family="Arial" font-size="19" font-weight="normal" fill="#52606D" text-anchor="middle">one g6.12xlarge instance</text>
+<rect x="689.0" y="226" width="542.0" height="46" rx="6" fill="#FFFFFF" stroke="#7B2F8E" stroke-width="2"/>
+<text x="960.0" y="257" font-family="Arial" font-size="22" font-weight="bold" fill="#1F2933" text-anchor="middle">One engine: all 4 cards work on every step</text>
+<rect x="689.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="744.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="695.5" y="341" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="720.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="745.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="770.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="695.5" y="366" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="720.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="745.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="770.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="695.5" y="391" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="720.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="745.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="770.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="695.5" y="416" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="720.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="745.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="770.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="833.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="888.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="839.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="864.5" y="341" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="889.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="914.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="839.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="864.5" y="366" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="889.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="914.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="839.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="864.5" y="391" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="889.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="914.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="839.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="864.5" y="416" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="889.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="914.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="977.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1032.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="983.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1008.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1033.5" y="341" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1058.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="983.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1008.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1033.5" y="366" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1058.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="983.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1008.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1033.5" y="391" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1058.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="983.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1008.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1033.5" y="416" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1058.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1121.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1176.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="1127.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1152.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1177.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1202.5" y="341" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1127.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1152.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1177.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1202.5" y="366" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1127.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1152.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1177.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1202.5" y="391" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<rect x="1127.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1152.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1177.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1202.5" y="416" width="22" height="22" rx="0" fill="#7B2F8E" stroke="none" stroke-width="0"/>
+<line x1="744.0" y1="272" x2="744.0" y2="293" stroke="#7B2F8E" stroke-width="3"/>
+<polygon points="744.0,306 735.0,292.5 753.0,292.5" fill="#7B2F8E"/>
+<line x1="888.0" y1="272" x2="888.0" y2="293" stroke="#7B2F8E" stroke-width="3"/>
+<polygon points="888.0,306 879.0,292.5 897.0,292.5" fill="#7B2F8E"/>
+<line x1="1032.0" y1="272" x2="1032.0" y2="293" stroke="#7B2F8E" stroke-width="3"/>
+<polygon points="1032.0,306 1023.0,292.5 1041.0,292.5" fill="#7B2F8E"/>
+<line x1="1176.0" y1="272" x2="1176.0" y2="293" stroke="#7B2F8E" stroke-width="3"/>
+<polygon points="1176.0,306 1167.0,292.5 1185.0,292.5" fill="#7B2F8E"/>
+<line x1="744.0" y1="464" x2="1176.0" y2="464" stroke="#7B2F8E" stroke-width="5"/>
+<line x1="744.0" y1="446" x2="744.0" y2="464" stroke="#7B2F8E" stroke-width="5"/>
+<line x1="888.0" y1="446" x2="888.0" y2="464" stroke="#7B2F8E" stroke-width="5"/>
+<line x1="1032.0" y1="446" x2="1032.0" y2="464" stroke="#7B2F8E" stroke-width="5"/>
+<line x1="1176.0" y1="446" x2="1176.0" y2="464" stroke="#7B2F8E" stroke-width="5"/>
+<text x="960.0" y="493" font-family="Arial" font-size="21" font-weight="bold" fill="#7B2F8E" text-anchor="middle">All-reduce over PCIe, for every layer</text>
+<text x="688" y="564" font-family="Arial" font-size="21" font-weight="bold" fill="#7B2F8E" text-anchor="start">Largest model</text>
+<text x="688" y="595" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Under 96 GB in total: each card holds</text>
+<text x="688" y="626" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">a quarter of every layer</text>
+<text x="688" y="658" font-family="Arial" font-size="21" font-weight="bold" fill="#7B2F8E" text-anchor="start">Speed</text>
+<text x="688" y="689" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Well under 4×: every layer waits</text>
+<text x="688" y="720" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">on all-reduce over PCIe</text>
+<text x="688" y="752" font-family="Arial" font-size="21" font-weight="bold" fill="#7B2F8E" text-anchor="start">Across instances</text>
+<text x="688" y="783" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Avoid: NCCL over TCP is inefficient.</text>
+<text x="688" y="814" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Stay inside one instance.</text>
+<rect x="688" y="848" width="544" height="42" rx="6" fill="#F3F5F7" stroke="none" stroke-width="0"/>
+<text x="960.0" y="877" font-family="Courier New" font-size="25" font-weight="bold" fill="#1F2933" text-anchor="middle">--tensor-parallel-size 4</text>
+<rect x="1280" y="150" width="592" height="754" rx="10" fill="#FFFFFF" stroke="#A85400" stroke-width="3"/>
+<rect x="1280" y="150" width="592" height="62" rx="10" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1280" y="190" width="592" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<text x="1304" y="193" font-family="Arial" font-size="33" font-weight="bold" fill="#FFFFFF" text-anchor="start">Pipeline parallel</text>
+<text x="1848" y="192" font-family="Arial" font-size="25" font-weight="normal" fill="#FFFFFF" text-anchor="end">Split by layers</text>
+<rect x="1292" y="288" width="568" height="244" rx="8" fill="#F3F5F7" stroke="#9AA5B1" stroke-width="2"/>
+<text x="1576.0" y="522" font-family="Arial" font-size="19" font-weight="normal" fill="#52606D" text-anchor="middle">one g6.12xlarge instance</text>
+<rect x="1305.0" y="226" width="542.0" height="46" rx="6" fill="#FFFFFF" stroke="#A85400" stroke-width="2"/>
+<text x="1576.0" y="257" font-family="Arial" font-size="22" font-weight="bold" fill="#1F2933" text-anchor="middle">One engine: 4 stages, batches in flight</text>
+<rect x="1305.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1360.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="1311.5" y="341" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1336.5" y="341" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1361.5" y="341" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1386.5" y="341" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1311.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1336.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1361.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1386.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1311.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1336.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1361.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1386.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1311.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1336.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1361.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1386.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1449.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1504.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="1455.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1480.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1505.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1530.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1455.5" y="366" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1480.5" y="366" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1505.5" y="366" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1530.5" y="366" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1455.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1480.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1505.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1530.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1455.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1480.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1505.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1530.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1593.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1648.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="1599.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1624.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1649.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1674.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1599.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1624.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1649.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1674.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1599.5" y="391" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1624.5" y="391" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1649.5" y="391" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1674.5" y="391" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1599.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1624.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1649.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1674.5" y="416" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1737.0" y="306" width="110" height="140" rx="6" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+<text x="1792.0" y="331" font-family="Arial" font-size="19" font-weight="bold" fill="#1F2933" text-anchor="middle">L4, 24 GB</text>
+<rect x="1743.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1768.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1793.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1818.5" y="341" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1743.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1768.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1793.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1818.5" y="366" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1743.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1768.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1793.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1818.5" y="391" width="22" height="22" rx="0" fill="#DDE2E7" stroke="none" stroke-width="0"/>
+<rect x="1743.5" y="416" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1768.5" y="416" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1793.5" y="416" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<rect x="1818.5" y="416" width="22" height="22" rx="0" fill="#A85400" stroke="none" stroke-width="0"/>
+<line x1="1360.0" y1="272" x2="1360.0" y2="293" stroke="#A85400" stroke-width="3"/>
+<polygon points="1360.0,306 1351.0,292.5 1369.0,292.5" fill="#A85400"/>
+<line x1="1792.0" y1="306" x2="1792.0" y2="285" stroke="#A85400" stroke-width="3"/>
+<polygon points="1792.0,272 1783.0,285.5 1801.0,285.5" fill="#A85400"/>
+<line x1="1415.0" y1="376.0" x2="1435.0" y2="376.0" stroke="#A85400" stroke-width="4"/>
+<polygon points="1448.0,376.0 1434.5,367.0 1434.5,385.0" fill="#A85400"/>
+<line x1="1559.0" y1="376.0" x2="1579.0" y2="376.0" stroke="#A85400" stroke-width="4"/>
+<polygon points="1592.0,376.0 1578.5,367.0 1578.5,385.0" fill="#A85400"/>
+<line x1="1703.0" y1="376.0" x2="1723.0" y2="376.0" stroke="#A85400" stroke-width="4"/>
+<polygon points="1736.0,376.0 1722.5,367.0 1722.5,385.0" fill="#A85400"/>
+<text x="1576.0" y="493" font-family="Arial" font-size="21" font-weight="bold" fill="#A85400" text-anchor="middle">Hidden states hop once per stage</text>
+<text x="1304" y="564" font-family="Arial" font-size="21" font-weight="bold" fill="#A85400" text-anchor="start">Largest model</text>
+<text x="1304" y="595" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Under 96 GB in total, and every</text>
+<text x="1304" y="626" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">stage must fit its own 24 GB</text>
+<text x="1304" y="658" font-family="Arial" font-size="21" font-weight="bold" fill="#A85400" text-anchor="start">Speed</text>
+<text x="1304" y="689" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">More throughput: several batches</text>
+<text x="1304" y="720" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">in flight. Each request runs no faster.</text>
+<text x="1304" y="752" font-family="Arial" font-size="21" font-weight="bold" fill="#A85400" text-anchor="start">Across instances</text>
+<text x="1304" y="783" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">Combine: tensor parallel inside each</text>
+<text x="1304" y="814" font-family="Arial" font-size="25" font-weight="normal" fill="#1F2933" text-anchor="start">instance, pipeline parallel between</text>
+<rect x="1304" y="848" width="544" height="42" rx="6" fill="#F3F5F7" stroke="none" stroke-width="0"/>
+<text x="1576.0" y="877" font-family="Courier New" font-size="25" font-weight="bold" fill="#1F2933" text-anchor="middle">--pipeline-parallel-size 4</text>
+<rect x="48" y="916" width="592" height="106" rx="10" fill="#1F2933" stroke="none" stroke-width="0"/>
+<circle cx="82" cy="969" r="20" fill="#FFFFFF"/>
+<text x="82" y="978" font-family="Arial" font-size="26" font-weight="bold" fill="#1F2933" text-anchor="middle">1</text>
+<text x="116" y="946" font-family="Arial" font-size="25" font-weight="bold" fill="#FFFFFF" text-anchor="start">Fits on one card, with its KV cache?</text>
+<text x="116" y="977" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">Data parallel: simplest, and the most</text>
+<text x="116" y="1006" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">throughput per card</text>
+<rect x="664" y="916" width="592" height="106" rx="10" fill="#1F2933" stroke="none" stroke-width="0"/>
+<circle cx="698" cy="969" r="20" fill="#FFFFFF"/>
+<text x="698" y="978" font-family="Arial" font-size="26" font-weight="bold" fill="#1F2933" text-anchor="middle">2</text>
+<text x="732" y="946" font-family="Arial" font-size="25" font-weight="bold" fill="#FFFFFF" text-anchor="start">Too big? Try quantising first</text>
+<text x="732" y="977" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">Gemma 4 12B: 23.9 GB in BF16 needs two</text>
+<text x="732" y="1006" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">cards; 10.3 GB in W4A16 fits on one</text>
+<rect x="1280" y="916" width="592" height="106" rx="10" fill="#1F2933" stroke="none" stroke-width="0"/>
+<circle cx="1314" cy="969" r="20" fill="#FFFFFF"/>
+<text x="1314" y="978" font-family="Arial" font-size="26" font-weight="bold" fill="#1F2933" text-anchor="middle">3</text>
+<text x="1348" y="946" font-family="Arial" font-size="25" font-weight="bold" fill="#FFFFFF" text-anchor="start">Still too big?</text>
+<text x="1348" y="977" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">Pipeline parallel (vLLM's advice without</text>
+<text x="1348" y="1006" font-family="Arial" font-size="23" font-weight="normal" fill="#FFFFFF" text-anchor="start">NVLink); tensor parallel as the fallback</text>
+<text x="48" y="1056" font-family="Arial" font-size="18" font-weight="normal" fill="#52606D" text-anchor="start">AWS lists each L4 as 22 GiB, the same capacity as 24 GB. Sources: AWS EC2 instance-type docs, NVIDIA L4 specifications, vLLM parallelism docs (read 5 November 2026).</text>
+</svg>

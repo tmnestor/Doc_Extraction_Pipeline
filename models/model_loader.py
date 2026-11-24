@@ -6,8 +6,8 @@ into a ``DocumentOrchestrator``.
 
 Usage:
     register_vllm_model(VllmSpec(
-        model_type="internvl3-vllm",
-        prompt_file="internvl3_prompts.yaml",
+        model_type="gemma4-31b-w4a16-vllm",
+        prompt_file="extraction_prompts.yaml",
     ))
 """
 
@@ -28,89 +28,56 @@ class VllmSpec:
 
     Holds only *structural* fields. Engine tuning (gpu_memory_utilization,
     max_model_len, max_num_seqs, limit_mm_per_prompt, enable_prefix_caching)
-    lives in ``config/run_config.yml`` under ``inference.vllm:`` — the YAML is the
+    lives in ``config/run_config.yml`` under ``inference.vllm:``. The YAML is the
     single source of truth and is resolved at load time via
     ``app_config.get_vllm_config(model_type)``.
     """
 
     model_type: str
-    prompt_file: str = "internvl3_prompts.yaml"
+    prompt_file: str = "extraction_prompts.yaml"
     description: str = ""
     attention_backend: str | None = None  # None = vLLM auto-selects
     mm_processor_kwargs: dict[str, Any] = field(default_factory=dict)
     hf_overrides: dict[str, Any] = field(default_factory=dict)
+    # Forwarded to every engine.chat() call. Suppresses a thinking-by-default
+    # chat template (e.g. Gemma 4: {"enable_thinking": False}). A model whose
+    # template ignores that flag needs bootstrap.model.chat_template instead.
     chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
+
+    # -- Capabilities: properties of the MODEL, so they live in code, not YAML --
+    # (Operator *intent* stays in run_config.yml; what a checkpoint can physically
+    # do is structural, same rationale as attention_backend above.)
+
+    # False for models too large to hold one whole engine per GPU: the DP fast
+    # path would start N independent engines and OOM.
+    supports_data_parallel: bool = True
+    # Whether a request puts the image before the text. The model's chat template renders the two
+    # in the order given, so this is part of what the model is sent. Each registration states it.
+    default_image_first: bool = False
 
 
 def _resolve_vllm_overrides(app_config: Any | None, model_type: str) -> dict[str, Any]:
-    """Resolve per-model vLLM engine tuning from the runtime AppConfig.
+    """Resolve per-model vLLM engine tuning from the runtime Settings.
 
-    The YAML is the single source of truth — there is no spec-level or Python
-    fallback, so an AppConfig is mandatory for vLLM loads.
+    The YAML is the single source of truth: there is no spec-level or Python
+    fallback, so an Settings is mandatory for vLLM loads.
 
     Raises:
         ValueError: If *app_config* is None, with a four-element diagnostic.
     """
     if app_config is None:
         raise ValueError(
-            f"vLLM model load requires an AppConfig, but none was provided for "
+            f"vLLM model load requires an Settings, but none was provided for "
             f"model_type={model_type!r}.\n"
             "  What:  load_model() was called without app_config= for a vLLM backend; "
             "per-model engine tuning has no Python fallback.\n"
             "  Where: the caller of common.pipeline_ops.load_model (a stage, worker, or "
             "benchmark script), plus the `vllm:` section of config/run_config.yml.\n"
-            "  Example: load_model(config, app_config=app_cfg)  # app_cfg = AppConfig.load(...)\n"
-            "  Fix:   thread the AppConfig already in scope into load_model; scripts that "
+            "  Example: load_model(config, app_config=app_cfg)  # app_cfg = Settings.load(...)\n"
+            "  Fix:   thread the Settings already in scope into load_model; scripts that "
             "call registration.loader() directly must pass loader(cfg, app_config=app_cfg)."
         ) from None
     return app_config.get_vllm_config(model_type)
-
-
-def ensure_corrected_tokenizer(model_path: str) -> str:
-    """Return a path to a ``fix_mistral_regex``-corrected copy of the tokenizer.
-
-    InternVL3.5 ships a Mistral-based tokenizer whose default pre-tokenizer regex
-    mis-splits runs of whitespace and digits (transformers warns at load and
-    advises ``fix_mistral_regex=True``). On dense bank statements — whitespace-
-    aligned, digit-heavy amount columns — that corrupts amount tokenization.
-
-    vLLM loads its tokenizer internally in BOTH the front-end and every spawned
-    EngineCore child, and exposes no kwarg to set the flag, so a load-time
-    monkeypatch cannot reach the child. Instead we bake the corrected regex into a
-    tokenizer saved to disk once and hand vLLM that directory via
-    ``LLM(tokenizer=...)``; every process then loads the already-fixed files.
-
-    Idempotent and concurrency-safe: the corrected copy is written to a private
-    temp dir and atomically renamed into place, so the parallel DP workers that
-    each call this can't corrupt a shared cache. Cached under
-    ``$LMM_TOKENIZER_CACHE`` (default ``~/.cache/lmm_poc_tokenizers/<model-name>``)
-    and reused across loads — the source model dir is typically read-only NFS, so
-    we never write next to it. ``entrypoint.sh`` pre-warms this once before the
-    workers spawn; this function is also safe to call directly.
-    """
-    import os
-    import shutil
-    from pathlib import Path
-
-    cache_root = os.environ.get("LMM_TOKENIZER_CACHE") or str(Path.home() / ".cache" / "lmm_poc_tokenizers")
-    out_dir = Path(cache_root) / Path(model_path).name
-    if (out_dir / "tokenizer_config.json").exists():
-        return str(out_dir)
-
-    from transformers import AutoTokenizer
-
-    tok = AutoTokenizer.from_pretrained(
-        model_path, use_fast=True, fix_mistral_regex=True, trust_remote_code=True
-    )
-    tmp_dir = out_dir.parent / f".{out_dir.name}.tmp.{os.getpid()}"
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tok.save_pretrained(str(tmp_dir))
-    try:
-        os.replace(tmp_dir, out_dir)  # atomic; loses harmlessly if a racer won
-    except OSError:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-    return str(out_dir)
 
 
 def build_vllm_loader(spec: VllmSpec):
@@ -157,15 +124,15 @@ def build_vllm_loader(spec: VllmSpec):
                 tp_size = max(1, tp_size)
 
                 # All engine tuning comes from app_config (YAML single source of
-                # truth). No spec-level fallback — a vLLM model MUST be loaded
-                # with an AppConfig. Keys are required, not optional, per the
+                # truth). No spec-level fallback: a vLLM model MUST be loaded
+                # with an Settings. Keys are required, not optional, per the
                 # "every config key is required" rule.
                 vllm_overrides = _resolve_vllm_overrides(app_config, spec.model_type)
 
                 # gpu_memory_utilization precedence: env var > YAML.
                 gpu_mem_util = float(
                     os.environ.get(
-                        "LMM_GPU_MEMORY_UTILIZATION",
+                        "DOC_EXTRACT_GPU_MEMORY_UTILIZATION",
                         vllm_overrides["gpu_memory_utilization"],
                     )
                 )
@@ -174,35 +141,9 @@ def build_vllm_loader(spec: VllmSpec):
                 effective_enable_prefix_caching = vllm_overrides["enable_prefix_caching"]
                 effective_limit_mm = vllm_overrides["limit_mm_per_prompt"]
 
-                # Pre-tiling hands vLLM one image PER tile (plus a thumbnail), so
-                # limit_mm_per_prompt must admit the largest per-doc-type tile
-                # budget + 1. Fail fast here — otherwise vLLM silently drops the
-                # extra sub-images and the dense bank statements stay under-tiled.
-                if cfg.pre_tiling_enabled and "internvl" in spec.model_type:
-                    max_budget = app_config.max_image_budget_tiles()
-                    needed = max_budget + 1  # tiles + thumbnail
-                    if effective_limit_mm < needed:
-                        raise ValueError(
-                            "What: pre-tiling is enabled but "
-                            f"inference.vllm.models.{spec.model_type}.limit_mm_per_prompt="
-                            f"{effective_limit_mm} is too low — pre-tiling sends one "
-                            f"image per tile, and the largest image budget is "
-                            f"{max_budget} tiles (+1 thumbnail = {needed}).\n"
-                            f"  Where: config/run_config.yml -> inference.vllm.models."
-                            f"{spec.model_type}.limit_mm_per_prompt (and inference.tiling.budgets.*.max_tiles)\n"
-                            f"  Expected: limit_mm_per_prompt >= {needed}, e.g.:\n"
-                            f"    inference:\n      vllm:\n        models:\n"
-                            f"          {spec.model_type}:\n"
-                            f"            limit_mm_per_prompt: {needed}\n"
-                            f"  How to fix: raise limit_mm_per_prompt to at least "
-                            f"{needed} for {spec.model_type}, or set "
-                            f"inference.tiling.pre_tiling.enabled: "
-                            f"false to run the single-image baseline."
-                        ) from None
-
                 # max_num_seqs is printed because it is the ceiling on
                 # concurrency and there is otherwise NO way to tell from a run
-                # whether the configured value reached the engine — vLLM's own
+                # whether the configured value reached the engine: vLLM's own
                 # startup lines are INFO, and entrypoint.sh suppresses those.
                 console.print(
                     f"\n[bold]Loading {spec.model_type} via vLLM "
@@ -214,10 +155,10 @@ def build_vllm_loader(spec: VllmSpec):
                     f"[dim]enforce_eager: {cfg.enforce_eager} "
                     f"({'skip CUDA graphs' if cfg.enforce_eager else 'CUDA graphs enabled'})[/dim]"
                 )
-                if os.environ.get("LMM_GPU_MEMORY_UTILIZATION"):
+                if os.environ.get("DOC_EXTRACT_GPU_MEMORY_UTILIZATION"):
                     console.print(
                         f"[dim]gpu_memory_utilization: {gpu_mem_util} "
-                        f"(from LMM_GPU_MEMORY_UTILIZATION env var)[/dim]"
+                        f"(from DOC_EXTRACT_GPU_MEMORY_UTILIZATION env var)[/dim]"
                     )
                 elif vllm_overrides.get("gpu_memory_utilization") is not None:
                     console.print(f"[dim]gpu_memory_utilization: {gpu_mem_util} (from app_config)[/dim]")
@@ -235,24 +176,6 @@ def build_vllm_loader(spec: VllmSpec):
                     "enable_prefix_caching": effective_enable_prefix_caching,
                 }
 
-                # InternVL3.5's Mistral tokenizer ships a buggy whitespace/digit
-                # regex; hand vLLM a fix_mistral_regex-corrected copy on disk so
-                # BOTH the front-end and every EngineCore child load the fixed
-                # tokenizer (a load-time patch can't reach the spawned child).
-                # entrypoint.sh pre-warms this cache before the workers spawn;
-                # the call here is the idempotent fallback for un-warmed runs.
-                # Best-effort: a degraded (buggy-regex) tokenizer still runs, so a
-                # build hiccup must not brick a prod engine load — log and proceed.
-                if "internvl" in spec.model_type:
-                    try:
-                        llm_kwargs["tokenizer"] = ensure_corrected_tokenizer(str(cfg.model_path))
-                    except Exception as exc:  # noqa: BLE001 - degraded tokenizer beats a dead engine
-                        console.print(
-                            f"[yellow]WARNING: could not build fix_mistral_regex tokenizer "
-                            f"({exc}); loading the model's own tokenizer — the whitespace/"
-                            f"digit regex bug remains.[/yellow]"
-                        )
-
                 if spec.attention_backend is not None:
                     llm_kwargs["attention_backend"] = spec.attention_backend
 
@@ -264,15 +187,15 @@ def build_vllm_loader(spec: VllmSpec):
                     llm_kwargs["mm_processor_kwargs"] = effective_mm_proc
 
                 # hf_overrides: spec defaults, then app_config (run_config) overlay.
-                # InternVL tile count (max_dynamic_patch) must be set HERE, by
-                # overriding the HF config field — NOT via mm_processor_kwargs,
-                # which vLLM forwards to the video processor constructor (which
-                # rejects it: InternVLVideoProcessor has no max_dynamic_patch).
                 effective_hf = dict(spec.hf_overrides) if spec.hf_overrides else {}
                 if vllm_overrides.get("hf_overrides"):
                     effective_hf.update(vllm_overrides["hf_overrides"])
                 if effective_hf:
                     llm_kwargs["hf_overrides"] = effective_hf
+                if effective_mm_proc or effective_hf:
+                    console.print(
+                        f"[dim]mm_processor_kwargs: {effective_mm_proc}; hf_overrides: {effective_hf}[/dim]"
+                    )
 
                 llm = LLM(**llm_kwargs)
 
@@ -295,52 +218,56 @@ def build_vllm_processor_creator(spec: VllmSpec):
         model,
         tokenizer_or_processor,
         config,
-        prompt_config,
         universal_fields,
         field_definitions,
         *,
         app_config=None,
     ):
-        # debug=config.debug → Tier C; verbose=config.verbose → Tier B. See
-        # `plans/quiet-pipeline-output.md` for the split.
         backend = VllmBackend(
             engine=model,
             model_type_key=spec.model_type,
             chat_template=config.chat_template,
+            chat_template_kwargs=spec.chat_template_kwargs,
+            default_image_first=spec.default_image_first,
             trace_path=effective_trace_path(config),
-            pre_tiling_enabled=config.pre_tiling_enabled,
-            tile_image_size=config.pre_tiling_image_size,
-            tile_use_thumbnail=config.pre_tiling_use_thumbnail,
             debug=config.debug,
         )
 
         return DocumentOrchestrator(
             backend=backend,
             field_list=universal_fields,
-            prompt_config=prompt_config,
             field_definitions=field_definitions,
             debug=config.debug,
             verbose=config.verbose,
             device=str(config.device_map),
-            batch_size=config.batch_size,
             model_type_key=spec.model_type,
             app_config=app_config,
-            has_oom_recovery=False,
         )
 
     return _creator
 
 
+# Registered specs, keyed by model_type. ``register_model`` stores loaders and
+# processor creators built from a spec via closures, so without this map a spec's
+# declared capabilities (chat_template_kwargs,
+# default_image_first) are unreachable once registration has happened. That
+# matters because those capabilities fail QUIETLY: a model that reasons when it
+# should not still returns a parseable response.
+_VLLM_SPECS: dict[str, VllmSpec] = {}
+
+
 def register_vllm_model(spec: VllmSpec) -> None:
     """Register a vLLM model with the registry.
 
-    Per-model engine tuning is resolved from the runtime AppConfig at load
+    Per-model engine tuning is resolved from the runtime Settings at load
     time (see ``build_vllm_loader``), so no config is captured at registration.
 
     Args:
         spec: Declarative vLLM model specification.
     """
     from models.registry import ModelRegistration, register_model
+
+    _VLLM_SPECS[spec.model_type] = spec
 
     register_model(
         ModelRegistration(
@@ -351,5 +278,6 @@ def register_vllm_model(spec: VllmSpec) -> None:
             description=spec.description,
             requires_sharding=True,
             is_vllm=True,
+            supports_data_parallel=spec.supports_data_parallel,
         )
     )

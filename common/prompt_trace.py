@@ -1,14 +1,12 @@
 """Raw VLM prompt/response trace -- one JSONL line per extraction call.
 
-Single-seam observability: ``VllmBackend`` records every ``generate()`` /
-``generate_for_graph()`` call here, so the trace covers *every* extraction
-prompt across *every* pipeline (classify, batch, graph-robust, trust,
-transaction-link) without per-stage plumbing.
+Single-seam observability: ``VllmBackend`` records every ``generate()`` call here, so the trace covers *every* extraction
+prompt across *every* pipeline (classify, extract) without per-stage plumbing.
 
 Callers may set per-call context (``image_name``, ``pipeline``, ``label``) via
 ``trace_context()``; because it uses ``contextvars``, setting ``image_name``
-once per image at a stage loop propagates to every nested VLM call (detection,
-bank turns, graph nodes).
+once per image at a stage loop propagates to every nested VLM call (classification,
+extraction).
 
 Disabled by default: with no sink configured, ``record()`` is a cheap no-op.
 """
@@ -37,12 +35,6 @@ def enable(path: str | Path) -> None:
     _sink_path = p
 
 
-def disable() -> None:
-    """Disable tracing (subsequent ``record()`` calls are no-ops)."""
-    global _sink_path
-    _sink_path = None
-
-
 def is_enabled() -> bool:
     return _sink_path is not None
 
@@ -53,7 +45,7 @@ def trace_context(**fields: Any):
 
     Example::
 
-        with trace_context(image_name="CASE012_westpac_premium.png", pipeline="transaction_link"):
+        with trace_context(image_name="CASE012_westpac_premium.png", pipeline="extract"):
             ...  # every VLM call inside inherits these fields
     """
     base = _CTX.get()
@@ -96,7 +88,7 @@ def record(
 
 
 def effective_trace_path(config: Any) -> str | None:
-    """Resolve the trace path for a ``PipelineConfig``-like object, or None.
+    """Resolve the trace path for a ``Settings``-like object, or None.
 
     Returns None when ``trace_raw_prompts`` is false. When enabled, uses
     ``trace_path`` if set, else ``<output_dir>/raw_prompt_trace.jsonl``.

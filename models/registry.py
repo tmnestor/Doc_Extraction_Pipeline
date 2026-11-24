@@ -18,11 +18,11 @@ class ModelRegistration:
     """Registration entry for a vision-language model.
 
     Attributes:
-        model_type: Short identifier, e.g. "internvl3".
-        loader: Callable(PipelineConfig) -> ContextManager[(model, tokenizer)].
-        processor_creator: Callable(model, tokenizer, config, prompt_config,
-                           universal_fields, field_definitions) -> DocumentProcessor.
-        prompt_file: Extraction prompt YAML filename, e.g. "internvl3_prompts.yaml".
+        model_type: The name a task asks for, e.g. "gemma4-31b-w4a16-vllm".
+        loader: Callable(Settings) -> ContextManager[(model, tokenizer)].
+        processor_creator: Callable(model, tokenizer, config, universal_fields,
+                           field_definitions) -> DocumentProcessor.
+        prompt_file: Extraction prompt YAML filename, e.g. "extraction_prompts.yaml".
         description: Human-readable description for help text.
     """
 
@@ -33,6 +33,8 @@ class ModelRegistration:
     description: str = ""
     requires_sharding: bool = False  # True = model must shard across GPUs (keep device_map="auto")
     is_vllm: bool = False  # True = vLLM backend (eligible for data-parallel)
+    # False = one whole engine per GPU won't fit; the DP fast path must not fire.
+    supports_data_parallel: bool = True
 
 
 _REGISTRY: dict[str, ModelRegistration] = {}
@@ -58,7 +60,7 @@ def get_model(model_type: str) -> ModelRegistration:
             "selects the model); a typo or a retired model name here is the usual cause.\n"
             f"  Expected: one of the registered types: {available}\n"
             "  How to fix: set bootstrap.model.type in config/run_config.yml to a registered "
-            "value (e.g. bootstrap:\\n  model:\\n    type: internvl3-vllm)."
+            "value (e.g. bootstrap:\\n  model:\\n    type: gemma4-31b-w4a16-vllm)."
         )
     return _REGISTRY[model_type]
 
@@ -68,16 +70,15 @@ def list_models() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def is_vllm_model(model_type: str) -> bool:
-    """Check if a registered model uses the vLLM backend."""
-    reg = _REGISTRY.get(model_type)
-    return reg is not None and reg.is_vllm
+def supports_data_parallel(model_type: str) -> bool:
+    """Check whether *model_type* can run one independent engine per GPU.
 
-
-def _get_requires_sharding(model_type: str) -> bool:
-    """Check if a registered model requires cross-GPU sharding."""
+    False for models too large to replicate per GPU (a quantised 31B still wants
+    the whole card once KV cache and vision activations are counted). Unknown
+    types answer True: ``get_model()`` is the place that rejects them.
+    """
     reg = _REGISTRY.get(model_type)
-    return reg.requires_sharding if reg else False
+    return reg.supports_data_parallel if reg else True
 
 
 # ============================================================================
@@ -88,28 +89,61 @@ def _get_requires_sharding(model_type: str) -> bool:
 
 from models.model_loader import VllmSpec, register_vllm_model  # noqa: E402
 
-# -- vLLM models -----------------------------------------------------------------
-
+# -- Gemma 4 31B -----------------------------------------------------------------
+# Google's own QAT W4A16 checkpoint (compressed-tensors), which vLLM loads natively:
+# 23,265,352,448 B = 21.67 GiB on disk. The vision embedder is excluded from
+# quantisation, which is why it is not the 18 GB a plain 4-bit estimate gives.
+#
+# 21.67 GiB does not fit one 24 GiB L4 (about 22.5 usable), so this runs as ONE
+# engine split across both cards (tp=2), over PCIe with no NVLink. Throughput
+# measured that way is less than the model would give on one adequate card.
+#
+# Engine tuning (soft-token budget, max_model_len, gpu_memory_utilization) lives in
+# run_config.yml under inference.vllm.models. Only capabilities are stated here.
 register_vllm_model(
     VllmSpec(
-        model_type="internvl3-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-8B via vLLM (PagedAttention, no flash-attn required)",
+        model_type="gemma4-31b-w4a16-vllm",
+        prompt_file="extraction_prompts.yaml",
+        description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
+        # Thinking off. This model's chat template takes a request without the argument as
+        # thinking off too (rendered both ways on 21 November 2026), so this states the default.
+        chat_template_kwargs={"enable_thinking": False},
+        # The weights exceed a single card, so one engine on each card is
+        # impossible and the data-parallel path must not be taken.
+        supports_data_parallel=False,
+        # The text before the image, for every task. The model card's examples put the image first,
+        # but that order was measured on receipts and invoices on 24 November 2026 and cost 16% of
+        # extract time for no gain: with the text first the engine reuses its work on the prompt
+        # from one page to the next.
+        default_image_first=False,
     )
 )
 
+# -- Gemma 4 12B, quantised by its maker ---------------------------------------------
+# Gemma 4 12B "Unified", Google's QAT W4A16 (compressed-tensors). A different
+# architecture from the 31B, not only a smaller size: Gemma4UnifiedForConditionalGeneration
+# is encoder-free and projects raw image patches straight into the embedding space.
+# Verified 2026-08-11 against the checkpoint's own config.json. Needs vLLM >= 0.23.0.
+#
+# 10,264,229,896 bytes (9.56 GiB), not the 6 GB a plain 4-bit estimate gives: the
+# quantisation ignore list excludes the vision embedder, the patch dense layers and
+# lm_head.
+#
+# At 9.56 GiB of about 22.5 GiB a card, one WHOLE engine fits on each GPU, so
+# supports_data_parallel is True and run_dp starts one engine on each L4 (tp=1 each).
+# That path uses no NCCL and no /dev/shm (see common/vllm_dp.py).
+#
+# Thinking is opt-in on this model, enabled by a `<|think|>` token at the start of a
+# system prompt. This pipeline sends a bare user message with no system prompt, so
+# thinking is already off; enable_thinking=False is belt and braces.
 register_vllm_model(
     VllmSpec(
-        model_type="internvl3-14b-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-14B via vLLM (~30 GB BF16)",
-    )
-)
-
-register_vllm_model(
-    VllmSpec(
-        model_type="internvl3-38b-vllm",
-        prompt_file="internvl3_prompts.yaml",
-        description="InternVL3.5-38B via vLLM (~77 GB BF16)",
+        model_type="gemma4-12b-unified-w4a16-vllm",
+        prompt_file="extraction_prompts.yaml",
+        description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
+        chat_template_kwargs={"enable_thinking": False},
+        supports_data_parallel=True,
+        # The text before the image, as for the 31B and for the reason given there.
+        default_image_first=False,
     )
 )

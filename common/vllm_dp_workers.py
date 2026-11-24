@@ -1,19 +1,69 @@
-"""vLLM data-parallel worker functions.
+"""Workers for an engine on each card.
 
-Each function is a top-level callable invoked in a subprocess by
-``vllm_dp.run_dp``. Workers build their own vLLM engine (TP=1)
-inside a process pinned to a single GPU via CUDA_VISIBLE_DEVICES.
+``vllm_dp.run_dp`` starts one process for each card and calls one of these functions in it, by name, with
+that card's share of the pages. A worker does three things: it loads the run's settings and the model on
+its card, it calls the stage's own reading function on its share, and it hands the records back.
 
-All arguments must be picklable (strings, dicts, ints -- no model
-objects, no Path objects across the process boundary).
+What is read, and how pages are grouped into engine calls, is the stage's business and is not repeated
+here. One engine across the cards calls the same reading functions, so the two arrangements cannot come to
+differ.
+
+Everything passed in is plain data (text, numbers, lists, dicts), since it crosses a process boundary.
 """
 
 import logging
-import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from common.settings import Settings
+from stages.classify import classify_pages
+from stages.extract import extract_pages
+from stages.sroie import read_sroie
+
 logger = logging.getLogger(__name__)
+
+
+def _on_card(
+    gpu_id: int,
+    config_path: str | None,
+    cli_overrides: dict[str, Any],
+    read: Callable[[Any, Settings], list[dict[str, Any]]],
+    *,
+    stage: str | None = None,
+) -> list[dict[str, Any]]:
+    """Load the model on this card, read with it, and hand the records back marked with the card.
+
+    Args:
+        gpu_id: The card's number, for the log and for the records.
+        config_path: Path to the settings file, or None for the shipped one.
+        cli_overrides: The settings the stage was started with, over the file's.
+        read: Given the document processor and the settings, returns this card's records.
+        stage: A stage whose engine settings differ from the model's own, if this is one.
+
+    Returns:
+        The records ``read`` returned. Each carries the card's number, so that the parent can report the
+        slowest card's time: the cards work at once, and adding their times would give the work done, not
+        the time taken.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
+    )
+    from common.pipeline_ops import open_processor
+
+    # This process sees one card only.
+    app_config = Settings.load(
+        {**cli_overrides, "num_gpus": 1}, config_path=Path(config_path) if config_path else None
+    )
+    if stage is not None:
+        app_config = app_config.for_stage(stage)
+
+    with open_processor(app_config) as processor:
+        records = read(processor, app_config)
+    for record in records:
+        record["gpu_id"] = gpu_id
+    return records
 
 
 def classify_worker(
@@ -23,86 +73,15 @@ def classify_worker(
     config_path: str | None,
     cli_overrides: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Worker: build vLLM engine + processor, classify each image.
-
-    Args:
-        gpu_id: GPU rank (for logging).
-        image_paths: Absolute paths to images (strings).
-        config_path: Path to run_config.yml (or None).
-        cli_overrides: CLI args dict for AppConfig.load().
-
-    Returns:
-        List of classification record dicts.
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
+    """Classify this card's share of the pages."""
+    pages = [Path(path) for path in image_paths]
+    return _on_card(
+        gpu_id,
+        config_path,
+        cli_overrides,
+        lambda processor, app_config: classify_pages(processor, pages, app_config),
+        stage="classify",
     )
-
-    from cli import load_pipeline_configs
-    from common.app_config import AppConfig
-    from common.pipeline_ops import create_processor, load_model
-
-    # Force single-GPU in this worker
-    overrides = dict(cli_overrides)
-    overrides["num_gpus"] = 1
-
-    cfg_path = Path(config_path) if config_path else None
-    app_cfg = AppConfig.load(overrides, config_path=cfg_path)
-    config = app_cfg.pipeline
-
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-
-    logger.info("Loading model: %s (GPU %d)", config.model_type, gpu_id)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
-        )
-
-        records: list[dict[str, Any]] = []
-        for idx, image_path in enumerate(image_paths):
-            img_start = time.time()
-            result = processor.detect_and_classify_document(image_path, verbose=config.verbose)
-            image_name = Path(image_path).name
-            records.append(
-                {
-                    "image_path": image_path,
-                    "image_name": image_name,
-                    "document_type": result["document_type"],
-                    "confidence": result.get("confidence", 1.0),
-                    "raw_response": result.get("raw_response", ""),
-                    "prompt_used": result.get("prompt_used", "detection"),
-                    # Timed so the stage can report inference separately
-                    # from wall clock, which includes engine startup.
-                    "processing_time": time.time() - img_start,
-                }
-            )
-            logger.info(
-                "[%d/%d] %s -> %s",
-                idx + 1,
-                len(image_paths),
-                image_name,
-                result["document_type"],
-            )
-
-        # Tag every record with the rank that produced it. Workers run
-        # concurrently, so the parent needs this to report the SLOWEST
-        # worker's inference time — summing across workers would give total
-        # compute and understate throughput by roughly the GPU count.
-        for record in records:
-            record["gpu_id"] = gpu_id
-        return records
-    finally:
-        model_cm.__exit__(None, None, None)
 
 
 def extract_worker(
@@ -111,280 +90,34 @@ def extract_worker(
     *,
     config_path: str | None,
     cli_overrides: dict[str, Any],
-    workflow_name: str,
-    label: str,
+    classifications: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Worker: build vLLM engine + GraphExecutor, extract per image.
+    """Read the fields of this card's share of the pages.
 
-    Args:
-        gpu_id: GPU rank (for logging).
-        image_paths: Absolute paths to images (strings).
-        config_path: Path to run_config.yml (or None).
-        cli_overrides: CLI args dict for AppConfig.load().
-        workflow_name: YAML file under prompts/workflows/.
-        label: Label for prompt_used prefix.
-
-    Returns:
-        List of extraction record dicts.
+    Every worker is given every classification record and keeps those of its own pages, in the order the
+    stage put them in.
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
+    mine = set(image_paths)
+    share = [record for record in classifications if record["image_path"] in mine]
+    return _on_card(
+        gpu_id,
+        config_path,
+        cli_overrides,
+        lambda processor, app_config: extract_pages(processor, share, app_config),
     )
 
-    import yaml
 
-    from common.app_config import AppConfig
-    from common.graph_executor import GraphExecutor
-    from common.pipeline_ops import load_model
-    from common.prompt_trace import effective_trace_path
-    from common.turn_parsers import build_parser_registry
-    from models.backends.vllm_backend import VllmBackend
-
-    # Force single-GPU in this worker
-    overrides = dict(cli_overrides)
-    overrides["num_gpus"] = 1
-
-    cfg_path = Path(config_path) if config_path else None
-    app_cfg = AppConfig.load(overrides, config_path=cfg_path)
-    config = app_cfg.pipeline
-
-    logger.info("Loading model: %s (GPU %d)", config.model_type, gpu_id)
-    model_cm = load_model(config, app_config=app_cfg)
-    engine, _ = model_cm.__enter__()
-
-    try:
-        backend = VllmBackend(
-            engine,
-            model_type_key=config.model_type,
-            chat_template=config.chat_template,
-            trace_path=effective_trace_path(config),
-            pre_tiling_enabled=config.pre_tiling_enabled,
-            tile_image_size=config.pre_tiling_image_size,
-            tile_use_thumbnail=config.pre_tiling_use_thumbnail,
-        )
-        generate_fn = backend.generate_for_graph
-
-        workflow_path = Path(__file__).resolve().parent.parent / "prompts" / "workflows" / workflow_name
-        with workflow_path.open() as f:
-            definition = yaml.safe_load(f)
-
-        parsers = build_parser_registry(fallback_type=app_cfg.classification_fallback_type)
-        executor = GraphExecutor(generate_fn, parsers, budget_resolver=app_cfg.get_token_budget)
-
-        records: list[dict[str, Any]] = []
-        total = len(image_paths)
-
-        for idx, image_path in enumerate(image_paths):
-            image_name = Path(image_path).name
-            img_start = time.time()
-            doc_type = "UNKNOWN"
-
-            try:
-                session = executor.run(
-                    document_type="UNKNOWN",
-                    definition=definition,
-                    image_path=image_path,
-                    image_name=image_name,
-                )
-                record = session.to_record()
-                record["prompt_used"] = f"graph_{label}_{session.strategy}"
-                records.append(record)
-                doc_type = session.document_type
-            except Exception as e:
-                logger.error("Error processing %s: %s", image_name, e)
-                img_time = time.time() - img_start
-                records.append(
-                    {
-                        "image_name": image_name,
-                        "image_path": image_path,
-                        "document_type": "UNKNOWN",
-                        "raw_response": "",
-                        "processing_time": img_time,
-                        "prompt_used": "error",
-                        "error": str(e),
-                    }
-                )
-
-            img_time = time.time() - img_start
-            logger.info(
-                "[%d/%d] %s: %s (%.1fs)",
-                idx + 1,
-                total,
-                image_name,
-                doc_type,
-                img_time,
-            )
-
-        # Tag every record with the rank that produced it. Workers run
-        # concurrently, so the parent needs this to report the SLOWEST
-        # worker's inference time — summing across workers would give total
-        # compute and understate throughput by roughly the GPU count.
-        for record in records:
-            record["gpu_id"] = gpu_id
-        return records
-    finally:
-        model_cm.__exit__(None, None, None)
-
-
-def classified_extract_worker(
+def sroie_worker(
     gpu_id: int,
     image_paths: list[str],
     *,
     config_path: str | None,
     cli_overrides: dict[str, Any],
-    classifications: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Worker: build vLLM engine + processor, run classified extraction.
-
-    Handles standard documents via ``process_document_aware`` and bank
-    statements via ``UnifiedBankExtractor``.  Each worker receives the
-    full classifications list and filters to its own image chunk.
-
-    Args:
-        gpu_id: GPU rank (for logging).
-        image_paths: Absolute paths to images assigned to this GPU.
-        config_path: Path to run_config.yml (or None).
-        cli_overrides: CLI args dict for AppConfig.load().
-        classifications: Full list of classification records (filtered
-            inside the worker to match ``image_paths``).
-
-    Returns:
-        List of extraction record dicts.
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s [GPU {gpu_id}] %(name)s: %(message)s",
+    """Read this card's share of the SROIE benchmark."""
+    return _on_card(
+        gpu_id,
+        config_path,
+        cli_overrides,
+        lambda processor, app_config: read_sroie(processor, image_paths, app_config),
     )
-
-    from cli import load_pipeline_configs
-    from common.app_config import AppConfig
-    from common.pipeline_ops import create_processor, load_model
-    from common.unified_bank_extractor import UnifiedBankExtractor
-
-    # Force single-GPU in this worker
-    overrides = dict(cli_overrides)
-    overrides["num_gpus"] = 1
-
-    cfg_path = Path(config_path) if config_path else None
-    app_cfg = AppConfig.load(overrides, config_path=cfg_path)
-    config = app_cfg.pipeline
-    effective_verbose = config.verbose
-
-    prompt_config, universal_fields, field_definitions = load_pipeline_configs(config.model_type)
-
-    # Filter classifications to this worker's image chunk
-    chunk_set = set(image_paths)
-    my_classifications = [c for c in classifications if c["image_path"] in chunk_set]
-
-    logger.info("Loading model: %s (GPU %d)", config.model_type, gpu_id)
-    model_cm = load_model(config, app_config=app_cfg)
-    model, tokenizer = model_cm.__enter__()
-
-    try:
-        processor = create_processor(
-            model,
-            tokenizer,
-            config,
-            prompt_config,
-            universal_fields,
-            field_definitions,
-            app_config=app_cfg,
-        )
-
-        # Set up bank adapter if needed
-        bank_adapter = None
-        has_bank = any(c["document_type"].upper() == "BANK_STATEMENT" for c in my_classifications)
-        if has_bank and config.bank_v2 and getattr(processor, "supports_multi_turn", True):
-            bank_budget = app_cfg.get_image_budget("bank_statement")
-            bank_adapter = UnifiedBankExtractor(
-                generate_fn=processor.generate,
-                verbose=effective_verbose,
-                use_balance_correction=config.balance_correction,
-                max_tiles=(bank_budget["max_tiles"] if config.pre_tiling_enabled else None),
-                min_tiles=(bank_budget["min_tiles"] if config.pre_tiling_enabled else None),
-            )
-            logger.info("Bank adapter enabled (GPU %d)", gpu_id)
-
-        records: list[dict[str, Any]] = []
-        total = len(my_classifications)
-
-        for idx, classification in enumerate(my_classifications):
-            image_path = classification["image_path"]
-            image_name = classification["image_name"]
-            doc_type = classification["document_type"]
-
-            # Progress up front: a dense bank statement can take a while, so log
-            # the start (not just the end) to track which of N is in flight.
-            logger.info("[%d/%d] extracting %s (%s)...", idx + 1, total, image_name, doc_type)
-
-            img_start = time.time()
-
-            try:
-                if doc_type.upper() == "BANK_STATEMENT" and bank_adapter is not None:
-                    schema_fields, metadata = bank_adapter.extract_bank_statement(image_path)
-                    img_time = time.time() - img_start
-                    raw_response_str = "\n".join(
-                        f"{field}: {value}" for field, value in schema_fields.items()
-                    )
-                    strategy = metadata.get("strategy_used", "unknown")
-                    records.append(
-                        {
-                            "image_name": image_name,
-                            "image_path": image_path,
-                            "document_type": doc_type,
-                            "raw_response": raw_response_str,
-                            "processing_time": img_time,
-                            "prompt_used": f"unified_bank_{strategy}",
-                            "error": None,
-                        }
-                    )
-                else:
-                    result = processor.process_document_aware(
-                        image_path, classification, verbose=effective_verbose
-                    )
-                    img_time = time.time() - img_start
-                    records.append(
-                        {
-                            "image_name": image_name,
-                            "image_path": image_path,
-                            "document_type": doc_type,
-                            "raw_response": result.get("raw_response", ""),
-                            "processing_time": img_time,
-                            "prompt_used": doc_type.lower(),
-                            "error": None,
-                        }
-                    )
-            except Exception as e:
-                logger.error("Error extracting %s: %s", image_name, e)
-                img_time = time.time() - img_start
-                records.append(
-                    {
-                        "image_name": image_name,
-                        "image_path": image_path,
-                        "document_type": doc_type,
-                        "raw_response": "",
-                        "processing_time": img_time,
-                        "prompt_used": "error",
-                        "error": str(e),
-                    }
-                )
-
-            logger.info(
-                "[%d/%d] %s: %s (%.1fs)",
-                idx + 1,
-                total,
-                image_name,
-                doc_type,
-                time.time() - img_start,
-            )
-
-        # Tag every record with the rank that produced it. Workers run
-        # concurrently, so the parent needs this to report the SLOWEST
-        # worker's inference time — summing across workers would give total
-        # compute and understate throughput by roughly the GPU count.
-        for record in records:
-            record["gpu_id"] = gpu_id
-        return records
-    finally:
-        model_cm.__exit__(None, None, None)

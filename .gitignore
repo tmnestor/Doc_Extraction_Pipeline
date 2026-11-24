@@ -48,6 +48,7 @@ env/
 output/
 results/
 /logs/
+!output/logs/
 # remote_results/
 
 # Log files
@@ -70,7 +71,6 @@ Thumbs.db
 
 # Local-only directories
 # docs/
-tests/
 .coverage
 htmlcov/
 .pytest_cache/
@@ -100,7 +100,6 @@ synthetic_invoice.json
 .env
 standard_labels.txt
 
-tests/
 plans/
 PrivateWealth/
 data/
@@ -119,3 +118,7 @@ docs/github-to-gitlab-content-sync.md
 # meant a dirty tree after every execution and diffs git cannot show. Regenerate
 # them by running the notebook.
 notebooks/figures/*.png
+
+# Run outputs are results, not code
+out_*/
+outputs_*/

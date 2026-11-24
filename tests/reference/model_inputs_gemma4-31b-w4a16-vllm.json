@@ -1,0 +1,6699 @@
+{
+  "calls": [
+    {
+      "engine": 0,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 150,
+        "temperature": 0
+      },
+      "stage": "classify"
+    },
+    {
+      "engine": 0,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 150,
+        "temperature": 0
+      },
+      "stage": "classify"
+    },
+    {
+      "engine": 0,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "1f124d2a44ad"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 150,
+        "temperature": 0
+      },
+      "stage": "classify"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "f84c760a2320"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 4096,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "6a0a108860f8"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 1,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "e142bc42bbb4"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 1408,
+        "temperature": 0
+      },
+      "stage": "extract"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE001_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE002_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE003_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE004_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE005_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE006_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE007_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE008_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE009_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE010_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE011_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE012_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE013_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE014_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE015_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE016_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE017_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE018_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE019_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE020_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE021_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE022_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE023_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE024_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE025_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE026_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE027_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE028_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE029_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE030_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE031_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE032_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE033_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE034_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE035_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE036_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE037_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE038_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE039_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE040_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE041_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE042_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_invoice.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE043_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE044_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE045_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE046_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE047_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE048_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE049_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE050_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE051_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE052_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE053_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_bank_statement.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 2,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE054_receipt.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_bank_statement.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_invoice.png RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "0b9eb06d0be9"
+          ],
+          [
+            "user",
+            "image_pil",
+            "PAGE055_receipt.png RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 400,
+        "temperature": 0
+      },
+      "stage": "split"
+    },
+    {
+      "engine": 3,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 100x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 101x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 102x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 103x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 104x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 105x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 106x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 107x150 RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 256,
+        "temperature": 0
+      },
+      "stage": "sroie"
+    },
+    {
+      "engine": 3,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 108x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 109x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 110x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 111x150 RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 256,
+        "temperature": 0
+      },
+      "stage": "sroie"
+    }
+  ],
+  "engines": [
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "default_output_length": 560
+          },
+          "vision_soft_tokens_per_image": 560
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 2,
+        "trust_remote_code": true
+      },
+      "cards": "all",
+      "stage": "classify"
+    },
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "default_output_length": 560
+          },
+          "vision_soft_tokens_per_image": 560
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 2,
+        "trust_remote_code": true
+      },
+      "cards": "all",
+      "stage": "extract"
+    },
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "default_output_length": 560
+          },
+          "vision_soft_tokens_per_image": 560
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 2,
+        "trust_remote_code": true
+      },
+      "cards": "all",
+      "stage": "split"
+    },
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "default_output_length": 560
+          },
+          "vision_soft_tokens_per_image": 560
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 2,
+        "trust_remote_code": true
+      },
+      "cards": "all",
+      "stage": "sroie"
+    }
+  ],
+  "prompts": {
+    "0b9eb06d0be9": "Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each receipt, in the form {\"box_2d\": [ymin, xmin, ymax, xmax], \"label\": \"receipt\"}, where the four numbers are normalised to 0-1000.",
+    "1f124d2a44ad": "Look at this document image and answer each question:\n\n1. COLUMNS: If there is a transaction table with rows of dates,\n   descriptions, and amounts, list the exact column headers\n   separated by \" | \".\n   If there is no transaction table, write NONE.\n\n2. PAID: Is there evidence that payment was completed?\n   Look for: payment method, \"PAID\" stamp, amount tendered,\n   change given, receipt number, EFTPOS/card details.\n   Answer YES or NO.\n\n3. ROWS: How many line items or transaction rows are visible?\n   Answer with a number.\n\n4. TRAVEL: Is this a flight ticket, e-ticket, boarding pass, or\n   travel itinerary (showing passenger names, flights, or travel\n   legs)? Answer YES or NO.\n",
+    "4faf339e27dd": "Read this scanned receipt and report four fields.\n\nWrite each field on its own line, in this order and this format:\n\ncompany: <registered business name, e.g. ACME TRADING SDN BHD>\ndate: <date printed on the receipt>\naddress: <full street address of the business>\ntotal: <final total amount paid, e.g. 4.95>\n\nGive the registered company name, not a brand or outlet name.\nDo not include the company registration number printed in brackets.\nWrite the date exactly as the receipt prints it.\nWrite the total with its decimal point and no currency symbol, e.g. 4.95.\nWrite NOT_FOUND as the value of any field the receipt does not show.\n",
+    "6a0a108860f8": "Extract ALL data from this invoice image. Respond in exact format below with actual values or NOT_FOUND.\n\nDOCUMENT_TYPE: INVOICE\nBUSINESS_ABN: NOT_FOUND\nSUPPLIER_NAME: NOT_FOUND\nBUSINESS_ADDRESS: NOT_FOUND\nPAYER_NAME: NOT_FOUND\nPAYER_ADDRESS: NOT_FOUND\nINVOICE_DATE: NOT_FOUND\nLINE_ITEM_DESCRIPTIONS: NOT_FOUND\nLINE_ITEM_QUANTITIES: NOT_FOUND\nLINE_ITEM_PRICES: NOT_FOUND\nLINE_ITEM_TOTAL_PRICES: NOT_FOUND\nIS_GST_INCLUDED: NOT_FOUND\nGST_AMOUNT: NOT_FOUND\nTOTAL_AMOUNT: NOT_FOUND\n\nInstructions:\n- Find ABN: 11 digits like \"12 345 678 901\"\n- Find supplier: Business name at top\n- Find customer: \"Bill To\" section\n- Find date: Use DD/MM/YYYY format\n- Find line items: List with \" | \" separator\n- Find amounts: Include $ symbol\n- Find IS_GST_INCLUDED: Does TOTAL_AMOUNT include GST? Answer true if GST\n  is part of the total, whether it is added to a subtotal (\"Subtotal\",\n  \"GST (10%)\", \"Total\") or stated as included in the prices (\"GST\n  INCLUDED\", \"Incl. GST\"). Answer false only if the document says no GST\n  was charged. Answer NOT_FOUND if GST is not mentioned. Use lower case:\n  true or false\n- Replace NOT_FOUND with actual values\n",
+    "e142bc42bbb4": "Extract ALL data from this receipt image. Respond in exact format below with actual values or NOT_FOUND.\n\nDOCUMENT_TYPE: RECEIPT\nBUSINESS_ABN: NOT_FOUND\nSUPPLIER_NAME: NOT_FOUND\nBUSINESS_ADDRESS: NOT_FOUND\nPAYER_NAME: NOT_FOUND\nPAYER_ADDRESS: NOT_FOUND\nINVOICE_DATE: NOT_FOUND\nLINE_ITEM_DESCRIPTIONS: NOT_FOUND\nLINE_ITEM_QUANTITIES: NOT_FOUND\nLINE_ITEM_PRICES: NOT_FOUND\nLINE_ITEM_TOTAL_PRICES: NOT_FOUND\nIS_GST_INCLUDED: NOT_FOUND\nGST_AMOUNT: NOT_FOUND\nTOTAL_AMOUNT: NOT_FOUND\n\nInstructions:\n- Find ABN: 11 digits like \"12 345 678 901\"\n- Find store: Business name at top\n- Find transaction date: Use DD/MM/YYYY format\n- Find purchased items: List with \" | \" separator\n- Find item names: The product name on its own, with no leading count. A\n  line printed as \"3x <item name>\" gives the item name by itself, and the\n  count goes in LINE_ITEM_QUANTITIES\n- Find quantities: One plain number per item, digits only, like \"3\" rather\n  than \"3x\". Write 1 for an item the receipt shows no count for, so the\n  quantity list is the same length as the item name list\n- Find line totals: The amount printed against an item is the total for\n  that whole line and goes in LINE_ITEM_TOTAL_PRICES. It already covers\n  every unit, so never multiply it by the quantity\n- Find unit prices: Decide per line from that line's quantity. Quantity 1\n  means the single printed amount is also the unit price, so write it.\n  Quantity 2 or more means the per-unit figure is not printed anywhere,\n  so write NOT_FOUND for that line. Never divide a line total to produce\n  a unit price. Keep one entry per item so the list stays the same length\n  as the item name list\n- Find amounts: Include $ symbol\n- Find IS_GST_INCLUDED: Does TOTAL_AMOUNT include GST? Answer true if GST\n  is part of the total, whether it is added to a subtotal (\"Subtotal\",\n  \"GST (10%)\", \"Total\") or stated as included in the prices (\"GST\n  INCLUDED\", \"Incl. GST\"). Answer false only if the document says no GST\n  was charged. Answer NOT_FOUND if GST is not mentioned. Use lower case:\n  true or false\n- Replace NOT_FOUND with actual values\n",
+    "f84c760a2320": "Extract ONLY DEBIT/WITHDRAWAL transactions (money OUT) from this bank statement for expense tracking.\nSKIP all deposits, credits, salary payments, and money IN transactions entirely.\n\nRespond in this exact format with actual values or NOT_FOUND:\n\nDOCUMENT_TYPE: BANK_STATEMENT\nSTATEMENT_DATE_RANGE: NOT_FOUND\nTRANSACTION_DATES: NOT_FOUND\nLINE_ITEM_DESCRIPTIONS: NOT_FOUND\nTRANSACTION_AMOUNTS_PAID: NOT_FOUND\n\nSTOP after TRANSACTION_AMOUNTS_PAID. No explanations or additional text.\n\nInstructions:\n- STATEMENT_DATE_RANGE: Find the statement period, written as \"DD/MM/YYYY - DD/MM/YYYY\"\n- TRANSACTION_DATES: Dates of DEBIT transactions only, separated by \" | \"\n- LINE_ITEM_DESCRIPTIONS: Descriptions of DEBIT transactions only, separated by \" | \"\n- TRANSACTION_AMOUNTS_PAID: DEBIT/withdrawal amounts with $ separated by \" | \"\n\nHOW TO IDENTIFY DEBITS (money OUT):\n- Amounts with negative sign (-$50.00) or in a Debit column\n- Keywords: withdrawal, payment, purchase, fee, charge, ATM, EFTPOS, direct debit\nDO NOT INCLUDE (money IN):\n- Keywords: deposit, credit, salary, wages, transfer in, interest received, \"Direct Credit\"\n\nCRITICAL RULES:\n1. Extract ONLY debit/withdrawal transactions - completely SKIP credits and deposits\n2. Keep items in the same order across all fields (date 1 matches description 1 matches amount 1)\n3. Use \" | \" as separator between items\n4. Include $ symbol for amounts\n5. Replace NOT_FOUND with actual values\n"
+  }
+}

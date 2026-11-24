@@ -2,41 +2,41 @@
 # All options explicitly stated - YAML takes priority over defaults
 # CLI flags override YAML when explicitly provided
 
-# Bootstrap configuration — the minimal set the entrypoint and model loader need
-# before any pipeline work begins (model identity, tiling, GPU count, log dir).
-# conda_env: bootstrapped from LMM_CONDA_ENV + the entrypoint default; it CANNOT
+# Bootstrap configuration: the minimal set the entrypoint and model loader need
+# before any pipeline work begins (model identity, GPU count, log dir).
+# conda_env: bootstrapped from DOC_EXTRACT_CONDA_ENV + the entrypoint default; it CANNOT
 # be a real key here (chicken-and-egg: this YAML is read by the conda python, so
 # the env must already be chosen before this file is parsed).
 bootstrap:
-  # Model — InternVL3.5 via vLLM (we run the 8B). Registered types:
-  # internvl3-vllm (8B, default), internvl3-14b-vllm, internvl3-38b-vllm.
-  # Switch type + path together.
   model:
-    type: internvl3-vllm
-    path: /home/jovyan/nfs_share/models/InternVL3_5-8B
-    # path: /efs/shared/PTM/InternVL3_5-8B   # alternate (EFS) deployment path
-    max_tiles: 18          # Image tiles (L4 / A10G: 18)
-    min_tiles: null        # null = disabled; set (e.g. 6) for adaptive quality-based tiling (min_tiles..max_tiles)
-    flash_attn: true       # Use Flash Attention 2 (L4 / A10G are Ampere+ — always on)
-    enforce_eager: false    # vLLM: true = skip CUDA graph compilation (faster startup,
+    # The model a stage loads when none is named to it. One of the names registered in
+    # models/registry.py: gemma4-31b-w4a16-vllm or gemma4-12b-unified-w4a16-vllm.
+    type: gemma4-31b-w4a16-vllm
+    # null = the folder under default_paths below for the model in use. An explicit path here
+    # outranks default_paths whatever `type` says, which once loaded one model's weights under
+    # another's name, so it is left null.
+    path: null
+    # enforce_eager: true  # vLLM: true = skip CUDA graph compilation (faster startup,
                            #        lower throughput); false = compile graphs (slower
                            #        startup, higher throughput for long runs)
-    dtype: bfloat16        # Torch dtype (bfloat16, float16, float32)
+    # false from 2026-08-11: a 165-image run pays the compilation cost ONCE and
+    # gets the decode speedup 165 times, so eager is the wrong trade here. Costs
+    # extra VRAM for the captured graphs: there is ~10.7 GiB spare per L4 at
+    # gpu_memory_utilization 0.90, but watch for OOM at engine load if the
+    # soft-token budget is ever raised from 560.
+    enforce_eager: false
     # vLLM only: override the chat template used by engine.chat().
     #   none            -> use the model's own template (default)
     #   <path/to/*.jinja> -> serve with this template instead (must exist)
-    # Use this to disable a serve-side R1/thinking template that emits <think>
-    # blocks. InternVL3.5 thinking is controlled by the system prompt, not
-    # enable_thinking; a custom non-thinking template is the override of last
-    # resort when the model dir ships a thinking-by-default template.
+    # Both registered models suppress thinking through enable_thinking, so this is
+    # the override of last resort for a model whose folder ships a template that
+    # thinks by default and does not honour that flag.
     chat_template: none
     # Model loading options (merged from the old top-level model_loading:).
     device_map: auto
     default_paths:
-      internvl3: /home/jovyan/nfs_share/models/InternVL3_5-8B
-      internvl3-vllm: /home/jovyan/nfs_share/models/InternVL3_5-8B
-      # internvl3: /efs/shared/PTM/InternVL3_5-8B
-      # internvl3-vllm: /efs/shared/PTM/InternVL3_5-8B
+      gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
+      gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
   # GPU count (moved from the old top-level processing: section).
   gpus:
     num_gpus: 0                # 0 = auto-detect all GPUs, 1 = single GPU, N = use N GPUs
@@ -45,56 +45,19 @@ bootstrap:
   logging:
     # log_dir: /efs/shared/PoC_data/logs   # Directory for entrypoint log files (EFS-backed)
     # log_dir: ../evaluation_data/output/logs   # Directory for entrypoint log files (sandbox-backed)
-    # log_dir: ../evaluation_data/output_internvl_degraded/logs
-    log_dir: ../evaluation_data/output_internvl_20260922/logs
+    # Kept beside the dataset and the run outputs under tod_2026 (2026-08-11), so
+    # a run's images, ground truth, artifacts and logs all live in one tree.
+    # Follows output.dir when that is re-dated: keep the two in step.
+    # Keep this in step with pipeline.information_extraction.output.dir. It is a
+    # SEPARATE key, not derived from it. A run normally sets both from the
+    # environment (DOC_EXTRACT_LOG_DIR and output); these are what applies when it does not.
+    log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run/logs
 
-# I/O paths moved into pipeline.information_extraction.* (2026-06-10) so all three
-# pipelines (information_extraction / trust / linking) are symmetric
-# pipeline.<name> blocks — top-level io.* is retired. See the pipeline: section.
 
-# Inference configuration — generation budget, tiling, sampling, vLLM engine,
+# Inference configuration: generation budget, sampling, vLLM engine,
 # and debug tracing. Everything that shapes how the model produces output.
 inference:
-  max_new_tokens: 3500   # Max tokens for generation (increased to avoid truncation on 30+ row statements)
 
-  tiling:
-    # vLLM app-side pre-tiling: crop each image into per-doc-type tiles ourselves
-    # and hand vLLM the crops as separate images, so OUR tile count is
-    # authoritative (the checkpoint's max_dynamic_patch=12 cap no longer bounds
-    # dense bank statements). Tile counts come from budgets below
-    # (bank=18, invoice=12, receipt=6). Enabling this REQUIRES raising
-    # vllm.models.<model>.limit_mm_per_prompt to at least
-    # max(budgets.*.max_tiles) + 1 (load fails fast otherwise).
-    # See plans/2026-06-04-adaptive-pre-tiling.md. Leave off to run the 12-tile baseline.
-    pre_tiling:
-      enabled: true       # true -> pre-tile; false -> single-image (vLLM tiles internally at 12)
-      image_size: 448      # InternVL3 tile size in pixels
-      use_thumbnail: true  # append a whole-image thumbnail after the detail tiles
-
-    # Per-doc-type image tile budgets for InternVL3 dynamic tiling.
-    # min_tiles is the FLOOR forced into the pre-tiling crop (dynamic_preprocess
-    # min_num); max_tiles is the ceiling. Because the InternVL tiling algorithm
-    # picks the grid by closest aspect-ratio match, a clean A4-portrait bank
-    # statement settles on a 2x3 (6-tile) grid and NEVER reaches max_tiles on its
-    # own — so raising max alone does nothing. min_tiles=12 forces the denser 3x4
-    # grid (near-square cells, ~1.4x linear resolution) needed to read packed
-    # transaction tables. Receipts/invoices keep min_tiles: 1 (aspect-matched).
-    # Requires min_tiles <= max_tiles. See plans/2026-06-04-adaptive-tiling-dense-bank.md.
-    budgets:
-      default:
-        min_tiles: 1
-        max_tiles: 18
-      bank_statement:
-        min_tiles: 12
-        max_tiles: 18
-      invoice:
-        min_tiles: 1
-        max_tiles: 12
-      receipt:
-        min_tiles: 1
-        max_tiles: 6
-
-  # Generation parameters
   generation:
     defaults:
       max_new_tokens_base: 512
@@ -104,14 +67,26 @@ inference:
       top_p: 0.95
       use_cache: true
     models:
-      internvl3:
-        max_new_tokens_base: 2000
-        max_new_tokens_per_field: 50
-    token_limits:
-      2b: null                    # use calculation
-      8b: 800
+      # Keys are NORMALISED model types (app_config._normalize_model_type), NOT
+      # the full registered names. The normalisation is not uniform, so these are
+      # spelled out per model and locked by a test:
+      #   gemma4-31b-w4a16-vllm         -> gemma4-31b
+      #   gemma4-12b-unified-vllm       -> gemma4-12b-unified
+      #   gemma4-12b-unified-w4a16-vllm -> gemma4-12b-unified  (SHARED with the
+      #     BF16 12B above: deliberate. `-vllm` strips, "w4a16" fails the
+      #     size-suffix test, then `-w4a16` strips. Same architecture, so the
+      #     same generation budget; no separate key is needed or wanted.)
+      # A wrong key here does NOT fail: the lookup silently falls back to
+      # generation.defaults above, which is how it can look correct while doing
+      # nothing.
+      gemma4-31b:
+        max_new_tokens_base: 512
+        max_new_tokens_per_field: 64
+      gemma4-12b-unified:
+        max_new_tokens_base: 512
+        max_new_tokens_per_field: 64
 
-  # vLLM engine parameters — per-model overrides for VllmSpec defaults
+  # vLLM engine parameters: per-model overrides for VllmSpec defaults
   vllm:
     defaults:
       gpu_memory_utilization: 0.90
@@ -120,41 +95,200 @@ inference:
       limit_mm_per_prompt: 1
       enable_prefix_caching: true
     models:
-      # pre_tiling (app-side, above) is used because vLLM's native
-      # mm_processor_kwargs / hf_overrides can't tile above the checkpoint
-      # default of 12 on this build — so we crop tiles ourselves.
-      # pre_tiling.enabled is ON (above), so the internvl3-vllm
-      # limit_mm_per_prompt below MUST stay >= max image_budget + 1 (= 19); at the
-      # defaults value of 1, vLLM silently drops the extra crops -> under-tiling.
-      internvl3-vllm:
-        max_model_len: 16384         # 18 tiles + thumbnail ~= 4.9k vision + prompt + 4096 output
-        limit_mm_per_prompt: 19      # 18 detail tiles + 1 thumbnail (required when pre_tiling on)
-
+      # Gemma 4 31B-it QAT W4A16 (compressed-tensors) on 2xL4, tp=2.
+      # CORRECTED 2026-09-22: this block previously read "1xL40S, tp=1" with
+      # "weights ~18 GB of ~44-48 GiB". All three were wrong. The checkpoint is
+      # 23,265,352,448 B = 21.67 GiB, which EXCEEDS a single 24 GiB L4 (~22.5
+      # usable), so it runs as ONE engine sharded tp=2 across both cards over
+      # PCIe with no NVLink, not one engine per card. 10.84 GiB of weights per
+      # card leaves ~9.4 GiB for KV cache and vision activations at 0.90.
+      # models/registry.py sets supports_data_parallel=False; without it the DP
+      # fast path starts two whole engines and OOMs at load.
+      # History worth respecting (old-repo commit a4b131d, BF16, on the OLD
+      # hardware): soft tokens 1120 OOM'd, gpu_memory_utilization 0.92 OOM'd,
+      # max_model_len 16384 was cut to 8192. Activations were the binding
+      # resource, not weights. Those were single-card BF16 limits and do not
+      # transfer directly to a tp=2 4-bit engine: VERIFY rather than assume.
+      gemma4-31b-w4a16-vllm:
+        max_model_len: 8192
+        # 0.85 was a BF16-era single-card OOM workaround. At tp=2 the per-card
+        # weight footprint halves, so this matches the other blocks at 0.90.
+        gpu_memory_utilization: 0.90
+        limit_mm_per_prompt: 1       # one whole image; Gemma pan-and-scans internally
+        # MEASURED on 2xL4 at tp=2, 2026-09-21:
+        #   kernel                          MarlinLinearKernel (CompressedTensorsWNA16)
+        #   consumed (weights + non-torch)  10.89 GiB/card
+        #   peak activation                  0.92 GiB
+        #   KV cache                         8.02 GiB  = 19,081 tokens
+        #   reported concurrency             2.33x at max_model_len 8192
+        # KV here costs ~440 KiB/token: this is a dense full-attention model where
+        # EVERY layer carries a cache.
+        # The reported 2.33x is a worst-case reservation (KV tokens /
+        # max_model_len), not a cap: what fits is set by the real request size.
+        # MEASURED 2026-11-16, 55 single-pass bank statements in one engine call
+        # (about 1,500 characters a reply), model seconds for the 55:
+        #   max_num_seqs   8    12    16    24    32
+        #   seconds      418   370   315   315   316
+        # F1 was unchanged across all five. The gain stops at 16: the KV cache
+        # holds about 16 such statements, so a higher value only queues.
+        # max_num_seqs: 1            # pre-2026-08-14 behaviour, one at a time
+        max_num_seqs: 16
+        enable_prefix_caching: true
+        mm_processor_kwargs:
+          # Gemma 4 accepts a DISCRETE set of visual token budgets:
+          # 70 | 140 | 280 | 560 | 1120.
+          # 560 is a measured optimum for this family, not an unquestioned
+          # default: 1120 regressed decisively on two separate corpora (global
+          # median F1 0.953 -> 0.369, and classification broke from 55/55/55),
+          # and 280 lost small-print detail (0.915 -> 0.882). Both neighbours
+          # are worse, in opposite ways. Do not re-try 1120.
+          max_soft_tokens: 560
+        hf_overrides:
+          vision_soft_tokens_per_image: 560
+          vision_config:
+            default_output_length: 560
+        # Settings one stage loads differently from the model's own, above.
+        # Each GPU stage loads its own engine, so this touches no other stage.
+        # classify is the only stage that takes overrides, and an override may
+        # only change a key the model's own block states.
+        #
+        # The classify stage is stated at 560, the same as extraction, so it
+        # changes nothing as shipped. Measured on 165 clean pages (55 each of
+        # bank statement, invoice, receipt): at 280 the stage's model time fell
+        # from 209 s to 123 s and all 165 pages kept the right type. Not yet
+        # measured on photographed pages, which is why it is not 280 here. The
+        # three values must move together.
+        stage_overrides:
+          classify:
+            mm_processor_kwargs:
+              max_soft_tokens: 560
+            hf_overrides:
+              vision_soft_tokens_per_image: 560
+              vision_config:
+                default_output_length: 560
+      # Gemma 4 12B-it Unified, QAT W4A16 (compressed-tensors): the 2xL4 target.
+      # SAME architecture as the BF16 12B above, so the hf_overrides field name is
+      # identical (vision_config.num_soft_tokens); only the weights differ.
+      # 9.56 GiB of ~22.5 GiB per L4 leaves ~10.7 GiB for KV cache and vision
+      # activations at gpu_memory_utilization 0.90, so one WHOLE engine fits per
+      # card and run_dp spawns two (DP=2, tp=1 each), rather than sharding one
+      # engine tp=2 across PCIe. See models/registry.py for the capability flag.
+      gemma4-12b-unified-w4a16-vllm:
+        max_model_len: 16384         # vLLM recipe recommends 16384-32768 for this model
+        gpu_memory_utilization: 0.90 # ~20.25 GiB budget/card; 9.56 GiB of it is weights
+        limit_mm_per_prompt: 1       # one whole image; Gemma pan-and-scans internally
+        # Concurrent sequences the scheduler may run. The defaults value of
+        # 1 disables vLLM's continuous batching entirely: every request waits
+        # for the previous one, so N GPUs give N in-flight requests for the
+        # WHOLE machine. That is what this pipeline did until 2026-08-14.
+        #
+        # Pairs with pipeline.batching (8 for the batchable types). Raising
+        # this alone does nothing while the stage submits one image per call,
+        # and raising the batch sizes alone does nothing while the cap is 1.
+        #
+        # 8 is evidence-based: the SROIE benchmark ran this checkpoint at 8
+        # with 560 soft tokens, no retries, 106 images/min. A batch that does
+        # not fit is retried one image at a time, so an over-large value
+        # costs throughput, never results: watch for "retrying one at a
+        # time" and lower BOTH if it appears.
+        # max_num_seqs: 1            # pre-2026-08-14 behaviour, one at a time
+        # KV cache caps real concurrency at 3.43x for this model at
+        # max_model_len 16384, so 8 and 10 both delivered the SAME dose and
+        # scored identically (0.915). 2 is the first value below that
+        # ceiling, so it is the first that genuinely changes concurrency.
+        # max_num_seqs: 2            # 0.914 AND 2.8x slower: worst of both
+        # max_num_seqs: 8            # 0.915, IS_GST_INCLUDED 0.5758
+        max_num_seqs: 10
+        enable_prefix_caching: true
+        mm_processor_kwargs:
+          # 560 -> 1120 on 2026-08-11. At 560 the `nab_classic` layout sat right
+          # on the legibility threshold: 2 of its 6 statements read perfectly and
+          # the other 4 returned NOT_FOUND for every transaction list: the model
+          # saw a bank statement but resolved no table at all. Bimodal
+          # all-or-nothing at a fixed visual budget is a resolution limit, not a
+          # reading error. Every other layout scored 0.924 at 560.
+          # MEMORY WATCH: 1120 doubles peak prefill activation, and it competes
+          # with CUDA graphs (enforce_eager: false) and disable_chunked_mm_input,
+          # which forces each image's soft tokens through in ONE prefill step.
+          # It fails loudly at engine load if it does not fit: revert to 560.
+          # REVERTED 2026-08-11: 1120 was a decisive REGRESSION, not an
+          # improvement. Global median F1 0.953 -> 0.369, mean 0.827 -> 0.455,
+          # AND classification broke (55/55/55 -> 52/55/58: three bank statements
+          # read as receipts) despite being 165/165 perfect at 560. Classify and
+          # extract share the visual budget, so degrading both means the IMAGE
+          # REPRESENTATION got worse at 1120: more visual tokens is not more
+          # detail for this checkpoint. Do not re-try 1120.
+          #
+          # PROBE 2026-08-14, 560 -> 280 (the checkpoint's own default).
+          # Soft tokens are the per-request vision cost, so this attacks the
+          # KV ceiling itself rather than trading accuracy against it the way
+          # batch size does: halving them should cut prefill compute AND let
+          # more sequences fit, lifting the measured 3.43x concurrency.
+          #
+          # NOT an extrapolation from the 1120 result. That direction made
+          # the image representation worse (address collapsed to 0.0000);
+          # this direction removes detail instead: a different failure mode
+          # that has to be measured, not inferred.
+          #
+          # Baseline to beat (batch 10, 560 soft tokens, 165 degraded
+          # receipts): overall 0.915, BUSINESS_ADDRESS 0.9657, 158.4s.
+          # RESULT 2026-08-14: 280 REJECTED. Worse on every axis.
+          #
+          #   soft tokens  overall  inference  concurrency  note
+          #       280       0.882     180.6s      3.43x     BUSINESS_ABN -0.182
+          #       560       0.915     158.4s      3.43x     <- keep
+          #      1120       0.275       -           -       address to 0.0000
+          #
+          # Concurrency did NOT move, and could not have: vLLM computes
+          # "Maximum concurrency" as KV tokens / max_model_len, a worst-case
+          # reservation. Soft tokens change the ACTUAL prompt length, not
+          # that reservation. The lever for concurrency is max_model_len (or
+          # more free VRAM), never the visual budget.
+          #
+          # 560 is a genuine optimum for this checkpoint, not a default
+          # nobody questioned: both neighbours are worse, in opposite ways.
+          # Halving loses small-print detail (an 11-digit ABN is the first
+          # casualty); doubling corrupts the representation outright.
+          # max_soft_tokens: 1120    # tested twice, regressed both times
+          # max_soft_tokens: 280     # tested 2026-08-14, 0.915 -> 0.882
+          max_soft_tokens: 560       # legal: 70 | 140 | 280 (model default) | 560 | 1120
+        # Unified architecture: the knob is vision_config.num_soft_tokens. This
+        # checkpoint has NO top-level vision_soft_tokens_per_image and NO
+        # vision_config.default_output_length (verified 2026-08-11 against its own
+        # config.json): using the 31B's names would set attributes nothing reads,
+        # leaving the engine silently at 280 while the YAML claims otherwise.
+        # MUST match max_soft_tokens above: a test asserts they agree, because a
+        # mismatch leaves the engine at one budget while the YAML claims another.
+        hf_overrides:
+          vision_config:
+            # Reverted to 560 with max_soft_tokens above after the 280 probe
+            # regressed. These two MUST always change together.
+            # num_soft_tokens: 1120
+            # num_soft_tokens: 280
+            num_soft_tokens: 560
   # Raw VLM prompt/response trace (debug observability; default off).
-  # When enabled, every extraction VLM call (detection, bank turns, graph nodes,
-  # linking fallback) appends one JSONL line {image_name, pipeline, label, prompt,
-  # raw_response, tokens} via the shared VllmBackend seam.
+  # When enabled, every model call (classification and extraction)
+  # appends one JSONL line via the shared VllmBackend seam.
+  # The keys are, EXACTLY (see common/prompt_trace.py:record):
+  #   image_name, pipeline, label, model, prompt, raw_response,
+  #   prompt_tokens, completion_tokens
+  # NOTE there is no `tokens` key: the counts are the two separate
+  # prompt_tokens / completion_tokens fields. An earlier version of this comment
+  # said `tokens`, which sends anyone reading it here to write `r.get("tokens")`
+  # and silently get None for every line.
   tracing:
     raw_prompts: false   # true -> persist every VLM prompt+response to JSONL
     path: none           # none -> <output_dir>/raw_prompt_trace.jsonl ; or an explicit path
 
-# Pipeline configuration — per-task settings grouped together: information
+# Pipeline configuration, per-task settings grouped together: information
 # extraction (the default classify/extract/clean/evaluate paths), classification,
-# processing toggles, token budgets, trust + transaction linking, batch tuning,
+# processing toggles, token budgets, batch tuning,
 # extraction ordering/skip labels, and the bank-header cache.
 pipeline:
-  # Information extraction — the DEFAULT image-source + output paths, used by the
-  # MAIN extraction pipeline: KFP_TASK = run_info_extract | run_graph_robust |
-  # classify | extract | clean | evaluate. Those read images from
+  # Information extraction: the DEFAULT image-source + output paths, used by the
+  # extraction pipeline: KFP_TASK = split | classify | extract | clean | evaluate. Those read images from
   # information_extraction.input.dir, score against input.ground_truth, and write
   # to output.dir.
-  #
-  # OVERRIDE MECHANISM (why paths appear in three pipeline.<name> blocks): the
-  # standalone linking and trust tasks REUSE the same classify/extract/clean
-  # stages but on their OWN dataset. entrypoint.sh repoints the shared
-  # image_dir/output globals at pipeline.linking.* (via _resolve_linking_vars) or
-  # pipeline.trust.* (via _resolve_trust_vars), SHADOWING information_extraction.*
-  # for the duration of that task.
   information_extraction:
     # Data paths
     input:
@@ -164,17 +298,27 @@ pipeline:
       # ground_truth: ../evaluation_data/bank/ground_truth_bank.csv
       # dir: ../evaluation_data/synthetic_original
       # ground_truth: ../evaluation_data/synthetic_original/ground_truth_synthetic.csv
-      # dir: ../evaluation_data/synthetic_transaction_linking
+      # The 165-image synthetic set for the Gemma 4 evaluation (2026-08-11).
+      # Absolute, and NOT tilde-prefixed: YAML reads a bare `~` as null and
+      # nothing in the entrypoint path shell-expands these values.
+      # synthetic_20260728 is CORRUPT: it holds 330 images (55 cases x 6) while
+      # its ground truth covers only 165, so half of every run was extracted but
+      # unscorable. Replaced 2026-08-11 by synthetic_20260807: 165 images, 165 GT
+      # records, exact 1:1, 55 each of BANK_STATEMENT / INVOICE / RECEIPT.
+      # Regenerated on the box 2026-08-11 via
+      #   python -m generators.pipeline eval-set --out ~/nfs_share/tod_2026/evaluation_data
+      # which emits a CLEAN and a DEGRADED set of 165 each, ground truth written
+      # into both. Images and GT come from the SAME pass, so they cannot drift.
+      # Swap the two lines below to score robustness against scan artefacts.
       # DEGRADED set: 55 receipts x 3 severity tiers (_v1 light, _v2 moderate,
       # _v3 heavy). Tier is recovered from the filename suffix at analysis time,
-      # so one run covers all three. Swap to synthetic_ for the clean set — the
+      # so one run covers all three. Swap to synthetic_ for the clean set: the
       # clean receipt scores are the tier-0 baseline.
       #
       # The _20260812 pair is the ONLY dated set on the box: the _20260811 pair
       # it replaced was deleted 2026-08-13, and the earlier _20260728 /
-      # _20260807 sets before that. Nothing here is a fallback — if a path below
-      # names a set that no longer exists, the run fails at the dataset check in
-      # scripts/run_full_comparison.sh rather than scoring anything.
+      # _20260807 sets before that. Nothing here is a fallback: if a path below
+      # names a set that no longer exists, the stage stops because it finds no images.
       #
       # It carries the same DOCUMENTS as _20260811 (the source YAMLs have not
       # changed since 2026-08-09 and the render is deterministic) but a
@@ -183,156 +327,538 @@ pipeline:
       # shows one amount and that amount is the line total, so the per-unit
       # figure was a value no reader could extract. Positions where quantity is
       # 1 keep their amount (there the two coincide); the rest are NOT_FOUND.
-      # Invoices are untouched — their layout has a real Unit Price column.
-      # dir: ../evaluation_data/synthetic_20260812
-      # dir: ../evaluation_data/degraded_20260812
-      # InternVL3.5-8B on the CLEAN 165-image set, 2026-09-22 -- the third model of the
-      # Gemma 31B / Qwen 3.8 comparison, scored with the corrected (sentinel-fixed) scorer.
-      # Fresh output dir: the stages resume from image_names already present, so reusing
-      # output_internvl_degraded would silently skip images the degraded run completed.
-      dir: ../evaluation_data/synthetic_20260812
+      # Invoices are untouched: their layout has a real Unit Price column.
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/nab_probe
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
+      # The CLEAN 165-image set, not the degraded sibling. Same date, one character
+      # apart in the path, and the wrong one answers a different question.
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/degraded_20260812
+      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
       # Extraction GT generated from the per-type YAMLs in
-      # Synthetic_Doc_Generation/ground_truth by that repo's
-      # scripts/generate_extraction_gt.py --schema <this repo>/config/field_definitions.yaml
-      # (the generator lives there because it reads that repo's ground truth).
-      # WARNING: those YAMLs describe a DIFFERENT corpus from the CSV and images
-      # in ../evaluation_data — regenerating over this path replaces the eval set.
-      # Patch the CSV in place instead, and back it up first.
-      # (Separate from linking.ground_truth, which the transaction-linking task uses.)
-      # JSONL, not CSV — load_ground_truth() dispatches on the suffix
-      # (common/evaluation_metrics.py) and the evaluator runs in _jsonl_mode,
-      # scoring exactly the fields each GT record carries. The set also ships a
-      # ground_truth.csv; keep the JSONL, which is what _jsonl_mode expects.
+      # Synthetic_Doc_Generation/ground_truth, by that repository's own script.
+      # JSON lines is the one format read. An answer is scored on exactly the fields it
+      # carries. The set also ships a ground_truth.csv, which is not read: name the JSONL.
       #
       # MUST be swapped together with input.dir above. Each set ships its own GT
       # copy, and the clean and degraded copies of one dated pair hold the SAME
       # values (distortion never changes the answer), differing only in the
-      # _v1/_v2/_v3 filenames — so crossing them inside a pair is harmless but
+      # _v1/_v2/_v3 filenames, so crossing them inside a pair is harmless but
       # crossing DATED SETS is not: filenames match across dates, so the run
       # would score new extractions against an older answer key and report
       # plausible numbers. Keep the date on both lines identical.
-      # ground_truth: ../evaluation_data/synthetic_20260812/ground_truth.jsonl
-      # ground_truth: ../evaluation_data/degraded_20260812/ground_truth.jsonl
-      ground_truth: ../evaluation_data/synthetic_20260812/ground_truth.jsonl
-      # ground_truth: ../evaluation_data/synthetic_transaction_linking/ground_truth_extraction.csv
+      # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/nab_probe/ground_truth.jsonl
+      # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812/ground_truth.jsonl
+      # MUST stay on the same dataset as input.dir above: filenames match across
+      # the clean and degraded sets, so a mismatch scores real extractions against
+      # the wrong answer key and reports plausible numbers.
+      # ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/degraded_20260812/ground_truth.jsonl
+      ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812/ground_truth.jsonl
+      # Applied by the classify stage when it lists the folder. A value left here
+      # from a short trial would make a later run read fewer pages than intended
+      # and still report a plausible score.
+      # max_images: 12       # a short trial only
       max_images: null       # null = process all images
-      document_types: null   # null = all types, or comma-separated: INVOICE,RECEIPT,BANK_STATEMENT,TRAVEL_EXPENSE,VEHICLE_LOGBOOK
+      # null = every type. A list keeps only the pages whose file name holds one of the names, e.g.
+      # [BANK_STATEMENT] or [INVOICE, RECEIPT]. Like max_images, a list left here from a trial would
+      # make a later run read fewer pages than intended, so the committed value is null.
+      document_types: null
     # Output settings
     output:
-      # Separate dir per model: read_completed_images() resumes from image_name,
-      # so sharing one would make the second model's run silently skip all 165.
-      # ../evaluation_data/output holds the InternVL CLEAN-set result (0.847).
       # dir: ../evaluation_data/output
-      # dir: ../evaluation_data/output_internvl_degraded
-      dir: ../evaluation_data/output_internvl_20260922
-      skip_visualizations: false  # Skip visualization generation
-      skip_reports: false         # Skip report generation
+      # Under tod_2026 alongside the input set (2026-08-11). The raw prompt trace
+      # (inference.tracing.path: none) derives from this dir, so it follows.
+      # DATED per dataset. The stages resume from image_name values already in
+      # this directory's JSONLs (stages/io.py read_completed_images), so reusing
+      # the old `output/` (which holds the corrupt 20260728 run's 330 records)
+      # would silently skip every image instead of re-running it.
+      # Dated per DATASET, not per day: a clean and a degraded run must not share
+      # an output dir or the second inherits the first's completed image_names.
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260807
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_degraded_20260811
+      # Dated per EXPERIMENT, not per day: output_20260811 holds the pre-rule-9
+      # baseline (0.953 median / 0.827 mean) and is left untouched so the two are
+      # directly comparable per document, not just by headline.
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_nab_probe
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260811
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_20260811_rule9
+      # SMOKE output, deliberately separate from the headline dirs below. The
+      # stages resume from image_name values already present here, so a smoke
+      # sharing the headline directory would make the headline run SKIP those
+      # twelve images and still report a plausible number.
+      # dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_gemma_degraded
+      # One dir per model, and they must NEVER be shared: the stages resume from
+      # image_name values already present, so the second model would skip every
+      # image the first completed and still report a plausible score.
+      # What applies when a run does not name its own folder in `output`. Every measured run does
+      # name its own, for the reasons above, so this folder is for trials only.
+      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run
+
+  # SROIE benchmark (KFP_TASK=sroie): ICDAR 2019 Task 3 receipt key
+  # information extraction, on a PUBLIC dataset. Separate from
+  # information_extraction above: its own data, its own 4-field answer key
+  # (company/date/address/total), its own prompt and scorer, and its own
+  # output dir. It does NOT run classify/extract/clean/evaluate.
+  #
+  # The stage reads ONLY this block. Every key below is required: a
+  # missing key fails at startup with a diagnostic rather than defaulting.
+  #
+  # Comparability between models rests on this block and the model type
+  # being the ONLY things that differ between two runs: same prompt, same
+  # parser, same scorer. Give each model its OWN output_dir so a second run
+  # cannot overwrite the first.
+  sroie:
+    # The split ROOT: the directory CONTAINING img/ and entities/, not
+    # either subdirectory.
+    #
+    # test/ is the 347-image ICDAR leaderboard split and is what we report.
+    # The 626-image train split also ships (as img/ + key/ at the dataset
+    # root); it is NOT interchangeable: two of its records have a blank
+    # answer-key field and the loader rejects them by design.
+    # dir: /home/jovyan/nfs_share/tod_2026/data/sroie          # 626-image train split
+    data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test  # 347-image test split
+    # One folder for each model. The task does not resume: every run writes over
+    # sroie_per_image.csv and sroie_summary.json here, so a second model sharing the
+    # folder would destroy the first model's results.
+    output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
+    # Four short fields. 256 is ample; a larger budget only lengthens a
+    # runaway repetition loop before it is caught.
+    max_new_tokens: 256
+    # Receipts submitted to the engine in one chat() call, so vLLM's
+    # scheduler can run them concurrently instead of one at a time.
+    #
+    # THE REAL CEILING IS inference.vllm.models.<model>.max_num_seqs. This
+    # value only decides how many requests are OFFERED at once; the
+    # scheduler still runs at most max_num_seqs of them concurrently, so
+    # raising this alone changes nothing. Raise both together.
+    #
+    # 8 is a deliberate starting point, not a tuned value: a SROIE receipt is one
+    # small image, so 8 concurrent requests is well inside the 23 GiB L4 budget.
+    # A failed batch is retried one image at a time, so an over-large value costs
+    # throughput, never results.
+    batch_size: 8
 
   # Classification settings
   classification:
     fallback_type: UNIVERSAL     # Default type when model response can't be parsed
 
   # Processing options
+  # How extraction is batched: documents submitted to the engine in ONE chat()
+  # call, so vLLM's scheduler can run them concurrently. Calling generate()
+  # per image keeps exactly one sequence in flight however max_num_seqs is
+  # set, which is what the pipeline did until 2026-08-14 and what made its
+  # throughput ~3x lower than it needed to be.
+  #
+  # ONE BATCH HOLDS ONE DOCUMENT TYPE. An engine call carries a single
+  # completion budget, so every image in it shares a completion budget, and each
+  # type has its own prompt. The classify stage runs first, so the type is known
+  # before batching.
+  #
+  # THE CEILING IS inference.vllm.models.<model>.max_num_seqs. These values
+  # only decide how many requests are OFFERED at once; the scheduler still
+  # runs at most max_num_seqs concurrently. Raise both together or neither
+  # moves.
+  #
+  # Sizes are bounded by peak memory. Set every value to 1 to reproduce exactly
+  # the pre-batching behaviour.
+  # SIZED FOR GEMMA 4 (2026-08-14). Gemma is sent ONE image per prompt, which it
+  # pans and scans for itself. The quantised 12B is 9.56 GiB of W4A16 weights,
+  # leaving about 11 GiB for KV cache and activations on a 23 GiB L4.
+  #
+  # 8 is not a guess: the SROIE benchmark ran this exact checkpoint at
+  # batch 8 / max_num_seqs 8 with 560 soft tokens and no retries, reaching
+  # 106 images/min.
+  # DOSE PROBE 2026-08-14, was 8. At batch 8 the whole 165-receipt set held
+  # accuracy except IS_GST_INCLUDED, which fell 0.8485 -> 0.5758 and took
+  # the overall mean 0.930 -> 0.915. It is a single-token boolean, so it is
+  # the field most exposed to the attention-kernel numerics that change with
+  # batch composition. Raising to 10 asks whether the effect scales with
+  # concurrency (dose-dependent, so a point on the curve can be chosen) or
+  # is structural (a fixed defect in the batch path, worth finding instead).
+  #
+  # Interpret against the ACTUAL concurrency, not this number: if the KV
+  # cache admits fewer than 10, the dose is whatever vLLM managed. Run with
+  # VLLM_LOGGING_LEVEL=INFO to see "Maximum concurrency for N tokens".
+  # DOSE PROBE, third setting. Measured on the 165 degraded receipts:
+  #
+  #   batch  actual concurrency  IS_GST_INCLUDED  overall  inference
+  #     1          1.0                0.8485       0.930     (unbatched)
+  #     8          3.43               0.5758       0.915      174.6s
+  #    10          3.43               0.5636       0.915      158.4s
+  #
+  # 8 and 10 gave the SAME result because the KV cache caps concurrency at
+  # 3.43x for this model at max_model_len 16384: both offered more than the
+  # engine could run, so both delivered the same dose. Raising further tests
+  # nothing.
+  #
+  # 2 is below the ceiling, so it is the first setting that genuinely
+  # reduces concurrency. If IS_GST_INCLUDED recovers toward 0.85 the effect
+  # is dose-dependent and a point on the curve can be chosen; if it stays
+  # near 0.57 the batch path is doing something structural to that field.
+  # SETTLED AT 10 (2026-08-14) after a dose probe on the 165 degraded
+  # receipts. The KV cache caps real concurrency at 3.43x, so 8 and 10 gave
+  # the same dose; 2 gave the same ACCURACY as 10 and was 2.8x slower.
+  #
+  #   batch  concurrency  IS_GST_INCLUDED  overall  inference
+  #     1        1.0          0.8485        0.930      -
+  #     2        2.0          0.5515        0.914    438.5s
+  #     8        3.43         0.5758        0.915    174.6s
+  #    10        3.43         0.5636        0.915    158.4s   <- fastest
+  #
+  # IS_GST_INCLUDED is a THRESHOLD effect, not a gradient: it collapses the
+  # moment concurrency exceeds 1 and then stays flat, because batched
+  # attention numerics flip a single-token boolean sitting on the decision
+  # boundary. It cannot be tuned away with batch size. It is also fragile
+  # unbatched (0.8485, SD 0.44: bimodal) and DERIVABLE from GST_AMOUNT,
+  # which is the real fix.
+  batching:
+    # Pages the classify stage submits in one engine call (vLLM backend). A
+    # page is one independent call, so the engine runs up to max_num_seqs of
+    # them at once; one at a time, 55 pages took 157 s on Gemma 4 31B
+    # (2026-11-13). 1 = one call a page. Keep it several times max_num_seqs so
+    # the engine stays full. Not a document type: the extract stage ignores it.
+    classify: 64
+    receipt: 10
+    invoice: 10
+    # Bank statements share an engine call: each statement is one independent
+    # call, so the engine runs up to max_num_seqs of them at once.
+    # Keep this several times max_num_seqs: the engine queues the rest and stays
+    # full as short statements finish, whereas every call ends with a few long
+    # statements running alone. MEASURED 2026-11-16 on 55 statements with 8 in
+    # flight: 16 a call took 484 s, one call of 55 took 418 s. A crash loses at
+    # most one batch, which the next run redoes.
+    bank_statement: 64
+    default: 10
+
   processing:
-    batch_size: null             # Images per batch (null = auto-detect from VRAM, 1 = sequential)
-    bank_v2: true              # Use V2 bank statement extraction
-    balance_correction: false  # Disable balance validation (reduces accuracy)
     verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
     debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)
 
-  # Named token budgets — single source of truth for all max_tokens values.
+  # Named token budgets: single source of truth for all max_tokens values.
   # Workflow YAML nodes reference these by name via `token_budget: <name>`.
   token_budgets:
     classify: 150
-    detection: 200
-    detect_headers: 500
-    detect_headers_short: 200
-    extract_standard: 2048
-    extract_travel: 1024
     extract_bank: 4096
-    bank_header_detection: 500
-    transaction_match: 2000
-    receipt_extract: 500
-    orchestrator_generate: 1024
-    bank_statement_floor: 1500
     fallback_base: 512
     fallback_per_field: 64
-    trust_classify: 300
-    trust_field_extract: 500
 
-  # Trust distribution linking — NRO Private Wealth compliance checking.
-  # Paths below SHADOW io.input/io.output when KFP_TASK=trust_* (entrypoint.sh
-  # _resolve_trust_vars repoints the shared stages here; see the io: header).
-  trust:
-    data_dir: ../private_wealth_docs
-    quads: ../private_wealth_docs/output/trust_quads.csv
-    quads_incomplete: ../private_wealth_docs/output/trust_quads_incomplete.csv
-    ground_truth: ../private_wealth_docs/ground_truth/trust_distribution_links.yml
-    classification_ground_truth: ../private_wealth_docs/ground_truth/trust_classification_gt.yml
-    classifications: ../private_wealth_docs/output/trust_classifications.jsonl
-    raw_extractions: ../private_wealth_docs/output/raw_extractions.jsonl
-    compliance_results: ../private_wealth_docs/output/trust_compliance_results.jsonl
-    output_dir: ../private_wealth_docs/output
-    evaluation_dir: ../private_wealth_docs/output/trust_evaluation
-    log_dir: ../private_wealth_docs/output/logs
-    subdirectories:
-      # Production (flat directory, trust_classify generates quads):
-      trust_return: .
-      distribution_stmt: .
-      income_schedule: .
-      beneficiary_itr: .
-      # Development (pre-sorted subdirectories):
-      #   trust_return: trust_returns
-      #   distribution_stmt: distribution_statements
-      #   income_schedule: trust_income_schedules
-      #   beneficiary_itr: beneficiary_itrs
-    amount_tolerance: 0.01    # trust-eval amount match tolerance (relative)
-    linking_fields:
-      # ID fields compared as ABN/TFN (space-normalised exact match)
-      id_fields:
-        - trust_abn
-        - beneficiary_tfn
-      # Amount fields compared numerically within amount_tolerance
-      amount_fields:
-        - share_of_net_income
-        - franking_credit
-        - capital_gain_component
+  # Photographs of receipts. People often lay a few receipts on a table and take one
+  # photograph; every later stage expects one document per image. The split stage
+  # (KFP_TASK=split, stages/split.py) runs before classify: it asks the model where each
+  # receipt is, cuts a photograph of several into one image per receipt, leaves a
+  # photograph of one receipt whole, and turns each image so its rows of print run
+  # level. Its output directory's images/ is
+  # what the later stages then read (image_dir=<split output>/images). The rules are in
+  # common/photo_split.py. Every key is required.
+  #
+  # MEASURED with the Gemma 4 31B, 17 November 2026, on the prompt below:
+  #   57 synthetic photographs of 2 to 4 receipts: the right number of boxes on all 57.
+  #   4 real photographs (three of one receipt, one of two): the right number of boxes
+  #     on all 4, each box close round its receipt.
+  # Asked only to count, the same model was wrong on 2 of the 57 and on the real
+  # photograph of two, which is why the stage asks for boxes and counts them.
+  #
+  # MEASURED end to end, same model and day, on the 55 synthetic receipts at three
+  # damage levels, photographed alone (165 photographs) and in groups (57 photographs):
+  #   the stage cut 56 of the 57 group photographs (55 on an earlier run); the rest were
+  #     left whole because two boxes overlapped, so 4 receipts (8 earlier) did not get
+  #     an image of their own;
+  #   all 165 photographs of one receipt were left whole, as they should be;
+  #   on the 157 receipts every run delivered, mean F1 over all fields and receipts
+  #     accepted (F1 0.95 or more):
+  #       alone, as it lies                 0.950   103
+  #       alone, turned level               0.965   127
+  #       cut from a group, as it lies      0.906    47
+  #       cut from a group, turned level    0.956   121
+  # So a receipt cut from a group and turned level reads as well as one photographed
+  # alone and left as it lies (+0.006, 95% interval -0.004 to +0.015), and a little
+  # behind one photographed alone and turned (-0.010, -0.019 to -0.002).
+  # Not yet measured: reading from real photographs (only the boxes were checked on the
+  # four), and receipts that touch or overlap.
+  photo_split:
+    # false = every photograph is copied through unchanged and the model is not loaded.
+    # Shipped false: the stage changes nothing until this is turned on.
+    enabled: false
+    # The question put to the model about each photograph. The reply's form (a JSON list
+    # of {"box_2d": [ymin, xmin, ymax, xmax]} on a 0 to 1000 scale) is the one this
+    # model gives for detection prompts; common/photo_split.py reads exactly that.
+    prompt: |
+      Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each receipt, in the form {"box_2d": [ymin, xmin, ymax, xmax], "label": "receipt"}, where the four numbers are normalised to 0-1000.
+    # Longest reply allowed. A box takes about 30 tokens.
+    max_tokens: 400
+    # Photographs sent to the engine in one call.
+    batch_size: 16
+    # Each cut image is this much larger than its box on every side, as a share of the
+    # box's own width and height, but never past the halfway line to a neighbour, so
+    # a generous margin costs only a strip of table.
+    # MEASURED on the 57 synthetic photographs, whose receipts are tilted up to 25
+    # degrees and whose boxes the model drew tighter than on real photographs (of 161
+    # receipts: whole sheet inside its cut / a cut holding over 2% of a neighbour):
+    #   0.03: 34 / 1     0.08: 62 / 2     0.15: 101 / 4     0.25: 123 / 5
+    # On the real photograph of two upright receipts, 0.03 already gave two whole,
+    # separate receipts. 0.10 is a middle value, not a measured optimum.
+    margin_frac: 0.10
+    # A box covering less than this share of the photograph is ignored.
+    min_box_frac: 0.01
+    # The reply is not trusted, and the photograph is copied through unchanged, when two
+    # boxes share more than max_overlap_frac of the smaller one or when there are more
+    # than max_receipts boxes.
+    max_overlap_frac: 0.10
+    max_receipts: 12
+    # Each image the stage writes is turned so its rows of print run level. The turn is
+    # found from the print (a least-squares line through each row; see finder below). A
+    # photograph of one receipt is turned whole, by the print inside its box. A turn
+    # under straighten_min_deg is left alone, as is one over straighten_max_deg, which is
+    # not believed: receipts lie roughly upright. straighten_fill_rgb colours the corners
+    # a turned image gains.
+    # WHY: a model follows a row across a wide gap (label on the left, amount on the
+    # right) far less well on a turned page. MEASURED 17 November 2026, Gemma 4 31B, the
+    # amount on the GST line of a receipt or invoice, before any turning:
+    #   level (clean, or photographed with a turn of up to 3 degrees)   165 of 165 read
+    #   photographed alone, turned up to 8 and to 14 degrees           43 and 34 of 55
+    #   cut from a group photograph, turned up to 25 degrees           64 of 157
+    # Every miss but one was NOT_FOUND, not a wrong amount. On those 157 cut images the
+    # turn was then found to within 2 degrees for 151 and never worse than 3.4.
+    # After turning, on the same receipts: the amount was read on 164 of the 165
+    # photographed alone and on 156 of the 161 cut from groups. Turning raised mean F1
+    # by 0.050 on cut receipts (93 better, 62 the same, 2 worse of 157) and by 0.016 on
+    # receipts photographed alone (35 better, 115 the same, 7 worse).
+    straighten: true
+    straighten_min_deg: 1.0
+    # MEASURED 19 November 2026 on the 472 real photographs of single receipts in the
+    # WildReceipt test split, by this stage's own row direction (checked by eye against
+    # the print on the 12 it turned furthest from where the set's upright word boxes put
+    # the rows: the stage was right on all 12, and the boxes are no yardstick for tilt).
+    # Of 454 not cut or rectified, 283 were under 1 degree or gave no direction, 25 were
+    # over 3, 10 over 5, 2 over 10, and the largest was 13.8. Nobody lays a receipt at 40
+    # degrees on purpose: 15 holds every tilt seen and declines the rest.
+    straighten_max_deg: 15.0
+    # An image is turned or rectified only when its rows of print DRIFT far enough to
+    # mislead a reader: at least this many text heights off their own line across the
+    # width of the print (width of the print x tangent of the rows' angle, in text
+    # heights). Under about one a reader following a row stays on it. A wide page at a
+    # small angle drifts more than a narrow receipt at a large one, so this, not the
+    # angle, is the test. 0 acts on every image.
+    straighten_min_drift_heights: 2.0
+    straighten_fill_rgb: [255, 255, 255]
+    # Turning removes tilt but not foreshortening: a page photographed at an angle has rows
+    # that converge, which on a wide row (a bank statement's date, description and amount)
+    # is the same failure again. So a photograph holding one document is first tried for
+    # rectification: its four corners are found (the finder below) and the homography
+    # reversed. It is done only when the corners can be trusted: exactly one sheet found,
+    # covering at least rectify_min_area_frac of the photograph, with at least
+    # rectify_min_edges of its four edges confirmed by a sharp step, and holding at least
+    # rectify_min_print_frac of the photograph's print. Otherwise the photograph is
+    # turned, as above. Needs straighten: true.
+    # The print test exists because the stage sees every page, clean ones too. Without
+    # it, on 7 of 55 clean bank statements the ruled border of the transaction table was
+    # taken for the page's edge and the page would have been cropped to its table. A
+    # sheet holds all the print; a table leaves the page's heading outside it.
+    # MEASURED 17 November 2026 on 165 synthetic photographs of bank statements (corner
+    # error as a share of the page's diagonal):
+    #   edges needed   print test   rectified   corners within 1%   over 2%   left to turning
+    #        4            on           156           156 (worst 0.10%)   0            9
+    #        4            off          160           160                 0            5
+    #        3            off          164           160                 4 (to 19%)   1
+    # What 4 edges declines is pages running off the frame, including the 4 that 3 edges
+    # gets wrong. The print test costs 4 more, and is what keeps clean pages safe: of 330
+    # clean pages (165 plain, 165 with distractors) none is rectified or turned. A
+    # rectified page comes out at its own size (2024 by 4090 photographed, 1801 by 3508
+    # rectified, against 1800 by 3508 as rendered). The photographs have a plain desk; the
+    # finder does not hold up on a textured or pale surface, where this falls back to
+    # turning.
+    # Not yet measured: the reading after rectification.
+    rectify_pages: true
+    # Each image cut from a photograph of several receipts is rectified in the same way
+    # and under the same tests, with its own box telling its print from a neighbour's.
+    # false leaves cut images to be turned only. Needs straighten.
+    rectify_pieces: true
+    rectify_min_area_frac: 0.30
+    rectify_min_edges: 4
+    rectify_min_print_frac: 0.98
+    # The corners are looked for by two methods. The desk method (the one measured
+    # above) comes first: fast and exact, but it needs a desk that is smooth and of one
+    # colour. With rectify_paper_model true, a photograph it gives no trusted sheet for
+    # is tried with the paper method, which finds a sheet on a textured, cluttered or
+    # pale surface (its settings are the paper_* keys of finder below). Its sheet must
+    # pass the same three tests, and agree with its own quadrilateral by at least
+    # rectify_paper_min_fit.
+    # MEASURED 18 November 2026, on this machine:
+    #   110 synthetic statement photographs, each with the box the model gave for it. The
+    #     desk method rectifies 104, all exact. Of the 6 it declines, the paper method
+    #     rectifies 2, each with its corners within 0.1% of the page diagonal, and
+    #     declines 4, which are turned: 106 of 110 in all. Run on all 110 by itself, the
+    #     paper method finds 109 sheets and trusts 65, every one within 0.2%.
+    #   330 clean pages (165 plain, 165 with distractors): the paper method stops at once
+    #     on every one (their border is their own paper), in about 0.01 s a page.
+    #   4 real photographs of receipts with the model boxes (felt, wood grain, a pale
+    #     desk, two receipts): it finds all 5 sheets, where the desk method finds none
+    #     (judged by eye), in 1 to 2 s each. None is rectified: a receipt is under
+    #     rectify_min_area_frac, and print inside is 0.59 on felt, 0.93 on wood grain,
+    #     0.98 on the pale desk, and 0.80 and 0.98 for the two receipts, against 0.98.
+    #   Real images with NO box (the model was not run), so the whole frame is used:
+    #     347 scanned receipts (SROIE test): 3 rectified, each correctly and with all of
+    #       its annotated text inside; 26 turned, none by more than 5 degrees. Slow: a
+    #       median of 3.4 s a scan and up to 49 s, because a real scan has no clean border
+    #       for the method to stop at.
+    #     472 photographed receipts (WildReceipt test): 16 rectified, with 99.6% or more
+    #       of the annotated text inside each. The paper method finds a sheet on 443 but
+    #       it holds all the text on only 83, and the tests of trust reject the rest.
+    #       Turning, measured over the whole frame, levels 93 and unlevels 48 (16 by more
+    #       than 3 degrees): these photographs are mostly level already, and a table
+    #       texture can outvote the print. In the stage the turn is measured inside the
+    #       model box, which this did not test.
+    #   Not yet measured: either real set with the model boxes, and the reading of any
+    #   image the paper method changes.
+    rectify_paper_model: true
+    rectify_paper_min_fit: 0.97
 
-  # Transaction linking — receipt/invoice -> bank-statement debit matching.
-  # Standalone task (KFP_TASK=run_transaction_link); does NOT touch the trust
-  # pipeline. Matcher-first: the algorithmic matcher links against the rows the
-  # extract stage already pulled; receipts it can't confidently match fall
-  # through to a targeted single-image VLM lookup. Every key is required —
-  # stages/transaction_link.py fails fast on a missing one.
-  linking:
-    case_key_pattern: "^(?P<case>[^_]+)_"   # group files by case (split on first "_")
-    vlm_prompt: single_receipt_link          # prompt file in prompts/ (without .yaml)
-    vlm_max_tokens: 4096                      # token budget for the fallback VLM lookup
-    vlm_temperature: 0.0                      # MUST be 0.0 — the shared generate seam is deterministic
-    hybrid_amount_tolerance: 0.01            # $ gate for an algorithmic amount match
-    hybrid_date_window_days: 5               # business-day window for date scoring
-    hybrid_description_threshold: 0.3        # min token-overlap fraction for description support
-    hybrid_min_confidence: LOW               # min matcher confidence to accept without VLM (HIGH|MEDIUM|LOW)
-    # --- Paths: these SHADOW io.input/io.output when KFP_TASK=run_transaction_link.
-    # entrypoint.sh _resolve_linking_vars points the shared classify/extract/clean
-    # stages at data_dir below and writes all artifacts under output's parent dir.
-    # (Keys above are linking-specific knobs; see the io: header for the mechanism.)
-    data_dir: ../evaluation_data/synthetic_transaction_linking
-    output: ../evaluation_data/synthetic_transaction_linking/output/transaction_links.jsonl
-    ground_truth: ../evaluation_data/synthetic_transaction_linking/transaction_links.yml   # optional eval; if set -> evaluate_linking runs
-    evaluation_dir: ../evaluation_data/synthetic_transaction_linking/output/transaction_evaluation
-    log_dir: ../evaluation_data/synthetic_transaction_linking/output/logs
+    # The sheet finder (common/sheet_finder.py). The split stage uses two parts of it
+    # to straighten an image: finding print (the mark_* keys and work_long_edge) and the
+    # direction of its rows (the text_* keys). The rest finds each sheet's four corners by
+    # image processing alone; nothing in the pipeline calls that, and it works on
+    # synthetic photographs with a plain desk but not on real ones (see the module).
+    # All of these settings are read by common/sheet_finder_config.py.
+    #
+    # MEASURED on 57 synthetic photographs of 2 to 4 receipts (165 placements, three
+    # damage levels, true corners known): every receipt found, none spurious, every one
+    # the right way up, corners within 1% of the receipt's diagonal for 164 (the other
+    # 3.3%). On 165 single-receipt photographs it was not set on: one sheet found in 164.
+    # Lengths in pixels are on the working copy unless they say otherwise.
+    finder:
+      # The sheets are separated on a copy shrunk to this long edge; corners are always
+      # refined on the full-size photograph.
+      work_long_edge: 1600
 
-  # Batch processing tuning
-  batch:
-    default_sizes: {internvl3: 4}
-    max_sizes: {internvl3: 8}
-    conservative_sizes: {internvl3: 1}
-    min_size: 1
-    strategy: balanced            # conservative | balanced | aggressive
-    auto_detect: true
+      # Desk: modelled from the frame's outer ring (share of the short edge). A pixel
+      # is not desk when its colour is further from the desk than both of these: a
+      # fixed distance in grey levels, and a multiple of the desk's own noise.
+      desk_ring_frac: 0.03
+      mask_min_distance: 14.0
+      mask_noise_multiple: 5.0
 
-  # Extraction ordering — controls batch submission order for prefix-cache reuse
+      # Shadow: the desk darkened without a change of hue, down to this share of its
+      # lit brightness. A shadow counts as desk only this close to lit desk, in text
+      # heights (or, when a photograph shows no print, as a share of the long edge).
+      # Further in, that colour is shaded paper: this is what keeps a grey receipt on
+      # a grey desk in one piece.
+      shadow_min_factor: 0.5
+      shadow_reach_heights: 4.5
+      shadow_reach_frac: 0.03
+
+      # Sharp steps: a change of at least step_min grey levels over step_span_px, after
+      # a light blur. A paper edge is one; a shadow's edge (a slow ramp) is not. Specks
+      # smaller than step_min_area_px are noise. Gaps in an edge up to about twice
+      # edge_gap_close_px are bridged, and edges are thickened by edge_seal_px, so the
+      # desk cannot be reached through a faint stretch of a paper edge.
+      blur_sigma_px: 1.0
+      step_span_px: 3
+      step_min: 9.0
+      step_min_area_px: 12
+      edge_gap_close_px: 4
+      edge_seal_px: 1
+
+      # A sheet must cover at least this share of the frame.
+      min_region_frac: 0.01
+
+      # Coarse edges: four lines fitted to the sheet's outline. A point supports a line
+      # within outline_tolerance_px; a line needs points along this share of the
+      # sheet's shorter side; and two lines must run within text_agree_deg of the rows
+      # of print, the other two within twice that of square to them.
+      outline_tolerance_px: 2.0
+      min_outline_edge_frac: 0.25
+      text_agree_deg: 10.0
+
+      # Refined edges, on the full-size photograph: each edge is walked from outside
+      # the sheet inwards to the first sharp step, twice. Reaches are shares of the
+      # sheet's diagonal. An edge is moved only if this share of it shows a step.
+      refine_outside_first_frac: 0.02
+      refine_inside_first_frac: 0.06
+      refine_outside_final_frac: 0.01
+      refine_inside_final_frac: 0.02
+      edge_tolerance_px: 2.0
+      min_edge_support: 0.35
+
+      # Print: a pixel darker than its mark_block_px neighbourhood (odd) by
+      # mark_darker_by grey levels. A mark longer than mark_max_heights text heights
+      # is not print.
+      mark_block_px: 31
+      mark_darker_by: 14.0
+      mark_max_heights: 5.0
+
+      # Direction of the rows of print, by a least-squares line through each row
+      # (cv2.fitLine). The letters of a row are joined sideways over text_join_heights
+      # into one strip; a strip counts as a row when it is at least
+      # text_min_row_heights long and no more than text_max_row_thickness_heights
+      # thick (all in text heights); the direction is the length-weighted median of the
+      # rows' directions, given when at least text_min_rows rows are found. Joining
+      # sideways assumes the sheet is roughly upright in the photograph.
+      #
+      # MEASURED 17 November 2026 on 165 synthetic receipts (right = within 2 degrees)
+      # and three real photographs:
+      #   this method        153 right, worst 3.4 degrees, 0 a quarter turn out; right on
+      #                      all three photographs. The same at a join of 1.0 and of 1.5;
+      #                      146 at 2.5.
+      #   hand-written vote  159 right, worst 5.1 degrees, 0 a quarter turn out; right on
+      #                      all three. Not used: custom code where this is a standard
+      #                      routine.
+      #   cv2.HoughLinesP    156 right, 2 a quarter turn out; a quarter turn out on two
+      #                      of the three photographs. It follows rows or columns
+      #                      according to one gap setting, and faint thermal print leaves
+      #                      no setting that works.
+      text_join_heights: 1.5
+      text_min_row_heights: 4.0
+      text_max_row_thickness_heights: 2.5
+      text_min_rows: 5
+
+      # Seed for the line fits, so a photograph always gives the same corners.
+      ransac_seed: 0
+
+      # The drift of the print is measured with this percentile of the rows' angles,
+      # ranked by size and weighted by length, not their median: on a page seen at a
+      # slant the rows fan out either side of level, and it is the steep ones that drift.
+      drift_row_percentile: 60.0
+
+      # THE PAPER METHOD (find_sheet_by_paper). Everything above models the desk, and
+      # needs it smooth and of one colour. This models the paper instead, for one
+      # document on any surface, and is what rectification tries when the desk method
+      # gives no sheet it can trust (see rectify_paper_model above).
+      # The area inside a block of print is paper for certain; cv2.grabCut, seeded with
+      # it, learns the paper's colours and the surroundings' from the photograph.
+      paper_work_long_edge: 800
+      paper_rounds: 5
+      # Letters and rows this many text heights apart, or closer, are one block of print.
+      paper_join_heights: 3.0
+      # The frame's outer ring, as a share of its short edge, is surroundings for certain.
+      paper_border_frac: 0.01
+      # A page that fills the frame has no surroundings: when that ring is within this
+      # colour difference (CIE Lab) of the paper under the print, the method stops at
+      # once. Measured: 0.0 on clean rendered pages, 5.7 or more on photographs.
+      paper_min_border_difference: 3.0
+      # With a box from the model: which blocks of print the box claims (those it covers
+      # at least paper_block_in_box_min of, and that are at least paper_block_min_share
+      # of the largest of them).
+      # ... and then only the box and that print are looked at, grown on every side by
+      # this share of their extent: wide enough to hold blank paper beyond the print
+      # (the model boxes the print, not the sheet). What lies further off, the rest of
+      # the table or another receipt, is neither segmented nor counted as print outside.
+      paper_region_grow_frac: 0.35
+      paper_block_in_box_min: 0.5
+      paper_block_min_share: 0.02
+      # The second pass lets the sheet continue along its own edges, to take in blank
+      # paper beyond the print. The longer sheet is kept when it and its quadrilateral
+      # agree at least this well. Measured: 0.987 or more where the longer sheet was
+      # right (synthetic statements), 0.915 or less where it let desk in (real photographs).
+      paper_extension_min_fit: 0.97
+      # Each edge is then placed on the full-size photograph at the first sharp step met
+      # walking OUT from inside the sheet (the desk method walks in from outside, which a
+      # textured surface, full of sharp steps of its own, does not allow). The walk starts
+      # this far inside the coarse edge, short enough to start in the page's margin and
+      # not in its print, and runs this far outside it; both are shares of the diagonal.
+      paper_refine_outside_frac: 0.02
+      paper_refine_inside_frac: 0.01
+
+  # Extraction ordering: controls batch submission order for prefix-cache reuse
   extraction:
     order:
       - bank_statement
@@ -342,24 +868,9 @@ pipeline:
     # Labels that skip extraction entirely (written as skipped records)
     skip_labels: []
 
-  # Per-bank column-mapping cache (standalone bank workflow only)
-  bank_header_cache:
-    enabled: false
-    key_pattern: "^(?P<institution>[A-Za-z]+)_"
-
-# Resources — GPU memory thresholds and infrastructure timeouts.
+# Resources
 resources:
-  # GPU memory thresholds (GB) — drive auto-batch-size selection.
-  gpu_memory:
-    low: 8                      # GB — conservative batching
-    medium: 16                  # GB — balanced batching
-    high: 24                    # GB — aggressive batching
-    very_high: 64               # GB — maximum batching
-
-  # Infrastructure settings — timeouts, memory thresholds
   infrastructure:
-    # No dp_timeout: data-parallel workers run until they finish or die (run_dp
-    # polls worker liveness instead of imposing an arbitrary wall-clock cap).
+    # A worker with an engine on a card runs until it finishes or dies; there is no time limit on
+    # the work. This is how long to wait for a finished worker's process to end.
     dp_join_timeout: 60           # seconds, process join timeout
-    gpu_memory_threshold_gb: 1.0
-    gpu_memory_fallback_gb: 24.0

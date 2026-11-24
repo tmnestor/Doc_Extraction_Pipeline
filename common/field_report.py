@@ -1,12 +1,11 @@
 """Per-field F1 dispersion for the evaluate stage.
 
-Addresses the gap named in plans/2026-08-13-field-f1-reporting.md: the
-pipeline publishes one number per field with no dispersion, no interval and
-no sample size, so a field scored on 12 documents reads the same as one
-scored on 165.
+Without it the pipeline publishes one number per field with no dispersion, no
+interval and no sample size, so a field scored on 12 documents reads the same
+as one scored on 165.
 
 The inputs are the per-(document, field) F1 values the evaluator already
-computes and stores in each record's ``field_scores`` — no scorer change is
+computes and stores in each record's ``field_scores``: no scorer change is
 needed to report this.
 
 NOTE ON THE INTERVAL. Production per-(document, field) F1 is CONTINUOUS:
@@ -14,7 +13,7 @@ list fields (transaction dates, line items) are scored position-agnostically
 and earn partial credit. So the interval here is the normal approximation on
 a mean, ``1.96 * sd / sqrt(n)``. It is deliberately NOT the Wilson interval
 used for the SROIE benchmark, where a field holds a single value and each
-document scores 1 or 0 — a proportion interval would be the wrong tool for
+document scores 1 or 0: a proportion interval would be the wrong tool for
 continuous scores.
 """
 
@@ -47,7 +46,7 @@ def field_distributions(eval_results: list[dict]) -> list[FieldDistribution]:
             zeros, which would understate every field.
 
     Returns:
-        One entry per field, WEAKEST FIRST — the table is read to find what
+        One entry per field, WEAKEST FIRST: the table is read to find what
         to fix. ``n`` differs between fields because field sets differ by
         document type, and reporting it is what stops a 12-document field
         being read like a 165-document one.

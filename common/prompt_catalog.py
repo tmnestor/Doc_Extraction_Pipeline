@@ -7,8 +7,8 @@ Usage:
     from common.prompt_catalog import PromptCatalog
 
     catalog = PromptCatalog()
-    prompt = catalog.get_prompt("internvl3", "invoice")
-    bank_prompt = catalog.get_prompt("bank", "turn0_header_detection")
+    prompt = catalog.get_prompt("gemma4-31b-w4a16-vllm", "invoice")
+    bank_prompt = catalog.get_prompt("bank", "schema_fallback_extraction")
 """
 
 from pathlib import Path
@@ -111,41 +111,12 @@ class PromptCatalog:
             text = text.format(**format_args)
         return text
 
-    # -- Entry point 2: Discovery / introspection -----------------------------
-
-    def list_keys(self, namespace: str) -> list[str]:
-        """List available prompt keys for a namespace.
-
-        Returns:
-            Sorted list of available keys, or ``[]`` if file not found.
-        """
-        try:
-            filename = self._resolve_filename(namespace)
-            path = self._dir / filename
-            data = self._load_yaml(path)
-            return sorted(data.get("prompts", {}).keys())
-        except (FileNotFoundError, ValueError):
-            return []
-
-    # -- Entry point 3: Detection config (structured data) --------------------
-
-    def get_detection_config(self) -> dict[str, Any]:
-        """Load the full detection YAML as a dict.
-
-        Provides ``type_mappings`` and ``fallback_keywords`` for document type
-        normalization.  Runtime settings (``fallback_type``, token budgets)
-        live in ``run_config.yml`` and are accessed via ``AppConfig``.
-
-        Returns:
-            Parsed dict from ``document_type_detection.yaml``.
-        """
-        path = self._dir / "document_type_detection.yaml"
-        return self._load_yaml(path)
+    # -- Entry point 2: the classification rules ----------------------------
 
     def get_column_roles(self) -> dict[str, list[str]]:
         """Load semantic column-role -> header-keyword lists from detection YAML.
 
-        Source of truth for ``HeaderListParser._match_columns``.
+        Read by ``common.classification``.
 
         Returns:
             Mapping of role name to its list of header keywords.
@@ -180,7 +151,7 @@ class PromptCatalog:
     def get_classification_evidence(self) -> dict[str, Any]:
         """Load the evidence-based classification rule set from detection YAML.
 
-        Drives ``ClassificationParser._parse_enriched``: an ordered list of
+        Read by ``common.classification``: an ordered list of
         ``rules`` (first match wins) plus a ``default`` for when none match.
 
         Returns:
@@ -291,80 +262,26 @@ class PromptCatalog:
                 "Fix: set `default: none` or a supported document type."
             )
 
-    # -- Auxiliary: column patterns (bank-specific structured data) ------------
+    def check_extraction_prompts(self, model_type: str) -> None:
+        """Check that every prompt in a model's prompt file is for a supported document type.
 
-    def get_column_patterns(self) -> dict[str, Any]:
-        """Load bank column patterns from ``bank_column_patterns.yaml``.
-
-        Returns:
-            The ``patterns`` dict mapping column types to keyword lists.
-        """
-        path = self._dir / "bank_column_patterns.yaml"
-        data = self._load_yaml(path)
-        return data.get("patterns", {})
-
-    # -- Auxiliary: extraction routing (replaces cli.py:load_prompt_config) ----
-
-    def build_extraction_routing(self, model_type: str) -> dict[str, str]:
-        """Derive the ``{DOC_TYPE: prompt_key}`` mapping for a given model.
-
-        Cross-references the model's extraction YAML keys against
-        ``field_definitions.yaml`` to determine which keys are document types,
-        strips structure suffixes, and returns the canonical mapping.
-
-        Args:
-            model_type: Registered model type string (e.g. ``"internvl3"``).
-
-        Returns:
-            Dict mapping uppercase canonical types to prompt keys.
-            e.g. ``{"INVOICE": "invoice", "RECEIPT": "receipt",
-                     "BANK_STATEMENT": "bank_statement_flat"}``
+        A prompt under a name that is no document type is never used, and usually a misspelling.
 
         Raises:
-            FileNotFoundError: If extraction YAML not found.
-            ValueError: If no document type keys found.
+            ValueError: Naming the prompts that belong to no type.
         """
         from common.field_schema import get_field_schema
-        from common.pipeline_config import (
-            load_structure_suffixes,
-            strip_structure_suffixes,
-        )
 
-        filename = self._resolve_filename(model_type)
-        path = self._dir / filename
-        data = self._load_yaml(path)
-
-        prompt_keys = set(data.get("prompts", {}).keys())
-        supported_types = set(get_field_schema().supported_document_types)
-        suffixes = load_structure_suffixes(path)
-
-        routing: dict[str, str] = {}
-        orphans: list[str] = []
-        for key in prompt_keys:
-            base_type = strip_structure_suffixes(key, suffixes)
-            if base_type in supported_types:
-                routing[base_type.upper()] = key
-            else:
-                orphans.append(key)
-
-        if orphans:
+        path = self._dir / self._resolve_filename(model_type)
+        prompts = set(self._load_yaml(path).get("prompts", {}))
+        supported = set(get_field_schema().supported_document_types)
+        strays = sorted(prompts - supported)
+        if strays or not prompts:
             raise ValueError(
-                "Orphaned extraction prompt key(s) do not map to any supported "
-                f"document type: {sorted(orphans)}.\n"
-                f"Where: {path.absolute()} (under the 'prompts:' section).\n"
-                "Each prompt key (after stripping structure suffixes "
-                f"{list(suffixes)}) must equal a supported_document_types entry in "
-                "config/field_definitions.yaml.\n"
-                f"Allowed types: {sorted(supported_types)}.\n"
-                "Fix: rename the key to its canonical type (e.g. 'travel_expense' "
-                "-> 'travel'), or add the new type to supported_document_types."
+                f"What: {'prompt(s) for no supported document type: ' + ', '.join(strays) if strays else 'no prompts'}.\n"
+                f"Where: {path.absolute()}, under the prompts: section.\n"
+                f"Expected: a prompt for each of some of: {', '.join(sorted(supported))} "
+                f"(supported_document_types in config/field_definitions.yaml).\n"
+                f"How to fix: rename each prompt to the document type it is for, or add the new type to "
+                f"supported_document_types."
             )
-
-        if not routing:
-            raise ValueError(
-                f"No document type prompts found in {filename}. "
-                f"Expected keys like 'invoice', 'receipt', etc. in prompts section. "
-                f"Found keys: {sorted(prompt_keys)}"
-            )
-
-        return routing

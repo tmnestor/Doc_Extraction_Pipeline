@@ -14,13 +14,12 @@ from pathlib import Path
 from queue import Empty
 from typing import Any
 
-from common.app_config import AppConfig
-from common.pipeline_config import PipelineConfig
+from common.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_gpu_count(config: PipelineConfig) -> int:
+def resolve_gpu_count(config: Settings) -> int:
     """Resolve effective GPU count for vLLM DP.
 
     Priority: data_parallel_size > num_gpus > auto-detect.
@@ -37,12 +36,46 @@ def resolve_gpu_count(config: PipelineConfig) -> int:
         return 1
 
 
+def resolve_dp_gpus(config: Settings, model_type: str) -> int | None:
+    """Resolve the DP rank count, or None when the DP fast path must not run.
+
+    ``None`` means "use the single-engine path", for one of two reasons: only one
+    GPU is available, or *model_type* cannot hold one whole engine per GPU (a
+    quantised 31B still wants the entire card once KV cache and vision
+    activations are counted, so N engines would OOM).
+
+    The second case is logged: an operator who asked for N GPUs and silently got
+    a slower single-engine run would have no way to tell from the output.
+
+    Args:
+        config: Pipeline config carrying the GPU/DP counts.
+        model_type: Registered model type, used to look up the capability.
+
+    Returns:
+        Number of DP ranks to spawn, or None to skip the data-parallel path.
+    """
+    from models.registry import supports_data_parallel
+
+    gpus = resolve_gpu_count(config)
+    if gpus <= 1:
+        return None
+    if not supports_data_parallel(model_type):
+        logger.info(
+            "%s cannot run one engine per GPU; using the single-engine path despite "
+            "%d GPUs being available",
+            model_type,
+            gpus,
+        )
+        return None
+    return gpus
+
+
 def _partition_images(images: list[Path], n: int) -> list[list[Path]]:
     """Deal images round-robin into n balanced chunks (stride partition).
 
     Images arrive sorted by document type (expensive bank statements first,
     per ``extraction_order``). Contiguous chunking would pile every bank
-    statement onto GPU 0 — it becomes the straggler while the other GPUs race
+    statement onto GPU 0: it becomes the straggler while the other GPUs race
     through cheap receipts. Dealing round-robin (``images[i::n]``) spreads each
     type evenly across GPUs, so every GPU gets roughly the same number of
     banks / invoices / receipts and thus a balanced workload.
@@ -79,13 +112,13 @@ def run_dp(
     images: list[Path],
     worker_fn: str,
     worker_kwargs: dict[str, Any],
-    app_config: AppConfig | None = None,
+    app_config: Settings,
 ) -> list[dict[str, Any]]:
     """Launch N workers, collect merged results in original image order.
 
     No global timeout: workers run until they finish or die. A slow-but-alive
     worker (e.g. a GPU grinding through dense bank statements) is never falsely
-    killed — the collect loop polls the queue every ``poll_interval`` seconds
+    killed: the collect loop polls the queue every ``poll_interval`` seconds
     and only fails if a worker is found dead (OOM/SIGKILL) without having
     written a result.
 
@@ -95,13 +128,13 @@ def run_dp(
         worker_fn: Dotted path to a top-level function with signature:
             (gpu_id: int, image_paths: list[str], **worker_kwargs) -> list[dict]
         worker_kwargs: Extra kwargs forwarded to worker_fn (must be picklable).
-        app_config: Optional application config. When supplied, the process
-            join timeout is read from ``app_config.get_infra("dp_join_timeout")``.
+        app_config: The run's settings. How long to wait for a finished worker's process to end
+            is ``resources.infrastructure.dp_join_timeout``.
 
     Returns:
         Merged list of result dicts in original image order.
     """
-    join_timeout = int(app_config.get_infra("dp_join_timeout")) if app_config else 60
+    join_timeout = int(app_config.get_infra("dp_join_timeout"))
     poll_interval = 10  # seconds between liveness checks
     chunks = _partition_images(images, num_gpus)
     actual_gpus = len(chunks)
@@ -124,11 +157,11 @@ def run_dp(
         p.start()
         procs.append(p)
 
-    # Collect results — no global timeout. Poll the queue on a short interval
+    # Collect results: no global timeout. Poll the queue on a short interval
     # and check worker liveness. Workers that complete normally put results on
     # the queue; workers that hit a Python-level error put an exception. The
     # only unhandled case is a worker killed by the OS (OOM, SIGKILL) without
-    # writing to the queue — detected via is_alive() + exitcode so a slow but
+    # writing to the queue: detected via is_alive() + exitcode so a slow but
     # healthy worker is never falsely timed out.
     gpu_results: dict[int, list[dict]] = {}
     try:

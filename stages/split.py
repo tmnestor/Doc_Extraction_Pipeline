@@ -28,15 +28,17 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 """
 
 import logging
+import os
 import shutil
-from collections.abc import Iterator
+import time
 from pathlib import Path
 from typing import Any
 
 
-from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
+from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 
 from common.stage_settings import StageSettings
+from common.vllm_dp import RecordSink
 
 from .io import append_jsonl, read_completed_images, take_out
 from .records import failed
@@ -197,21 +199,107 @@ def apply_reply(
     return _record(photograph, "split", decision.reason, boxes, outputs, turns, rectifieds, reply, drifts)
 
 
-def _ask(
-    processor: Any, photographs: list[Path], config: Any, watch: EngineWatch
-) -> Iterator[list[Outcome[Path, str]]]:
-    """Put the photo split prompt to the model for each photograph, one engine call at a time.
+def ask_about_photographs(
+    processor: Any, photographs: list[Path], app_config: Any, *, sink: RecordSink | None = None
+) -> list[dict[str, Any]]:
+    """Ask the model where the documents are in each photograph. The one place photographs are asked about.
 
-    Photographs go ``batch_size`` to an engine call, and each call's outcomes are given as soon as it is
-    done, in the photographs' order. A call that fails is tried again one photograph at a time, and a
-    photograph that still fails comes back with its error and no reply (``common.engine_calls``).
+    One engine across the cards calls this once with every photograph. With an engine on each card, each
+    worker calls it with its share. It loads no model, cuts no image and writes no file: it gives the
+    model's reply for each photograph, and the stage's ``run`` acts on the replies.
+
+    Photographs go ``pipeline.photo_split.batch_size`` to an engine call. A call that fails is tried again
+    one photograph at a time, and a photograph that still fails comes back with its error and no reply
+    (``common.engine_calls``).
+
+    Args:
+        processor: The document processor.
+        photographs: The photographs, in order.
+        app_config: The run's settings.
+        sink: Where to write each photograph's reply as soon as it is given, if anywhere.
+
+    Returns:
+        For each photograph, in the order given: image_name, image_path, raw_response, error and
+        processing_time.
     """
+    from common.photo_split import photo_split_config_from
+
+    config = photo_split_config_from(app_config.raw, config_path=app_config.config_path)
+    watch = EngineWatch(app_config.stop_after_failed_requests)
 
     def ask(batch: list[Path]) -> list[str]:
         images = [processor.load_document_image(str(photograph)) for photograph in batch]
         return processor.ask(images, [config.prompt] * len(images), config.max_tokens)
 
-    return in_engine_calls(groups_of(photographs, config.batch_size), ask, watch=watch, what="photographs")
+    asked: list[dict[str, Any]] = []
+    calls = in_engine_calls(groups_of(photographs, config.batch_size), ask, watch=watch, what="photographs")
+    for outcomes in calls:
+        for outcome in outcomes:
+            record = {
+                "image_name": outcome.item.name,
+                "image_path": str(outcome.item),
+                "raw_response": outcome.reply or "",
+                "error": outcome.error,
+                "processing_time": outcome.seconds,
+            }
+            asked.append(record)
+            if sink is not None:
+                sink.write(record)
+    return asked
+
+
+class _ActedOn:
+    """Acts on each photograph's reply as it arrives: cuts or copies the image, and writes its record.
+
+    A photograph is dealt with, and its record written, as soon as the model has answered about it,
+    whichever card answered: a run that stops part way keeps every photograph it had finished, and
+    carries on from there.
+    """
+
+    def __init__(self, images_dir: Path, records_path: Path, config: Any, finder: Any, total: int) -> None:
+        self.records: list[dict[str, Any]] = []
+        self._images_dir, self._records_path = images_dir, records_path
+        self._config, self._finder, self._total = config, finder, total
+
+    def write(self, asked: dict[str, Any]) -> None:
+        photograph = Path(asked["image_path"])
+        record = apply_reply(
+            photograph, asked["raw_response"], self._images_dir, self._config, self._finder
+        )
+        if asked.get("error"):
+            # The model could not be asked about this photograph, in a shared call or alone. It is
+            # treated as one the model said nothing clear about, and says why.
+            record["reason"] = f"the model could not be asked: {asked['error']}"
+            record["error"] = asked["error"]
+        append_jsonl(self._records_path, [record])
+        self.records.append(record)
+        logger.info(
+            "[%d/%d] %s -> %s (%s)",
+            len(self.records),
+            self._total,
+            photograph.name,
+            record["action"],
+            record["reason"],
+        )
+
+
+def _in_the_photographs_order(records_path: Path, photographs: list[Path]) -> None:
+    """Put the records in the order of the photographs, whatever order their replies arrived in.
+
+    With an engine on each card the replies arrive as the cards give them. The file is written again in
+    the photographs' order and put in place whole, so that two runs of the same photographs write the
+    same file. A file already in that order is not touched.
+    """
+    from stages.io import read_jsonl, write_jsonl
+
+    place = {photograph.name: position for position, photograph in enumerate(photographs)}
+    records = read_jsonl(records_path)
+    in_order = sorted(records, key=lambda record: place.get(record.get("image_name", ""), len(place)))
+    if in_order == records:
+        return
+    rewritten = records_path.with_name(records_path.name + ".rewriting")
+    write_jsonl(rewritten, in_order)
+    os.replace(rewritten, records_path)
 
 
 def run(
@@ -292,7 +380,8 @@ def run(
         return images_dir
 
     from common.settings import Settings
-    from common.pipeline_ops import open_processor
+    from common.stage_timing import inference_seconds_from_records
+    from common.vllm_dp import read_on_the_cards
 
     cli_args: dict[str, Any] = {"output_dir": str(output_dir)}
     if model_type is not None:
@@ -307,32 +396,18 @@ def run(
         finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
         finder = finder_params_from(finder_section, config_path=resolved_config)
 
-    # Each engine call's photographs are dealt with, and their records written, before the next call is
-    # made: a run that stops part way keeps every photograph it had finished, and carries on from there.
-    records = []
-    model_seconds = 0.0
-    with open_processor(app_cfg) as processor:
-        watch = EngineWatch(app_cfg.stop_after_failed_requests)
-        for outcomes in _ask(processor, todo, split_config, watch):
-            model_seconds += sum(outcome.seconds for outcome in outcomes)
-            for outcome in outcomes:
-                photograph = outcome.item
-                record = apply_reply(photograph, outcome.reply or "", images_dir, split_config, finder)
-                if outcome.error is not None:
-                    # The model could not be asked about this photograph, in a shared call or alone. It
-                    # is treated as one the model said nothing clear about, and says why.
-                    record["reason"] = f"the model could not be asked: {outcome.error}"
-                    record["error"] = outcome.error
-                append_jsonl(records_path, [record])
-                records.append(record)
-                logger.info(
-                    "[%d/%d] %s -> %s (%s)",
-                    len(records),
-                    len(todo),
-                    photograph.name,
-                    record["action"],
-                    record["reason"],
-                )
+    # One engine on each card where the model allows it, else one engine across the cards, as for every
+    # other stage that uses the model. Until 25 November 2026 this stage started one engine across the
+    # cards whatever the model: for a model that fits on one card, half the engines it could have had.
+    # Either way the photographs are asked about by ask_about_photographs, and each reply is acted on
+    # here as it arrives.
+    started = time.time()
+    acted_on = _ActedOn(images_dir, records_path, split_config, finder, len(todo))
+    asked = read_on_the_cards(app_cfg, todo, ask_about_photographs, sink=acted_on)
+    records = acted_on.records
+    _in_the_photographs_order(records_path, photographs)
+    model_seconds = inference_seconds_from_records(asked.records, fallback=time.time() - started)
+    logger.info("Engines: %s", asked.arrangement)
     logger.info(
         "Split questions complete: %d photographs in %.1fs (%.2fs/photograph)",
         len(todo),

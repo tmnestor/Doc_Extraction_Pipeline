@@ -196,7 +196,8 @@ failures in it is not read as a clean one.
 | `gemma4-12b-unified-w4a16-vllm` | Gemma 4 12B, quantised to 4-bit weights by its maker | One engine on each card, each reading its share of the pages |
 
 Both arrangements read pages through the same code. An engine on each card is given its share of the pages
-and runs exactly what a single engine runs.
+and runs exactly what a single engine runs. That holds for every task that uses the model: `split`,
+`classify`, `extract` and `sroie`.
 
 Both models run on vLLM 0.29.0 in one conda environment, `conda_envs/vllm_env4.yaml`.
 

@@ -127,7 +127,12 @@ def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
         orchestrator(FakeBackend()), pages, batch_size=1, verbose=False
     )
 
-    assert together == one_by_one
+    # A page's time is a measurement, and differs from one call to the next.
+    def without_times(records):
+        return [{k: v for k, v in record.items() if k != "processing_time"} for record in records]
+
+    assert without_times(together) == without_times(one_by_one)
+    assert all(record["processing_time"] >= 0.0 for record in together)
     assert set(together[0]) == {
         "image_path",
         "image_name",
@@ -135,6 +140,7 @@ def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
         "confidence",
         "raw_response",
         "prompt_used",
+        "processing_time",
     }
     assert together[0]["image_name"] == "page_1.png"
     assert together[0]["prompt_used"] == "detection"

@@ -76,6 +76,82 @@ class StreamingJsonlWriter:
         return self._count
 
 
+class Journal:
+    """A stage's records, kept beside its output as each is made, until the stage has written its output.
+
+    A stage writes its output when it has read every page, in the pages' order. Until then nothing of
+    its work would be on disk, and a run that stopped part way would lose all of it. So each record is
+    also written here the moment it is made, in whatever order the engines finish. When the stage ends
+    it writes its output as it always has and throws the journal away.
+
+    A journal still there when a stage starts is what an earlier run had read before it stopped.
+    ``recover`` adds those records to the output, in the pages' own order, and the stage then carries on
+    from them like any other earlier output.
+
+    The output itself is never written out of order: the order of its pages decides how a later stage
+    groups them into engine calls, which must not depend on which card finished first.
+    """
+
+    def __init__(self, output_path: Path) -> None:
+        self.output = output_path
+        self.path = output_path.with_name(output_path.name + ".journal")
+        self._file: Any = None
+
+    def recover(self, order: list[str]) -> list[dict[str, Any]]:
+        """Add what an interrupted run had read to the output, and remove the journal.
+
+        Args:
+            order: The names of the stage's pages, in the stage's own order. The recovered records are
+                added in that order, whatever order they were made in.
+
+        Returns:
+            The records added. Empty when there is no journal.
+        """
+        if not self.path.is_file():
+            return []
+        already = read_completed_images(self.output)
+        kept: dict[str, dict[str, Any]] = {}
+        for line in self.path.read_text().splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # the line being written when the run stopped
+            name = record.get("image_name") if isinstance(record, dict) else None
+            if name and name not in already:
+                kept.setdefault(name, record)
+        place = {name: position for position, name in enumerate(order)}
+        records = sorted(kept.values(), key=lambda record: place.get(record["image_name"], len(place)))
+        if records:
+            self.output.parent.mkdir(parents=True, exist_ok=True)
+            append_jsonl(self.output, records)
+        self.path.unlink()
+        return records
+
+    def __enter__(self) -> "Journal":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = self.path.open("a")
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Close the journal. It is kept: only ``discard``, after the output is written, removes it."""
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+
+    def write(self, record: dict[str, Any]) -> None:
+        """Keep one record, on disk before this returns."""
+        if self._file is None:
+            msg = "Journal not open. Use as context manager."
+            raise RuntimeError(msg)
+        self._file.write(json.dumps(record, default=str) + "\n")
+        self._file.flush()
+
+    def discard(self) -> None:
+        """Remove the journal, once the stage's output holds everything it held."""
+        if self.path.is_file():
+            self.path.unlink()
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read all records from a JSONL file."""
     records: list[dict[str, Any]] = []

@@ -14,9 +14,10 @@ from typing import Any
 
 
 from common.engine_calls import groups_of, in_engine_calls
+from common.vllm_dp import RecordSink
 from common.extraction_batching import read_classify_batch_size
 
-from .io import append_jsonl, read_completed_images, write_jsonl
+from .io import Journal, append_jsonl, read_completed_images, write_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,15 @@ def run(
     # (clear the output first: the entrypoint does this for full re-runs). This
     # mirrors the extract stage and runs BEFORE the model load, so a fully
     # resumed run skips the GPU entirely.
+    # What an earlier run had classified before it stopped is added to the output first, and is then
+    # carried on from like any other earlier output.
+    journal = Journal(output_path)
+    recovered = journal.recover([image.name for image in images])
+    if recovered:
+        logger.info("Recovered %d page(s) an earlier run had classified before it stopped", len(recovered))
+        from common.stage_timing import note_recovered
+
+        note_recovered(output_path.parent, stage="classify", records=recovered)
     original_total = len(images)
     images, completed_count = _filter_already_classified(images, output_path)
     resuming = completed_count > 0
@@ -108,7 +118,9 @@ def run(
     from common.vllm_dp import read_on_the_cards
 
     started = time.time()
-    read = read_on_the_cards(app_cfg, images, classify_pages)
+    # Each record is kept in the journal as it is made; the output is written below, in the pages' order.
+    with journal:
+        read = read_on_the_cards(app_cfg, images, classify_pages, sink=journal)
     records = read.records
     wall_clock = time.time() - started
 
@@ -124,6 +136,7 @@ def run(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_fn = append_jsonl if resuming else write_jsonl
     count = write_fn(output_path, records)
+    journal.discard()
     logger.info("Wrote %d classifications to %s", count, output_path)
     note_stage_timing(
         output_path.parent,
@@ -137,7 +150,9 @@ def run(
     return output_path
 
 
-def classify_pages(processor: Any, images: list[Path], app_config: Any) -> list[dict[str, Any]]:
+def classify_pages(
+    processor: Any, images: list[Path], app_config: Any, *, sink: RecordSink | None = None
+) -> list[dict[str, Any]]:
     """Give each page its document type. The one place pages are classified, however engines are arranged.
 
     One engine across the cards calls this once with every page. With an engine on each card, each worker
@@ -145,27 +160,24 @@ def classify_pages(processor: Any, images: list[Path], app_config: Any) -> list[
     already done: the stage's ``run`` does those.
 
     Each record carries a processing time. Inside a shared engine call the requests overlap, so a page's
-    own time is not separable: each page is charged an equal share of the whole.
+    own time is not separable: each page is charged an equal share of its call.
 
     Args:
         processor: The document processor.
         images: The pages, in order.
         app_config: The run's settings.
+        sink: Where to write each record as soon as it is made, if anywhere.
 
     Returns:
         One classification record per page, in the order given.
     """
-    started = time.time()
-    records = _classify_images(
+    return _classify_images(
         processor,
         [str(image) for image in images],
         read_classify_batch_size(app_config.raw, config_path=app_config.config_path),
         app_config.verbose,
+        sink,
     )
-    share = (time.time() - started) / len(records) if records else 0.0
-    for record in records:
-        record["processing_time"] = share
-    return records
 
 
 def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
@@ -183,7 +195,11 @@ def _record(image_path: str, result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _classify_images(
-    processor: Any, image_paths: list[str], batch_size: int, verbose: bool
+    processor: Any,
+    image_paths: list[str],
+    batch_size: int,
+    verbose: bool,
+    sink: RecordSink | None = None,
 ) -> list[dict[str, Any]]:
     """Classify pages, ``batch_size`` to an engine call.
 
@@ -196,9 +212,10 @@ def _classify_images(
         image_paths: Pages to classify, in order.
         batch_size: Pages per engine call. 1 means one call a page.
         verbose: Passed through to the processor.
+        sink: Where to write each record as soon as it is made, if anywhere.
 
     Returns:
-        One classification record per page, in input order.
+        One classification record per page, in input order, each with its share of its call's time.
     """
     total = len(image_paths)
     if batch_size > 1:
@@ -218,7 +235,10 @@ def _classify_images(
     for outcomes in calls:
         for outcome in outcomes:
             result = outcome.reply if outcome.reply is not None else processor.unclassified(outcome.error)
-            records.append(_record(outcome.item, result))
+            record = {**_record(outcome.item, result), "processing_time": outcome.seconds}
+            records.append(record)
+            if sink is not None:
+                sink.write(record)
             # Tier A: always-on per-image progress.
             logger.info(
                 "[%d/%d] %s -> %s", len(records), total, Path(outcome.item).name, result["document_type"]

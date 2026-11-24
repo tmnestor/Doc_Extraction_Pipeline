@@ -23,7 +23,7 @@ from typing import Any
 from common.engine_calls import in_engine_calls
 from common.vllm_dp import RecordSink
 
-from .io import StreamingJsonlWriter, read_completed_images, read_jsonl
+from .io import Journal, StreamingJsonlWriter, append_jsonl, read_completed_images, read_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,25 @@ def run(
 
     logger.info("Read %d classifications from %s", len(classifications), classifications_path)
 
+    cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_path.parent)}
+    if model_type is not None:
+        cli_args["model_type"] = model_type
+
+    app_cfg = Settings.load(cli_args, config_path=config_path)
+
+    # What an earlier run had read before it stopped is added to the output first, in the order the
+    # stage reads pages in, and is then carried on from like any other earlier output.
+    journal = Journal(output_path)
+    in_order = sort_for_extraction(
+        classifications, app_cfg.extraction_order, secondary_sort=app_cfg.secondary_sort
+    )
+    recovered = journal.recover([c["image_name"] for c in in_order])
+    if recovered:
+        logger.info("Recovered %d page(s) an earlier run had read before it stopped", len(recovered))
+        from common.stage_timing import note_recovered
+
+        note_recovered(output_path.parent, stage="extract", records=recovered)
+
     # Check for resumption
     completed = read_completed_images(output_path)
     if completed:
@@ -81,11 +100,6 @@ def run(
         logger.info("All images already processed -- nothing to do")
         return output_path
 
-    cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_path.parent)}
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-
-    app_cfg = Settings.load(cli_args, config_path=config_path)
     # -- Phase 4: filter out skip-labels before extraction -----------------------
     classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
     if skipped:
@@ -132,12 +146,14 @@ def run(
 
     stage_started = time.time()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # The file is added to, never begun again: it may hold an earlier run's pages, or the skipped pages
-    # written above. One engine writes each record as it is made, so a run that stops part way can be
-    # carried on; with an engine on each card the records are written when the cards have finished.
-    with StreamingJsonlWriter(output_path) as writer:
-        read = read_on_the_cards(app_cfg, classifications, extract_pages, sink=writer)
+    # Each record is kept in the journal as it is made, so that a run that stops part way keeps what it
+    # had read, however the engines are arranged. The output is then added to, in the pages' order,
+    # and never begun again: it may hold an earlier run's pages, or the skipped pages written above.
+    with journal:
+        read = read_on_the_cards(app_cfg, classifications, extract_pages, sink=journal)
     records, execution_mode = read.records, read.arrangement
+    append_jsonl(output_path, records)
+    journal.discard()
 
     wall_clock = time.time() - stage_started
     # The model's time, apart from starting the engine: the sum of the pages' times, and with an engine on

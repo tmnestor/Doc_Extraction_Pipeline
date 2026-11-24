@@ -45,6 +45,11 @@ stack, so that a model can be compared with published results.
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
 
+A task that is stopped part way keeps what it had read. Each record goes into a journal beside the
+task's output the moment it is made (`<output file>.journal`), however the engines are arranged, and the
+next run adds the journal to the output before it carries on. The output itself is always in the order of
+the pages, never the order the cards finished them in.
+
 Because a task carries on from what its output folder holds, a folder belongs to one run. `split`,
 `classify` and `extract` each note in `<output>/run_manifest.json` the model, the folder of pages and the
 commit of the code they were run with. A task that finds its own earlier note from another model, folder

@@ -49,3 +49,46 @@ def test_the_settings_keys_in_the_table_are_the_ones_the_code_reads() -> None:
     for variable, key in sources:
         row = next(line for line in README.splitlines() if line.startswith(f"| `{variable}` |"))
         assert f"`{key}`" in row, (variable, key)
+
+
+# Words the flowchart grammar keeps for itself. A node named by one of them stops the whole diagram
+# being drawn: on 25 November 2026 a node named `call` left a parse error on the page in its place.
+MERMAID_KEEPS = {
+    "call",
+    "class",
+    "classdef",
+    "click",
+    "default",
+    "direction",
+    "end",
+    "flowchart",
+    "graph",
+    "href",
+    "interpolate",
+    "linkstyle",
+    "style",
+    "subgraph",
+}
+
+
+def mermaid_node_names(text: str) -> set[str]:
+    """The names of the nodes in the flowchart diagrams of a Markdown text."""
+    names: set[str] = set()
+    for diagram in re.findall(r"```mermaid\n(.*?)\n```", text, flags=re.DOTALL):
+        for line in diagram.splitlines()[1:]:
+            # A name is a word at the start of a line, or one that an arrow or its label leads to.
+            names.update(re.findall(r"(?:^\s*|[->.]+(?:\|[^|]*\|)?\s*)([A-Za-z_][A-Za-z0-9_]*)\b", line))
+    return names
+
+
+def test_no_node_of_a_diagram_is_named_by_a_word_the_diagram_language_keeps() -> None:
+    names = mermaid_node_names(README)
+
+    assert len(names) >= 14, "the diagrams were not found"
+    assert not {name for name in names if name.lower() in MERMAID_KEEPS}
+
+
+def test_the_check_of_node_names_finds_the_name_that_broke_the_diagram() -> None:
+    broken = '```mermaid\nflowchart TD\n    call["Pages"]\n    call -->|answered| record\n    record --> end\n```'
+
+    assert mermaid_node_names(broken) == {"call", "record", "end"}

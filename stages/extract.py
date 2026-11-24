@@ -28,40 +28,6 @@ from .io import StreamingJsonlWriter, read_completed_images, read_jsonl
 logger = logging.getLogger(__name__)
 
 
-def _record_stage_timing(
-    output_dir: Path,
-    *,
-    stage: str,
-    records: list[dict[str, Any]],
-    wall_clock: float,
-    execution_mode: str,
-) -> None:
-    """Write this stage's timing sidecar for the evaluate summary.
-
-    Observability only: a failure here must never fail a run that has
-    already done its expensive work.
-    """
-    try:
-        from common.stage_timing import (
-            StageTiming,
-            inference_seconds_from_records,
-            write_stage_timing,
-        )
-
-        write_stage_timing(
-            output_dir,
-            StageTiming(
-                stage=stage,
-                wall_clock=wall_clock,
-                inference_seconds=inference_seconds_from_records(records, fallback=wall_clock),
-                execution_mode=execution_mode,
-                images=len(records),
-            ),
-        )
-    except Exception as err:  # noqa: BLE001 - timing must not break the stage
-        logger.warning("Could not record %s stage timing: %s", stage, err)
-
-
 def run(
     classifications_path: Path,
     image_dir: Path,
@@ -161,7 +127,7 @@ def run(
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by extract_pages; only where the engine is started differs.
-    from common.stage_timing import inference_seconds_from_records
+    from common.stage_timing import inference_seconds_from_records, note_stage_timing
     from common.vllm_dp import read_on_the_cards
 
     stage_started = time.time()
@@ -181,12 +147,13 @@ def run(
         len(records),
         inference_seconds_from_records(records, fallback=wall_clock),
     )
-    _record_stage_timing(
+    note_stage_timing(
         output_path.parent,
         stage="extract",
         records=records,
         wall_clock=wall_clock,
         execution_mode=execution_mode,
+        carried_on=bool(completed),
     )
     logger.info("Wrote %d extractions to %s", len(records), output_path)
     return output_path

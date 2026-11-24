@@ -10,8 +10,7 @@ stage. A run carries on from where an earlier one stopped unless ``CLEAR_PREV_OU
 stage's own earlier output to be deleted first: pages arrive over time, and a second run should read only
 the new ones. A stage that carries on checks first that the earlier output is its own run's: the same
 model, folder of pages and commit of the code, by the note the earlier run left in the output folder
-(``common.run_manifest``). And each stage that uses the cards notes the whole seconds it took, which the
-evaluate stage adds up.
+(``common.run_manifest``). What a stage spent on the cards it notes itself (``common.stage_timing``).
 """
 
 import importlib
@@ -54,19 +53,6 @@ def _start_afresh(settings: StageSettings, *files: Path) -> None:
         if file.is_file():
             file.unlink()
             logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
-
-
-def _seconds_noted(settings: StageSettings) -> int | None:
-    """The whole seconds the stages that use the cards took, added up, or None if none was noted."""
-    if not settings.inference_elapsed.is_file():
-        logger.warning(
-            "%s not found: the rate will be worked out from the pages' own times.",
-            settings.inference_elapsed,
-        )
-        return None
-    total = sum(int(line) for line in settings.inference_elapsed.read_text().split())
-    logger.info("Time on the cards: %ds (from %s)", total, settings.inference_elapsed)
-    return total
 
 
 def _check_what_made_the_folder(settings: StageSettings) -> None:
@@ -130,11 +116,9 @@ def run_task(settings: StageSettings) -> None:
             "Split complete. Later stages read their images from: %s", settings.split_dir / "images"
         )
     elif settings.task == "classify":
-        _start_afresh(settings, settings.classifications, settings.inference_elapsed)
+        _start_afresh(settings, settings.classifications)
         run(settings.image_dir, settings.classifications, model_type=settings.model)
-        elapsed = int(time.time() - started)
-        settings.inference_elapsed.write_text(f"{elapsed}\n")
-        logger.info("Classification complete (%ds).", elapsed)
+        logger.info("Classification complete (%ds).", int(time.time() - started))
     elif settings.task == "extract":
         _start_afresh(settings, settings.raw_extractions)
         run(
@@ -143,9 +127,7 @@ def run_task(settings: StageSettings) -> None:
             settings.raw_extractions,
             model_type=settings.model,
         )
-        with settings.inference_elapsed.open("a") as noted:
-            noted.write(f"{int(time.time() - started)}\n")
-        logger.info("Extraction complete.")
+        logger.info("Extraction complete (%ds).", int(time.time() - started))
     elif settings.task == "clean":
         _start_afresh(settings, settings.cleaned_extractions)
         run(settings.raw_extractions, settings.cleaned_extractions)
@@ -153,12 +135,7 @@ def run_task(settings: StageSettings) -> None:
     elif settings.task == "evaluate":
         settings.evaluation_dir.mkdir(parents=True, exist_ok=True)
         _start_afresh(settings, settings.evaluation_dir / "evaluation_results.jsonl")
-        run(
-            settings.cleaned_extractions,
-            settings.ground_truth,
-            settings.evaluation_dir,
-            inference_seconds=_seconds_noted(settings),
-        )
+        run(settings.cleaned_extractions, settings.ground_truth, settings.evaluation_dir)
         logger.info("Evaluation complete.")
 
 

@@ -66,7 +66,6 @@ def test_the_usual_variables_give_the_paths_the_entry_script_gave(task: str) -> 
     assert settings.raw_extractions == Path(f"{D}/output_run/raw_extractions.jsonl")
     assert settings.cleaned_extractions == Path(f"{D}/output_run/cleaned_extractions.jsonl")
     assert settings.evaluation_dir == Path(f"{D}/output_run/evaluation")
-    assert settings.inference_elapsed == Path(f"{D}/output_run/.inference_elapsed")
     assert settings.clear_previous_output is False and settings.sroie_max_images is None
 
 
@@ -237,7 +236,7 @@ def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     return called
 
 
-def test_classify_is_given_its_folders_and_notes_how_long_it_took(
+def test_classify_is_given_its_folders_and_says_how_long_it_took(
     tmp_path: Path, stage: Called, caplog
 ) -> None:
     settings = settings_for("classify", tmp_path)
@@ -247,31 +246,28 @@ def test_classify_is_given_its_folders_and_notes_how_long_it_took(
 
     assert stage.args == (settings.image_dir, settings.classifications)
     assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm"}
-    assert settings.inference_elapsed.read_text().strip().isdigit()
     assert any("Classification complete (" in record.getMessage() for record in caplog.records)
+    # The runner keeps no time of its own: a stage notes what it spent (tests/common/test_stage_timing.py).
+    assert not (settings.output / ".inference_elapsed").exists()
 
 
-def test_extract_adds_its_time_to_the_classify_stages(tmp_path: Path, stage: Called) -> None:
+def test_extract_is_given_its_folders(tmp_path: Path, stage: Called) -> None:
     settings = settings_for("extract", tmp_path)
-    settings.output.mkdir()
-    settings.inference_elapsed.write_text("139\n")
 
     starter.run_task(settings)
 
     assert stage.args == (settings.classifications, settings.image_dir, settings.raw_extractions)
-    lines = settings.inference_elapsed.read_text().split()
-    assert lines[0] == "139" and len(lines) == 2
+    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm"}
 
 
-def test_evaluate_is_given_the_sum_of_the_stage_times(tmp_path: Path, stage: Called) -> None:
+def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called) -> None:
+    """It reads the time each stage noted from the output folder itself."""
     settings = settings_for("evaluate", tmp_path)
-    settings.output.mkdir()
-    settings.inference_elapsed.write_text("139\n310\n")
 
     starter.run_task(settings)
 
     assert stage.args == (settings.cleaned_extractions, settings.ground_truth, settings.evaluation_dir)
-    assert stage.kwargs == {"inference_seconds": 449}
+    assert stage.kwargs == {}
 
 
 def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) -> None:

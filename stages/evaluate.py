@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.table import Table
 
 from common import scoring
+from common.stage_timing import RunTime, read_stage_timings, run_time
 
 from .io import read_jsonl, write_jsonl
 
@@ -78,8 +79,6 @@ def run(
     cleaned_extractions_path: Path,
     ground_truth: Path,
     output_dir: Path,
-    *,
-    inference_seconds: float | None = None,
 ) -> Path:
     """Evaluate cleaned extractions against ground truth.
 
@@ -92,10 +91,6 @@ def run(
         cleaned_extractions_path: Path to cleaned_extractions.jsonl from Stage 3.
         ground_truth: The answer key, a JSON lines file.
         output_dir: Directory for evaluation output files.
-        inference_seconds: GPU inference wall-clock seconds (extract phase
-            elapsed time, set by entrypoint.sh). Used for throughput in the
-            Execution Summary. Falls back to sum of per-image processing_time
-            when not provided.
 
     Returns:
         Path to the written evaluation_results.jsonl.
@@ -200,7 +195,7 @@ def run(
         )
 
     # Rich Execution Summary table (equivalent to pre-staged-pipeline output)
-    _print_summary_table(eval_results, records, output_dir, inference_seconds, scores)
+    _print_summary_table(eval_results, records, output_dir, scores)
 
     return output_path
 
@@ -226,44 +221,41 @@ def _some(names: list[str], most: int = 10) -> str:
     return shown if len(names) <= most else f"{shown} and {len(names) - most} more"
 
 
+def time_rows(time: RunTime, pages: int) -> list[tuple[str, str]]:
+    """The summary table's rows of time. Every figure says which stages it is of, and where it is from.
+
+    The model's time is given for each stage and for the stages together, and the rate is of the stages
+    together: pages a minute through every stage that used the cards.
+    """
+    rows = [(f"{t.stage.capitalize()}, model time", f"{t.inference_seconds:.1f}s") for t in time.stages]
+    of = " + ".join(t.stage for t in time.stages)
+    # "not recorded" beats 0.0s: a rate made from nothing reads as a measurement.
+    seconds = time.model_seconds
+    rows.append(
+        (f"Model Time ({of})" if of else "Model Time", f"{seconds:.1f}s" if seconds else "not recorded")
+    )
+    rows.append(("Throughput", f"{pages / seconds * 60.0:.2f} images/min" if seconds else "not recorded"))
+    rows.append(("Timing Source", time.source))
+    if time.stages:
+        # Shown only when the stages recorded their own time: they are not known otherwise.
+        rows.append(("Execution Mode", time.execution_mode))
+        rows.append(("Total Wall Clock", f"{time.wall_clock:.1f}s"))
+        rows.append(("Engine Startup", f"{time.startup_seconds:.1f}s"))
+    return rows
+
+
 def _print_summary_table(
     eval_results: list[dict[str, Any]],
     cleaned_records: list[dict[str, Any]],
     output_dir: Path,
-    inference_seconds: float | None,
     scores: Headline,
 ) -> None:
-    """Render an Execution Summary table and document-type breakdown.
-
-    Mimics the pre-staged-pipeline `cli.print_summary` output so runs still
-    end with the familiar throughput/accuracy summary.
-
-    Args:
-        inference_seconds: GPU inference wall-clock (extract phase elapsed).
-            When provided, used for both "Inference Time" and throughput.
-            Falls back to sum of per-image processing_time (correct for
-            single-GPU sequential, but inflated for multi-GPU DP).
-    """
+    """Print the spread of each field's scores, the summary table and the count of each document type."""
     console = Console()
 
     num = len(eval_results)
     total_processing = sum(r.get("processing_time", 0.0) for r in cleaned_records)
-
-    # Prefer the GPU stages' own timing when they recorded it: the
-    # entrypoint measures from outside the process, so its number includes
-    # engine startup, and under data parallelism the sum of per-image times
-    # is total COMPUTE rather than elapsed.
-    from common.stage_timing import read_stage_timings, resolve_timing
-
-    resolved = resolve_timing(
-        read_stage_timings(output_dir.parent),
-        entrypoint_seconds=inference_seconds,
-        per_image_total=total_processing,
-        images=num,
-    )
-    timing_summary = resolved.summary
-    inference_time = resolved.inference_seconds
-    throughput = (num / inference_time * 60.0) if inference_time and inference_time > 0 else None
+    time = run_time(read_stage_timings(output_dir.parent), per_image_total=total_processing, images=num)
 
     doc_types: dict[str, int] = {}
     for r in eval_results:
@@ -281,18 +273,8 @@ def _print_summary_table(
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
     table.add_row("Images Processed", str(num))
-    # "not recorded" beats 0.0s: a fabricated rate reads as a measurement.
-    table.add_row("Inference Time", f"{inference_time:.1f}s" if inference_time else "not recorded")
-    table.add_row("Throughput", f"{throughput:.2f} images/min" if throughput else "not recorded")
-    table.add_row("Timing Source", resolved.source)
-    if timing_summary is not None:
-        # Only shown when the GPU stages recorded their own timing. The
-        # entrypoint's number bundles engine startup in and knows nothing
-        # about data parallelism, so these rows would be misleading if
-        # derived from it.
-        table.add_row("Execution Mode", timing_summary.execution_mode)
-        table.add_row("Total Wall Clock", f"{timing_summary.wall_clock:.1f}s")
-        table.add_row("Engine Startup", f"{timing_summary.startup_seconds:.1f}s")
+    for metric, value in time_rows(time, num):
+        table.add_row(metric, value)
     for metric, value in score_rows(scores):
         table.add_row(metric, value)
     table.add_row("Output Directory", str(output_dir))

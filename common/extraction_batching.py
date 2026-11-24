@@ -11,9 +11,8 @@ works rather than from taste:
   every image in it shares a completion budget, and each type has its own
   prompt. classify runs first, so the type is already known here.
 * **Consecutive runs only.** Classifications arrive sorted by
-  ``sort_for_extraction`` (extraction_order, then secondary_sort), and the
-  bank header cache depends on a bank's statements arriving together.
-  Batching consecutive runs preserves that order exactly.
+  ``sort_for_extraction`` (extraction_order, then secondary_sort). Batching
+  consecutive runs preserves that order exactly.
 
 Every document type can share a call, a bank statement included.
 """

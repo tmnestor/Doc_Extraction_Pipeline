@@ -128,7 +128,7 @@ def run(
         logger.info("All images already processed -- nothing to do")
         return output_path
 
-    # -- Phase 4: filter out skip-labels before extraction -----------------------
+    # Pages of a type the settings say not to read are set aside, and recorded as not read.
     classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
     if skipped:
         logger.info("Skipping %d records with skip labels", len(skipped))
@@ -155,7 +155,7 @@ def run(
         logger.info("All remaining images skipped -- nothing to extract")
         return output_path
 
-    # -- Phase 2: sort by doc_type for prefix-cache reuse ------------------------
+    # One document type after another, so that the engine reuses its work on a type's prompt.
     classifications = sort_for_extraction(
         classifications,
         app_cfg.extraction_order,

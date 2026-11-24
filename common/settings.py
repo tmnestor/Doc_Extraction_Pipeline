@@ -74,38 +74,6 @@ def _is_none(value: Any) -> bool:
     return value is None or str(value).strip().lower() in {"none", "null", ""}
 
 
-def _build_generation_registry(raw_config: dict, config_file: str) -> dict[str, dict]:
-    """The generation settings of each model: ``generation.defaults`` with the model's own laid over them.
-
-    Raises:
-        ValueError: If ``inference.generation.defaults`` is missing. Nothing is assumed in its place.
-    """
-    gen = raw_config.get("inference", {}).get("generation", {})
-    if not isinstance(gen.get("defaults"), dict):
-        raise ValueError(
-            "What: the settings file has no inference.generation.defaults block.\n"
-            f"Where: {config_file}, key inference.generation.defaults.\n"
-            "Expected: a block such as\n"
-            "  inference:\n"
-            "    generation:\n"
-            "      defaults:\n"
-            "        max_new_tokens_base: 512\n"
-            "        max_new_tokens_per_field: 64\n"
-            "        temperature: 0.0\n"
-            "        do_sample: false\n"
-            "        top_p: 0.95\n"
-            "        use_cache: true\n"
-            f"How to fix: add that block to {config_file}."
-        )
-    defaults = dict(gen["defaults"])
-    registry: dict[str, dict] = {
-        model_name: {**defaults, **overrides} for model_name, overrides in (gen.get("models") or {}).items()
-    }
-    # What a model with no block of its own gets.
-    registry["__defaults__"] = defaults
-    return registry
-
-
 def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
     """The engine settings of each model: ``vllm.defaults`` with the model's own laid over them."""
     section = raw.get("inference", {}).get("vllm", {})
@@ -126,7 +94,7 @@ def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
             f"How to fix: add that block to {path}."
         )
     models = section.get("models", {})
-    _check_model_names(models, raw.get("inference", {}).get("generation", {}).get("models", {}))
+    _check_model_names(models, path)
     validate_stage_overrides(models, config_path=str(path))
     config: dict[str, dict] = {"__defaults__": dict(defaults)}
     for model_name, own in models.items():
@@ -134,58 +102,28 @@ def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
     return config
 
 
-def normalised_model_type(model_type: str) -> str:
-    """A model's name without its deployment suffixes, as ``inference.generation.models`` is keyed.
-
-    ``"gemma4-31b-w4a16-vllm"`` -> ``"gemma4-31b"``,
-    ``"gemma4-12b-unified-w4a16-vllm"`` -> ``"gemma4-12b-unified"``.
-    """
-    key = model_type.lower()
-    if key.endswith("-vllm"):
-        key = key[: -len("-vllm")]
-    parts = key.rsplit("-", 1)
-    if len(parts) == 2 and parts[1].endswith("b") and parts[1][:-1].isdigit():
-        key = parts[0]
-    if key.endswith("-w4a16"):
-        key = key[: -len("-w4a16")]
-    return key
-
-
-def _check_model_names(vllm_models: dict, generation_models: dict) -> None:
+def _check_model_names(vllm_models: dict, path: Path) -> None:
     """Refuse a per-model block under a name no registered model has.
 
     Such a block is never looked up: the model gets the defaults, and the block reads as if it were in
-    force. The two sections are keyed differently, which is how the mistake is made:
-    ``inference.vllm.models`` by the full registered name, ``inference.generation.models`` by the name
-    without its deployment suffixes.
+    force.
     """
     from models.registry import list_models
 
     registered = list_models()
-    normalised = {normalised_model_type(name) for name in registered}
-    unknown_vllm = sorted(set(vllm_models) - set(registered))
-    unknown_generation = sorted(set(generation_models) - normalised)
-    if not unknown_vllm and not unknown_generation:
-        return
-    problems = []
-    if unknown_vllm:
-        problems.append(f"inference.vllm.models: {unknown_vllm}")
-    if unknown_generation:
-        problems.append(f"inference.generation.models: {unknown_generation}")
-    raise ValueError(
-        f"What:  per-model override key(s) match no registered model, so the "
-        f"block is dead config -- the lookup silently falls through to the "
-        f"`defaults` block and the tuning is never applied. "
-        f"Offending: {'; '.join(problems)}\n"
-        f"  Where: config/run_config.yml -> {' and '.join(p.split(':')[0] for p in problems)}\n"
-        f"  Expected: inference.vllm.models is keyed by the FULL registered "
-        f"type, one of: {', '.join(sorted(registered))}. "
-        f"inference.generation.models is keyed by the NORMALISED type, one of: "
-        f"{', '.join(sorted(normalised))}. The two conventions differ and the "
-        f"normalisation is not uniform -- check it rather than inferring it.\n"
-        f"  How to fix: correct the key to a listed value, or delete the block "
-        f"if the model should inherit the `defaults` above it."
-    )
+    unknown = sorted(set(vllm_models) - set(registered))
+    if unknown:
+        raise ConfigError(
+            f"What: inference.vllm.models has block(s) for no registered model: {', '.join(unknown)}. "
+            f"Such a block is never read, so its settings are not applied.\n"
+            f"Where: {path} -> inference.vllm.models.{unknown[0]}\n"
+            f"Expected: a block under a registered model's full name, one of: {', '.join(registered)}.\n"
+            f"How to fix: correct the name, or delete the block if the model should have the defaults "
+            f"above it."
+        )
+
+
+_TOKEN_BUDGETS = ("classify", "extract_base", "extract_per_field")
 
 
 class Settings:
@@ -204,12 +142,10 @@ class Settings:
     # How the engine is started.
     enforce_eager: bool
     chat_template: str | None
-    device_map: str
     num_gpus: int
     data_parallel_size: int | None
-    # What is printed, and whether what is sent to the model is kept.
+    # Whether each page's type is printed as it is classified, and whether what is sent to the model is kept.
     verbose: bool
-    debug: bool
     trace_raw_prompts: bool
     trace_path: str | None
     # The order pages are read in, and the labels that are not read.
@@ -218,7 +154,6 @@ class Settings:
     extraction_skip_labels: list[str]
     classification_fallback_type: str
 
-    _generation_registry: dict[str, dict]
     _vllm_config: dict[str, dict]
     _token_budgets: dict[str, int]
     _infrastructure: dict[str, int | float]
@@ -235,8 +170,8 @@ class Settings:
 
         Raises:
             ConfigError: If the settings file does not exist, holds a key the pipeline does not know,
-                lacks a needed key, or has a value that cannot be used.
-            ValueError: If a per-model block is under a name no model has.
+                lacks a needed key, has a value that cannot be used, or has a per-model block
+                under a name no model has.
         """
         path = config_path or DEFAULT_CONFIG
         raw = read_settings_file(path)
@@ -277,7 +212,6 @@ class Settings:
         )
         self.model_path = cls._model_folder(raw, path, self.model_type)
         self.enforce_eager = _need(raw, f"{model}.enforce_eager", path, "true or false")
-        self.device_map = str(_need(raw, f"{model}.device_map", path, "auto"))
         self.chat_template = cls._chat_template(raw, path)
 
         gpus = "bootstrap.gpus"
@@ -299,12 +233,10 @@ class Settings:
         )
 
         self.verbose = _need(raw, "pipeline.processing.verbose", path, "true or false")
-        self.debug = _need(raw, "pipeline.processing.debug", path, "true or false")
         self.trace_raw_prompts, self.trace_path = cls._tracing(raw, path)
 
-        self._generation_registry = _build_generation_registry(raw, str(path))
         self._vllm_config = _build_vllm_config(raw, path)
-        self._token_budgets = dict(raw.get("pipeline", {}).get("token_budgets", {}))
+        self._token_budgets = cls._budgets(raw, path)
         self._infrastructure = dict(raw.get("resources", {}).get("infrastructure", {}))
         self.classification_fallback_type = _need(
             raw,
@@ -396,6 +328,23 @@ class Settings:
         return enabled, None if _is_none(tracing["path"]) else str(tracing["path"])
 
     @staticmethod
+    def _budgets(raw: dict[str, Any], path: Path) -> dict[str, int]:
+        """The completion budgets, each a positive whole number. Checked here, before any engine starts."""
+        budgets: dict[str, int] = {}
+        for name in _TOKEN_BUDGETS:
+            key = f"pipeline.token_budgets.{name}"
+            value = _need(raw, key, path, f"a whole number of tokens, e.g. {name}: 512")
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ConfigError(
+                    f"What: {key} is {value!r}, not a positive whole number.\n"
+                    f"Where: {path} -> {key}\n"
+                    f"Expected: the most tokens a reply may run to, e.g. {name}: 512\n"
+                    f"How to fix: set {key} to a positive whole number."
+                )
+            budgets[name] = value
+        return budgets
+
+    @staticmethod
     def _list_of_text(
         raw: dict[str, Any], path: Path, key: str, example: str, *, empty_if_null: bool = False
     ) -> list[str]:
@@ -437,11 +386,6 @@ class Settings:
         defaults = self._vllm_config["__defaults__"]
         own = self._vllm_config.get(model_type, {})
         return apply_stage_overrides({**defaults, **own}, self._stage) if own else dict(defaults)
-
-    def get_generation_config(self, model_type: str) -> dict[str, Any]:
-        """The generation settings of a model: its own block, else ``inference.generation.defaults``."""
-        key = normalised_model_type(model_type)
-        return dict(self._generation_registry.get(key) or self._generation_registry["__defaults__"])
 
     def get_token_budget(self, name: str) -> int:
         """A completion budget from ``pipeline.token_budgets``."""

@@ -15,13 +15,7 @@ import types
 import pytest
 
 from models.backends.vllm_backend import VllmBackend
-from models.model_loader import _VLLM_SPECS
-
-# Importing the registry is what RUNS the register_vllm_model calls that populate
-# _VLLM_SPECS. Without this the map is empty when this file is run on its own, and
-# only fills by accident when another test module happens to import the registry
-# first, so the import is load-bearing, not tidiness.
-from models.registry import list_models  # noqa: E402
+from models.registry import get_model
 
 MODELS = ("gemma4-31b-w4a16-vllm", "gemma4-12b-unified-w4a16-vllm")
 
@@ -77,10 +71,4 @@ def test_a_backend_given_no_kwargs_sends_none(blank):
 @pytest.mark.parametrize("model", MODELS)
 def test_each_model_actually_sets_the_flag(model):
     # Guards the gap between "the backend CAN forward it" and "the spec DOES set it".
-    assert _VLLM_SPECS[model].chat_template_kwargs == {"enable_thinking": False}
-
-
-def test_every_registered_spec_is_recorded():
-    # The map must not drift from the registry, or a future model could be
-    # registered without its capabilities being inspectable.
-    assert set(_VLLM_SPECS) == set(list_models())
+    assert get_model(model).chat_template_kwargs == {"enable_thinking": False}

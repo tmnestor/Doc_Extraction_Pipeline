@@ -54,7 +54,6 @@ def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._fallback_type = "INVOICE"
-    orch.debug = False
     orch.app_config = types.SimpleNamespace(get_token_budget=lambda name: {"classify": 150}[name])  # type: ignore[assignment]
     return orch
 

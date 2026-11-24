@@ -10,19 +10,8 @@ hardcoded zero ever became configurable, a model could start sampling without an
 
 import inspect
 
-import pytest
-import yaml
-
-from common.settings import _build_generation_registry
+from common.config_schema import KNOWN_KEYS
 from models.backends import vllm_backend
-
-MODELS_NORMALISED = ("gemma4-31b", "gemma4-12b-unified")
-
-
-@pytest.fixture(scope="module")
-def generation_registry(run_config_path) -> dict[str, dict]:
-    """The generation registry with `defaults` merged into each model entry."""
-    return _build_generation_registry(yaml.safe_load(run_config_path.read_text()), str(run_config_path))
 
 
 def test_the_vllm_extraction_path_hardcodes_temperature_zero():
@@ -32,14 +21,23 @@ def test_the_vllm_extraction_path_hardcodes_temperature_zero():
     assert "do_sample" not in source
 
 
-@pytest.mark.parametrize("model", MODELS_NORMALISED)
-def test_generation_settings_are_greedy_for_both_models(generation_registry, model):
-    assert generation_registry[model]["temperature"] == 0.0
-    assert generation_registry[model]["do_sample"] is False
+def test_no_setting_offers_a_sampler():
+    """Until 24 November 2026 the settings file held temperature, do_sample and top_p, which nothing read.
+
+    They read as if sampling could be switched on there. No key may name a sampler: the zero is fixed
+    where the request is made.
+    """
+    sampler_words = ("temperature", "do_sample", "top_p", "top_k", "generation")
+    assert [key for key in KNOWN_KEYS if any(word in key for word in sampler_words)] == []
 
 
-def test_both_models_have_the_same_token_budget(generation_registry):
+def test_both_models_have_the_same_token_budget():
     # The same completion budget for both, or a comparison of the two is confounded: a model given fewer
-    # tokens can be cut off mid-answer on the dense tables of a bank statement.
-    for key, value in (("max_new_tokens_base", 512), ("max_new_tokens_per_field", 64)):
-        assert {generation_registry[model][key] for model in MODELS_NORMALISED} == {value}
+    # tokens can be cut off mid-answer on the dense tables of a bank statement. The budgets are keyed by
+    # what is asked, never by model.
+    budgets = sorted(key for key in KNOWN_KEYS if "token_budgets" in key)
+    assert budgets == [
+        "pipeline.token_budgets.classify",
+        "pipeline.token_budgets.extract_base",
+        "pipeline.token_budgets.extract_per_field",
+    ]

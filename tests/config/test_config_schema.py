@@ -97,19 +97,70 @@ def test_a_setting_from_before_the_refactor_is_refused(tmp_path: Path, removed: 
     assert ".".join((*section, key)) in str(raised.value)
 
 
-def test_generation_settings_are_never_supplied_by_the_code() -> None:
-    """Before 21 November 2026 a file without them ran on values written in Python for a removed model."""
-    from common.settings import _build_generation_registry
+@pytest.mark.parametrize("name", ["classify", "extract_base", "extract_per_field"])
+def test_a_completion_budget_is_never_supplied_by_the_code(name: str) -> None:
+    """Each is needed, and found missing when the settings are read: not minutes later, at the first page."""
+    from common.settings import Settings
 
     raw = shipped()
-    del raw["inference"]["generation"]["defaults"]
+    del raw["pipeline"]["token_budgets"][name]
 
     with pytest.raises(ValueError) as raised:
-        _build_generation_registry(raw, str(RUN_CONFIG))
+        Settings._budgets(raw, RUN_CONFIG)
 
     message = str(raised.value)
-    assert "inference.generation.defaults" in message and str(RUN_CONFIG) in message
+    assert f"pipeline.token_budgets.{name}" in message and str(RUN_CONFIG) in message
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+
+
+@pytest.mark.parametrize("value", [0, -5, 51.2, "512", True, None])
+def test_a_completion_budget_is_a_positive_whole_number(value: object) -> None:
+    from common.settings import Settings
+
+    raw = shipped()
+    raw["pipeline"]["token_budgets"]["extract_base"] = value
+
+    with pytest.raises(ValueError) as raised:
+        Settings._budgets(raw, RUN_CONFIG)
+
+    message = str(raised.value)
+    assert "pipeline.token_budgets.extract_base" in message
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+
+
+def test_the_shipped_completion_budgets_are_read() -> None:
+    from common.settings import Settings
+
+    assert Settings._budgets(shipped(), RUN_CONFIG) == {
+        "classify": 150,
+        "extract_base": 512,
+        "extract_per_field": 64,
+    }
+
+
+@pytest.mark.parametrize(
+    "old_key",
+    [
+        ("inference", "generation", "defaults", "temperature"),
+        ("inference", "generation", "models", "gemma4-31b", "max_new_tokens_base"),
+        ("pipeline", "token_budgets", "fallback_base"),
+        ("bootstrap", "model", "device_map"),
+        ("pipeline", "processing", "debug"),
+    ],
+)
+def test_a_setting_that_nothing_read_is_now_refused(tmp_path: Path, old_key: tuple[str, ...]) -> None:
+    """Removed 24 November 2026: each sat in the file looking like an instruction and changed nothing."""
+
+    def put_back(raw: dict) -> None:
+        block = raw
+        for part in old_key[:-1]:
+            block = block.setdefault(part, {})
+        block[old_key[-1]] = 1
+
+    with pytest.raises(ValueError) as raised:
+        read_settings_file(config_with(tmp_path, put_back))
+
+    assert ".".join(old_key) in str(raised.value)
 
 
 def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -> None:

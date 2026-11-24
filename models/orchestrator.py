@@ -6,21 +6,16 @@ which hands the engine call to the backend. The replies of an extraction are kep
 later, by the clean stage.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
 from common import classification
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
+from common.settings import Settings
 from models.backends.vllm_backend import VllmBackend
-
-if TYPE_CHECKING:
-    from common.settings import Settings
 
 # What a classification record says its page was read with.
 DETECTION_PROMPT = "detection"
@@ -29,111 +24,25 @@ DETECTION_PROMPT = "detection"
 class DocumentOrchestrator:
     """Asks the model about pages, for the stages."""
 
-    def __init__(
-        self,
-        backend: VllmBackend,
-        *,
-        field_list: list[str],
-        field_definitions: dict[str, list[str]] | None = None,
-        debug: bool = False,
-        verbose: bool = False,
-        device: str = "cuda",
-        model_type_key: str,
-        app_config: Settings,
-    ) -> None:
+    def __init__(self, backend: VllmBackend, *, model_type_key: str, app_config: Settings) -> None:
         self._backend = backend
-        # debug → Tier C (dev-noise: PARSING DEBUG, prompt/response dumps, tracebacks).
-        # verbose → Tier B (init/config details: auto-batch, gen-config, processing X).
-        self.debug = debug
-        self._verbose = verbose
-        self.device = device
         self._model_type_key = model_type_key
-
-        # Validate app_config
         self.app_config: Settings = app_config
-
-        # Field configuration
-        self.field_list = field_list
-        self.field_count = len(field_list)
-
         # The type of a page whose classification reply cannot be read.
-        self._fallback_type = self.app_config.classification_fallback_type
+        self._fallback_type = app_config.classification_fallback_type
 
-        schema = get_field_schema()
-
-        # Document-specific field lists
-        self.document_field_lists: dict[str, list[str]] = (
-            field_definitions if field_definitions is not None else schema.get_all_doc_type_fields()
-        )
-
-        # Generation config
-        self._configure_generation()
-
-        if self._verbose:
-            print(
-                f"DocumentOrchestrator initialized: {self.field_count} fields, model_type={model_type_key}"
-            )
-
-    # -- Generation config -----------------------------------------------------
-
-    def _configure_generation(self) -> None:
-        """Load generation hyper-parameters from Settings."""
-        self.gen_config: dict[str, Any] = self.app_config.get_generation_config(self._model_type_key)
-
-        self.fallback_max_tokens = max(
-            int(
-                self.gen_config.get(
-                    "max_new_tokens_base",
-                    self.app_config.get_token_budget("fallback_base"),
-                )
-            ),
-            self.field_count
-            * int(
-                self.gen_config.get(
-                    "max_new_tokens_per_field",
-                    self.app_config.get_token_budget("fallback_per_field"),
-                )
-            ),
-        )
-
-        if self._verbose:
-            print(
-                f"Generation config: max_new_tokens={self.fallback_max_tokens}, "
-                f"do_sample={self.gen_config.get('do_sample', False)}"
-            )
+    # -- Completion budgets ----------------------------------------------------
 
     def _calculate_max_tokens(self, field_count: int) -> int:
-        """The completion budget of a page with this many fields."""
-        base = int(
-            self.gen_config.get(
-                "max_new_tokens_base",
-                self.app_config.get_token_budget("fallback_base"),
-            )
-        )
-        per_field = int(
-            self.gen_config.get(
-                "max_new_tokens_per_field",
-                self.app_config.get_token_budget("fallback_per_field"),
-            )
-        )
-        return base + (field_count * per_field)
+        """The completion budget of a page with this many fields (``pipeline.token_budgets``)."""
+        base = self.app_config.get_token_budget("extract_base")
+        return base + field_count * self.app_config.get_token_budget("extract_per_field")
 
     # -- Image loading ---------------------------------------------------------
 
     def load_document_image(self, image_path: str) -> Image.Image:
-        """Load document image with error handling."""
-        try:
-            return Image.open(image_path)
-        except Exception as e:
-            if self.debug:
-                print(f"Error loading image {image_path}: {e}")
-            raise
-
-    # -- Prompt loading --------------------------------------------------------
-
-    # -- Document type parsing -------------------------------------------------
-
-    # -- Bank structure classification -----------------------------------------
+        """A page's image. A file that cannot be opened is the caller's to deal with."""
+        return Image.open(image_path)
 
     # -- The engine ------------------------------------------------------------
 
@@ -154,10 +63,6 @@ class DocumentOrchestrator:
             max_tokens: The completion budget of every request.
         """
         return self._backend.chat(images, prompts, max_tokens)
-
-    def cache_hit_summary(self) -> dict:
-        """Proxy the backend's cumulative prefix-cache hit summary."""
-        return self._backend.cache_hit_summary()
 
     # -- Detection pipeline ----------------------------------------------------
 
@@ -261,5 +166,3 @@ class DocumentOrchestrator:
         prompt = PromptCatalog().get_prompt(self._model_type_key, kind)
         budget = described.completion_tokens or self._calculate_max_tokens(len(described.fields))
         return self.ask(pages, [prompt] * len(pages), budget)
-
-    # -- Model info ------------------------------------------------------------

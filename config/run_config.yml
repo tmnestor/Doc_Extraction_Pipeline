@@ -32,15 +32,14 @@ bootstrap:
     # the override of last resort for a model whose folder ships a template that
     # thinks by default and does not honour that flag.
     chat_template: none
-    # Model loading options (merged from the old top-level model_loading:).
-    device_map: auto
+    # The folder of each model's weights.
     default_paths:
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
       gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
   # GPU count (moved from the old top-level processing: section).
   gpus:
     num_gpus: 0                # 0 = auto-detect all GPUs, 1 = single GPU, N = use N GPUs
-    data_parallel_size: null   # null = auto (num_gpus for vLLM, ignored for HF)
+    data_parallel_size: null   # null = one engine on each card, for a model that fits on one
   # Logging
   logging:
     # log_dir: /efs/shared/PoC_data/logs   # Directory for entrypoint log files (EFS-backed)
@@ -54,37 +53,11 @@ bootstrap:
     log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run/logs
 
 
-# Inference configuration: generation budget, sampling, vLLM engine,
-# and debug tracing. Everything that shapes how the model produces output.
+# Inference configuration: the vLLM engine's settings for each model, and the trace of what is
+# sent to it. There is no setting for sampling: every request is decoded greedily (temperature 0),
+# which is fixed where the request is made (models/backends/vllm_backend.py) so that a difference
+# between two runs is never the sampler's. Completion budgets are pipeline.token_budgets, below.
 inference:
-
-  generation:
-    defaults:
-      max_new_tokens_base: 512
-      max_new_tokens_per_field: 64
-      temperature: 0.0
-      do_sample: false
-      top_p: 0.95
-      use_cache: true
-    models:
-      # Keys are NORMALISED model types (app_config._normalize_model_type), NOT
-      # the full registered names. The normalisation is not uniform, so these are
-      # spelled out per model and locked by a test:
-      #   gemma4-31b-w4a16-vllm         -> gemma4-31b
-      #   gemma4-12b-unified-vllm       -> gemma4-12b-unified
-      #   gemma4-12b-unified-w4a16-vllm -> gemma4-12b-unified  (SHARED with the
-      #     BF16 12B above: deliberate. `-vllm` strips, "w4a16" fails the
-      #     size-suffix test, then `-w4a16` strips. Same architecture, so the
-      #     same generation budget; no separate key is needed or wanted.)
-      # A wrong key here does NOT fail: the lookup silently falls back to
-      # generation.defaults above, which is how it can look correct while doing
-      # nothing.
-      gemma4-31b:
-        max_new_tokens_base: 512
-        max_new_tokens_per_field: 64
-      gemma4-12b-unified:
-        max_new_tokens_base: 512
-        max_new_tokens_per_field: 64
 
   # vLLM engine parameters: per-model overrides for VllmSpec defaults
   vllm:
@@ -531,15 +504,20 @@ pipeline:
     default: 10
 
   processing:
-    verbose: false             # Tier B: init/config details (auto-batch, gen-config, processing X, field counts)
-    debug: false               # Tier C: dev noise (PARSING DEBUG, CONFIG DEBUG, TENSOR_DTYPE, prompt/response dumps)
+    verbose: false             # true = the classify stage prints each page's type as it is detected
 
-  # Named token budgets: single source of truth for all max_tokens values.
-  # Workflow YAML nodes reference these by name via `token_budget: <name>`.
+  # Completion budgets: the most tokens a reply may run to. The same for every model, so that a
+  # comparison of two models is not one of two budgets: a model given fewer tokens can be cut off
+  # part way through the dense table of a bank statement.
+  #   classify            the reply to the classification prompt
+  #   extract_base        a page's fields: this many tokens ...
+  #   extract_per_field   ... and this many more for each field of its document type
+  # A document type with `completion_tokens` in config/field_definitions.yaml has that fixed budget
+  # in place of the two extract numbers.
   token_budgets:
     classify: 150
-    fallback_base: 512
-    fallback_per_field: 64
+    extract_base: 512
+    extract_per_field: 64
 
   # Photographs of receipts. People often lay a few receipts on a table and take one
   # photograph; every later stage expects one document per image. The split stage

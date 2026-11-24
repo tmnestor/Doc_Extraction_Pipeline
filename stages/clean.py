@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-from common.field_schema import get_field_schema
+from common.field_schema import NOT_FOUND, get_field_schema
 from common.reply_fields import fields_from_reply
 
 from .io import read_jsonl, write_jsonl
@@ -62,6 +62,25 @@ def run(
         raw_response = record.get("raw_response", "")
         error = record.get("error")
 
+        # A page the extract stage was set not to read (pipeline.extraction.skip_labels) has no reply.
+        # It is passed on as not read. Until 25 November 2026 its empty reply was parsed like any
+        # other, every field came out as not found, and the evaluate stage scored the page as all wrong.
+        if record.get("skipped"):
+            cleaned_records.append(
+                {
+                    "image_name": image_name,
+                    "image_path": record.get("image_path", ""),
+                    "document_type": doc_type,
+                    "extracted_data": {},
+                    "field_count": 0,
+                    "extracted_fields_count": 0,
+                    "processing_time": record.get("processing_time", 0.0),
+                    "skipped": True,
+                    "skip_reason": record.get("skip_reason", doc_type),
+                }
+            )
+            continue
+
         # Skip records with extraction errors
         if error:
             logger.warning("Skipping %s: extraction error: %s", image_name, error)
@@ -89,7 +108,7 @@ def run(
         # Parse + clean + validate
         extracted_data = fields_from_reply(raw_response, expected_fields)
 
-        found_count = sum(1 for v in extracted_data.values() if v != "NOT_FOUND")
+        found_count = sum(1 for v in extracted_data.values() if v != NOT_FOUND)
 
         cleaned_records.append(
             {
@@ -126,5 +145,11 @@ def run(
         total_fields,
         error_count,
     )
+    not_read = sum(1 for r in cleaned_records if r.get("skipped"))
+    if not_read:
+        logger.info(
+            "%d page(s) were not read, by pipeline.extraction.skip_labels, and are passed on as not read",
+            not_read,
+        )
 
     return output_path

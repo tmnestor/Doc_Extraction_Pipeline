@@ -114,6 +114,23 @@ def note_stage_timing(
         logger.warning("Could not record %s stage timing: %s", stage, err)
 
 
+def note_recovered(output_dir: Path, *, stage: str, records: list[dict]) -> None:
+    """Note the time of pages recovered from a run that stopped before it could note its own.
+
+    The run that stopped left no row, or left one that does not cover these pages. Their own times are
+    added, so that the stage's row covers every page its output holds. Of that run's whole time nothing is
+    known but the model's.
+    """
+    note_stage_timing(
+        output_dir,
+        stage=stage,
+        records=records,
+        wall_clock=inference_seconds_from_records(records, fallback=0.0),
+        execution_mode="a run that stopped",
+        carried_on=True,
+    )
+
+
 def write_stage_timing(output_dir: Path, timing: StageTiming) -> Path:
     """Write one stage's row, in the place of any earlier row for that stage. Returns the file."""
     path = output_dir / _FILENAME

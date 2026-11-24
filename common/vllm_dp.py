@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 type Reading = Callable[..., list[dict[str, Any]]]
 
 
+# The kinds of message a worker's process sends its parent.
+_A_RECORD, _FINISHED, _FAILED = "record", "finished", "failed"
+
+
 class RecordSink(Protocol):
     """Anything a stage can write its records to, one at a time: a file written as it goes, or a list."""
 
@@ -61,9 +65,9 @@ def read_on_the_cards(
             ``for_stage``.
         items: What ``read`` reads: pages, or the records of pages, in order.
         read: The stage's reading function.
-        sink: Where each record is written, if anywhere. One engine writes each record as it is made, so
-            that a run that stops part way can be carried on. With an engine on each card the records
-            come back when the cards have finished, and are written then.
+        sink: Where each record is written the moment it is made, if anywhere, so that a run that
+            stops part way keeps what it had read. With an engine on each card the records arrive
+            in the order the cards finish them, not the order of the items.
 
     Returns:
         One record for each item, in the order given, and the arrangement.
@@ -72,11 +76,9 @@ def read_on_the_cards(
 
     engines = resolve_dp_gpus(settings, settings.model_type)
     if engines:
-        records = run_dp(num_gpus=engines, items=items, read=read, settings=settings)
-        if sink is not None:
-            for record in records:
-                sink.write(record)
-        return CardsRead(records, engines)
+        return CardsRead(
+            run_dp(num_gpus=engines, items=items, read=read, settings=settings, sink=sink), engines
+        )
     with open_processor(settings) as processor:
         if sink is not None:
             return CardsRead(read(processor, items, settings, sink=sink), None)
@@ -162,7 +164,14 @@ def _in_the_order_given(by_card: dict[int, list[dict[str, Any]]], cards: int) ->
     return [record for _, record in placed]
 
 
-def run_dp(*, num_gpus: int, items: list[Any], read: Reading, settings: Settings) -> list[dict[str, Any]]:
+def run_dp(
+    *,
+    num_gpus: int,
+    items: list[Any],
+    read: Reading,
+    settings: Settings,
+    sink: RecordSink | None = None,
+) -> list[dict[str, Any]]:
     """Start an engine on each card, read each card's share, and give the records in the items' order.
 
     There is no time limit on the work: a card grinding through dense pages is never stopped for being
@@ -176,6 +185,8 @@ def run_dp(*, num_gpus: int, items: list[Any], read: Reading, settings: Settings
             the settings by value, so all three must pickle.
         settings: The run's settings. How long to wait for a finished worker's process to end is
             ``resources.infrastructure.dp_join_timeout``.
+        sink: Where each record is written as soon as its card has made it, if anywhere. Each
+            worker then sends its records one at a time as well as all together at the end.
 
     Returns:
         One record for each item, in the order given. Each carries ``gpu_id``, its card's number, so
@@ -196,26 +207,33 @@ def run_dp(*, num_gpus: int, items: list[Any], read: Reading, settings: Settings
     one_card = settings.on_one_card()
 
     for gpu_id, share in enumerate(shares):
-        p = ctx.Process(target=_worker, args=(gpu_id, share, read, one_card, result_queue))
+        p = ctx.Process(
+            target=_worker, args=(gpu_id, share, read, one_card, result_queue, sink is not None)
+        )
         p.start()
         procs.append(p)
 
-    # A worker that finishes puts its records on the queue; one that hits an error in Python puts the
-    # error. The case left is a worker killed by the system without writing anything, which is found by
-    # is_alive() and the exit code, so that a slow but healthy worker is never mistaken for a dead one.
+    # A worker puts three kinds of message on the queue: each record as it is made (when there is a
+    # sink), all its records when it finishes, and an error it hit in Python. The case left is a worker
+    # killed by the system without a last message, which is found by is_alive() and the exit code, so
+    # that a slow but healthy worker is never mistaken for a dead one.
     by_card: dict[int, list[dict]] = {}
     try:
         remaining = cards
         while remaining > 0:
             try:
-                gpu_id, payload = result_queue.get(timeout=poll_interval)
+                gpu_id, kind, payload = result_queue.get(timeout=poll_interval)
             except Empty:
                 for i, p in enumerate(procs):
                     if not p.is_alive() and p.exitcode != 0 and i not in by_card:
                         msg = f"GPU {i} worker died (exit code {p.exitcode}) without returning results"
                         raise RuntimeError(msg) from None
                 continue
-            if isinstance(payload, Exception):
+            if kind == _A_RECORD:
+                if sink is not None:
+                    sink.write(payload)
+                continue
+            if kind == _FAILED:
                 raise payload
             by_card[gpu_id] = payload
             remaining -= 1
@@ -237,8 +255,20 @@ def run_dp(*, num_gpus: int, items: list[Any], read: Reading, settings: Settings
     return _in_the_order_given(by_card, cards)
 
 
+class _ToTheParent:
+    """A worker's sink: each record goes to the parent's process as it is made, marked with its card."""
+
+    def __init__(self, gpu_id: int, result_queue: Any) -> None:
+        self._gpu_id, self._queue = gpu_id, result_queue
+
+    def write(self, record: dict[str, Any]) -> None:
+        record["gpu_id"] = self._gpu_id
+        # A copy: the queue pickles it a moment later, and the record may be added to meanwhile.
+        self._queue.put((self._gpu_id, _A_RECORD, dict(record)))
+
+
 def _worker(
-    gpu_id: int, share: list[Any], read: Reading, settings: Settings, result_queue: mp.Queue
+    gpu_id: int, share: list[Any], read: Reading, settings: Settings, result_queue: Any, streams: bool
 ) -> None:
     """A worker's process: pin its card, start the engine on it, read its share, hand the records back."""
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
@@ -251,10 +281,13 @@ def _worker(
         from common.pipeline_ops import open_processor
 
         with open_processor(settings) as processor:
-            records = read(processor, share, settings)
+            if streams:
+                records = read(processor, share, settings, sink=_ToTheParent(gpu_id, result_queue))
+            else:
+                records = read(processor, share, settings)
         for record in records:
             record["gpu_id"] = gpu_id
-        result_queue.put((gpu_id, records))
+        result_queue.put((gpu_id, _FINISHED, records))
     except Exception:
         tb = traceback.format_exc()
-        result_queue.put((gpu_id, RuntimeError(f"GPU {gpu_id} worker failed:\n{tb}")))
+        result_queue.put((gpu_id, _FAILED, RuntimeError(f"GPU {gpu_id} worker failed:\n{tb}")))

@@ -189,7 +189,7 @@ def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
     assert pickle.loads(pickle.dumps((pages, bench.classified(pages)))) == (pages, bench.classified(pages))
 
 
-def test_one_engine_writes_as_it_reads_and_engines_on_cards_write_when_they_finish(
+def test_every_record_is_written_as_it_is_made_whichever_way_the_engines_are_arranged(
     bench: Bench, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class Sink:
@@ -212,7 +212,14 @@ def test_one_engine_writes_as_it_reads_and_engines_on_cards_write_when_they_fini
         assert read.engines == engines
         assert read.arrangement == ("data-parallel (2 GPUs)" if engines else "single-engine")
         assert [record["image_name"] for record in read.records] == names
-        assert [record["image_name"] for record in sink.records] == names
+        # One engine makes the records in the pages' order. Engines on cards make them card by card, so
+        # what is written as it is made is every page, in the order the cards finished them.
+        written = [record["image_name"] for record in sink.records]
+        assert sorted(written) == sorted(names) and len(written) == len(names)
+        if engines is None:
+            assert written == names
+        else:
+            assert all("gpu_id" in record for record in sink.records)
 
 
 @pytest.mark.parametrize("stage", STAGES)

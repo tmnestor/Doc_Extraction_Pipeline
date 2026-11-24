@@ -24,6 +24,7 @@ from typing import Any
 
 from common import run_manifest
 from common.stage_settings import ConfigError, StageSettings, resolve
+from stages.io import Journal
 
 logger = logging.getLogger("stages")
 
@@ -49,10 +50,12 @@ def _start_afresh(settings: StageSettings, *files: Path) -> None:
     """Delete the stage's own earlier output, if that was asked for. Never a folder, never a log."""
     if not settings.clear_previous_output:
         return
-    for file in files:
-        if file.is_file():
-            file.unlink()
-            logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
+    for output in files:
+        # With an output goes its journal: what an interrupted run had read and not yet written.
+        for file in (output, Journal(output).path):
+            if file.is_file():
+                file.unlink()
+                logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
 
 
 def _check_what_made_the_folder(settings: StageSettings) -> None:

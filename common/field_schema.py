@@ -40,6 +40,8 @@ CLEANED_AS = (
     "document_type",
 )
 SCORED_AS = ("text", "money", "date", "yes_no", "identifier")
+# What stands for a value that is not there: in a reply, in a cleaned field and in an answer.
+NOT_FOUND = "NOT_FOUND"
 _EXAMPLE = (
     "document_types:\n"
     "  invoice:\n"

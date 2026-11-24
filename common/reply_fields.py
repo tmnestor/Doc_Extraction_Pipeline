@@ -6,7 +6,8 @@ The clean stage calls ``fields_from_reply``. It does two things, in order:
    also reads the ways a reply strays: markdown emphasis, bullets, a value on the line below its name,
    the whole reply written as JSON, a list written with commas where bars were asked for.
 2. **Clean.** Each value is tidied by the kind of field it is (money, list, date, identifier, address,
-   text), so that the same answer written two ways compares as the same.
+   text), so that the same answer written two ways compares as the same. Every value takes the one
+   way through ``clean_value``, whichever way its reply was written.
 
 What a field is (a list or not, and how its values are tidied) is its entry in
 ``config/field_definitions.yaml``. Nothing here reads a field's name to decide it, and a name that has no
@@ -21,9 +22,7 @@ from typing import Any
 
 from dateutil import parser as date_parser  # type: ignore[import-untyped]
 
-from .field_schema import Field, get_field_schema
-
-NOT_FOUND = "NOT_FOUND"
+from .field_schema import NOT_FOUND, Field, get_field_schema
 
 
 def fields_from_reply(reply: str, expected_fields: list[str]) -> dict[str, str]:
@@ -84,17 +83,11 @@ _QUANTITY_TRAILING_DECORATION = re.compile(r"(?<=\d)\s*(?:X|EACH)\s*$", re.IGNOR
 
 
 def parse_reply(reply: str, expected_fields: list[str]) -> dict[str, str]:
-    """The reply's value for each expected field, before cleaning."""
+    """The reply's value for each expected field, as the reply wrote it. Cleaning comes after."""
     if not reply:
         return dict.fromkeys(expected_fields, NOT_FOUND)
     as_json = _from_json(reply.strip(), expected_fields)
-    if as_json is not None:
-        # A JSON reply skips the tidying a reply in lines gets, so its quantities are bared here.
-        for name in as_json:
-            if _entry(name).cleaned_as == "quantity":
-                as_json[name] = bare_quantities(as_json[name])
-        return as_json
-    return _tidied(_from_lines(reply, expected_fields))
+    return as_json if as_json is not None else _from_lines(reply, expected_fields)
 
 
 def bare_quantities(value: str) -> str:
@@ -323,47 +316,37 @@ def _markdown_as_lines(lines: list[str]) -> list[str]:
     return result
 
 
-def _tidied(fields: dict[str, str]) -> dict[str, str]:
-    """Parsed values put into the forms the rest of the pipeline expects.
+def _in_form(entry: Field, value: str) -> str:
+    """A parsed value put into the form its kind of field is written in, before it is cleaned.
 
-    The document type by its settled name, lists with " | " between entries, addresses without commas,
-    quantities bare, dates as DD/MM/YYYY.
+    A list with " | " between its entries, however the reply separated them (commas, stars on lines of
+    their own, wide gaps); a list of quantities bare; an address with spaces for its commas; a date, or
+    each date of a list, as DD/MM/YYYY.
+
+    Every value of every reply passes through here, whichever way the reply was written. Until
+    24 November 2026 a reply written as JSON skipped it, so its dates and its lists were left as the
+    model wrote them.
     """
-    for name, value in fields.items():
-        if value == NOT_FOUND:
-            continue
-        entry = _entry(name)
-        if entry.cleaned_as == "document_type":
-            settled = get_field_schema().aliases.get(value.lower().strip())
-            if settled:
-                fields[name] = settled.upper()
-            continue
+    if entry.is_list:
+        if "," in value and " | " not in value:
+            # Not the comma inside a number: $8,026.87 is one value.
+            value = " | ".join(item.strip() for item in re.split(r",(?!\d)", value) if item.strip())
+        elif "*" in value and " | " not in value:
+            value = " | ".join(
+                line.strip().lstrip("* ").strip() for line in value.split("\n") if line.strip()
+            )
+        elif re.search(r"\s{2,}", value) and " | " not in value:
+            value = " | ".join(item.strip() for item in re.split(r"\s{2,}", value) if item.strip())
+        if entry.cleaned_as == "quantity":
+            value = bare_quantities(value)
+    elif entry.cleaned_as == "address" and "," in value:
+        value = " ".join(value.split(",")).strip()
+    if entry.cleaned_as == "day_month_year":
         if entry.is_list:
-            if "," in value and " | " not in value:
-                # Not the comma inside a number: $8,026.87 is one value.
-                fields[name] = " | ".join(
-                    item.strip() for item in re.split(r",(?!\d)", value) if item.strip()
-                )
-            elif "*" in value and " | " not in value:
-                fields[name] = " | ".join(
-                    line.strip().lstrip("* ").strip() for line in value.split("\n") if line.strip()
-                )
-            elif re.search(r"\s{2,}", value) and " | " not in value:
-                fields[name] = " | ".join(
-                    item.strip() for item in re.split(r"\s{2,}", value) if item.strip()
-                )
-            if entry.cleaned_as == "quantity":
-                fields[name] = bare_quantities(fields[name])
-        elif entry.cleaned_as == "address" and "," in value:
-            fields[name] = " ".join(value.split(",")).strip()
-        if entry.cleaned_as == "day_month_year":
-            if entry.is_list:
-                fields[name] = " | ".join(
-                    _as_day_month_year(date.strip()) for date in fields[name].split(" | ")
-                )
-            else:
-                fields[name] = _as_day_month_year(fields[name])
-    return fields
+            value = " | ".join(_as_day_month_year(date.strip()) for date in value.split(" | "))
+        else:
+            value = _as_day_month_year(value)
+    return value
 
 
 # A date that begins with its year: 2031-02-09, 2031/2/9, 2031.02.09, 2031 Feb 9, with or without a time
@@ -395,20 +378,24 @@ def _as_day_month_year(date: str) -> str:
 _MEANS_NOTHING = ("NOT_FOUND", "Not Found", "not found", "None", "null", "", "N/A", "n/a")
 _PRICE_SUFFIXES = (r"\s+(each|per\s+item|per\s+unit|per\s+piece)$", r"\s+(ea\.?|@|apiece)$")
 _CURRENCY_NAMES = ((r"AUD?\s*", "$"), (r"USD?\s*", "$"), (r"\$\$+", "$"))
-_IDENTIFIER_LABEL = r"^(ABN|BSB|ACN|GST|TAX|ID|NUMBER|NO\.?|#)\s*:?\s*"
+# The label a model, or an answer key, may leave in front of an identifier ("ABN 12 345...").
+IDENTIFIER_LABEL = r"^(ABN|BSB|ACN|GST|TAX|ID|NUMBER|NO\.?|#)\s*:?\s*"
 
 
 def clean_value(field_name: str, raw_value: Any) -> str:
-    """A value tidied by the kind of field it is. Nothing, in any of its spellings, is ``NOT_FOUND``."""
+    """A value tidied by the kind of field it is. Nothing, in any of its spellings, is ``NOT_FOUND``.
+
+    The one way from a parsed value to a cleaned one: put into its field's form, then cleaned.
+    """
+    entry = _entry(field_name)
+    if isinstance(raw_value, str) and raw_value != NOT_FOUND:
+        raw_value = _in_form(entry, raw_value)
     if not raw_value or raw_value in _MEANS_NOTHING:
         return NOT_FOUND
     value = str(raw_value).strip()
     if not value:
         return NOT_FOUND
-    entry = _entry(field_name)
     if entry.is_list:
-        if "," in value and "|" not in value:
-            value = " | ".join(item.strip() for item in re.split(r",(?!\d)", value))
         return _clean_list(entry, value)
     cleaned = _CLEANERS.get(entry.cleaned_as, _clean_text)(value)
     if entry.cleaned_as == "document_type" and cleaned and cleaned != NOT_FOUND:
@@ -448,9 +435,9 @@ def _clean_list(entry: Field, value: str) -> str:
     if entry.cleaned_as in ("money", "amount_as_written"):
         # Two amounts with only a space between them are two entries.
         value = re.sub(r"(\$\d+\.\d{2})\s+(\$\d+\.\d{2})", r"\1 | \2", value)
-    items = value.split("|") if "|" in value else re.split(r",(?!\d)", value)
-    # An entry of a list is tidied as money or as text; a list's dates and quantities were put in their
-    # form when the reply was parsed.
+    items = value.split("|")
+    # An entry of a list is tidied as money or as text; a list's dates and quantities are already in
+    # their form (_in_form), and so are its bars.
     clean_item = _clean_money if entry.cleaned_as == "money" else _clean_text
     cleaned = [clean_item(item.strip()) or NOT_FOUND for item in items if item.strip()]
     if not cleaned or all(item == NOT_FOUND for item in cleaned):
@@ -472,7 +459,7 @@ def _clean_identifier(value: str) -> str:
     """An identifier without its label ("ABN 12 345..."), and an 11-digit one without its spaces."""
     if not value or value == NOT_FOUND:
         return NOT_FOUND
-    cleaned = re.sub(_IDENTIFIER_LABEL, "", value.strip(), flags=re.IGNORECASE).strip()
+    cleaned = re.sub(IDENTIFIER_LABEL, "", value.strip(), flags=re.IGNORECASE).strip()
     if re.match(r"^\d+(\s+\d+)+$", cleaned) and len(cleaned.replace(" ", "")) == 11:
         cleaned = cleaned.replace(" ", "")
     elif not re.match(r"^\d{3}-\d{3}$", cleaned):
@@ -491,7 +478,7 @@ def _clean_text(value: str) -> str:
 
 
 def _clean_address(value: str) -> str:
-    """An address without a telephone number or email address added to it, and without commas."""
+    """An address without a telephone number or email address added to it. Its commas are gone already."""
     if not value or value == NOT_FOUND:
         return NOT_FOUND
     cleaned = re.sub(
@@ -501,7 +488,7 @@ def _clean_address(value: str) -> str:
     # A telephone number at the end goes, but not a business number (XX XXX XXX XXX).
     if not re.search(r"\d{2}\s+\d{3}\s+\d{3}\s+\d{3}$", cleaned):
         cleaned = re.sub(r"\s*-?\s*\(?[0-9]{2,4}\)?\s*[0-9\s\-]{6,}$", "", cleaned)
-    cleaned = re.sub(r"\s*[;\-]\s*$", "", cleaned.replace(",", ""))
+    cleaned = re.sub(r"\s*[;\-]\s*$", "", cleaned)
     cleaned = re.sub(r"\s+", " ", re.sub(r"\s*/\s*", "/", cleaned)).strip()
     return cleaned if cleaned else NOT_FOUND
 

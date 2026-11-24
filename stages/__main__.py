@@ -5,11 +5,13 @@ This is what ``entrypoint.sh`` starts, for every task:
     KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> python -m stages
 
 The settings come from ``common.stage_settings.resolve``: the environment first, the settings file second.
-Here they are handed to the stage's own ``run``. Two things are done around a stage, the same for every
+Here they are handed to the stage's own ``run``. Three things are done around a stage, the same for every
 stage. A run carries on from where an earlier one stopped unless ``CLEAR_PREV_OUTPUT=true`` asks for the
 stage's own earlier output to be deleted first: pages arrive over time, and a second run should read only
-the new ones. And each stage that uses the cards notes the whole seconds it took, which the evaluate stage
-adds up.
+the new ones. A stage that carries on checks first that the earlier output is its own run's: the same
+model, folder of pages and commit of the code, by the note the earlier run left in the output folder
+(``common.run_manifest``). And each stage that uses the cards notes the whole seconds it took, which the
+evaluate stage adds up.
 """
 
 import importlib
@@ -21,11 +23,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from common import run_manifest
 from common.stage_settings import ConfigError, StageSettings, resolve
 
 logger = logging.getLogger("stages")
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "run_config.yml"
+REPOSITORY = Path(__file__).resolve().parent.parent
+CONFIG_PATH = REPOSITORY / "config" / "run_config.yml"
 
 _BANNERS = {
     "split": "Stage 0: split, one image for each document in a photograph (GPU)",
@@ -65,6 +69,34 @@ def _seconds_noted(settings: StageSettings) -> int | None:
     return total
 
 
+def _check_what_made_the_folder(settings: StageSettings) -> None:
+    """A stage that carries on from its earlier output checks that it is the same run, and notes itself.
+
+    The other stages say what the notes in the folder hold, so that a score carries the model and the
+    commit that produced it.
+
+    Raises:
+        ConfigError: If the stage's earlier output is from a run with another model, folder of pages or
+            commit of the code (``common.run_manifest``).
+    """
+    if settings.task not in run_manifest.STAGES:
+        for line in run_manifest.describe(settings.output):
+            logger.info("  made by %s", line)
+        return
+    assert settings.image_dir is not None
+    run_manifest.check_and_note(
+        settings.output,
+        settings.task,
+        model=settings.model,
+        image_dir=settings.image_dir,
+        repository=REPOSITORY,
+        # The split stage has no earlier output deleted for it, so it always checks.
+        starting_afresh=settings.clear_previous_output and settings.task != "split",
+    )
+    if settings.task == "extract":
+        run_manifest.warn_if_made_another_way(settings.output, "extract", after="classify")
+
+
 def run_task(settings: StageSettings) -> None:
     """Run one task with its settings.
 
@@ -89,6 +121,7 @@ def run_task(settings: StageSettings) -> None:
         return
 
     settings.output.mkdir(parents=True, exist_ok=True)
+    _check_what_made_the_folder(settings)
     started = time.time()
     if settings.task == "split":
         settings.split_dir.mkdir(parents=True, exist_ok=True)
@@ -133,11 +166,10 @@ def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH)
+        run_task(resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH))
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
         return 1
-    run_task(settings)
     return 0
 
 

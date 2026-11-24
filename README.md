@@ -45,6 +45,13 @@ stack, so that a model can be compared with published results.
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
 
+Because a task carries on from what its output folder holds, a folder belongs to one run. `split`,
+`classify` and `extract` each note in `<output>/run_manifest.json` the model, the folder of pages and the
+commit of the code they were run with. A task that finds its own earlier note from another model, folder
+of pages or commit stops before any work and says what differs: give the run a folder of its own, or
+start the task afresh. `clean` and `evaluate` print what the notes hold, so that a score carries the model
+and the commit that produced it.
+
 ## The two models
 
 | Model | What it is | How it sits on two 24 GB cards |

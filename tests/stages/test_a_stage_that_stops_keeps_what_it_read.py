@@ -12,120 +12,30 @@ and the stage carries on from there.
 The pages are blank images made here, and every reply is invented.
 """
 
-import contextlib
 import json
 import logging
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
-from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
 
-from model_inputs import InProcessContext, test_config  # noqa: E402
+from model_inputs import test_config  # noqa: E402
 
 from common import vllm_dp  # noqa: E402
 from common.stage_settings import resolve  # noqa: E402
 from common.stage_timing import read_stage_timings  # noqa: E402
 from stages import __main__ as starter  # noqa: E402
-from stages import classify, extract, split  # noqa: E402
+from stages import split  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.io import Journal, read_jsonl  # noqa: E402
 
 test_config.__test__ = False  # type: ignore[attr-defined]
 
-ONE_ENGINE = "gemma4-31b-w4a16-vllm"
-AN_ENGINE_ON_EACH_CARD = "gemma4-12b-unified-w4a16-vllm"
-KINDS = ("bank_statement", "invoice", "receipt")
-
-
-class Stopped(BaseException):
-    """Stands in for a run being killed: nothing in the pipeline catches it."""
-
-
-class Processor:
-    """Stands in for the document processor. It can be told to stop the run at one of its calls."""
-
-    def __init__(self) -> None:
-        self.calls: list[list[str]] = []
-        self.stop_at_call: int | None = None
-
-    def _called(self, names: list[str]) -> None:
-        if self.stop_at_call is not None and len(self.calls) + 1 == self.stop_at_call:
-            raise Stopped
-        self.calls.append(names)
-
-    def detect_many(self, image_paths: list[str], verbose: bool = False) -> list[dict[str, Any]]:
-        self._called([Path(p).name for p in image_paths])
-        return [
-            {
-                "document_type": next(k for k in KINDS if k in Path(p).name).upper(),
-                "raw_response": "a reply",
-            }
-            for p in image_paths
-        ]
-
-    def read_pages(self, image_paths: list[str], document_type: str) -> list[str]:
-        self._called([Path(p).name for p in image_paths])
-        return [f"TOTAL_AMOUNT: read from {Path(p).name}" for p in image_paths]
-
-    def load_document_image(self, image_path: str) -> Image.Image:
-        return Image.open(image_path)
-
-    def ask(self, images: list[Any], prompts: list[str], max_tokens: int) -> list[str]:
-        self._called([f"{len(images)} photographs"])
-        return ["[]"] * len(images)
-
-    @property
-    def asked_about(self) -> list[str]:
-        return [name for call in self.calls for name in call]
-
-
-class Bench:
-    """A folder of blank pages, the settings to read them two to an engine call, and a stand-in processor."""
-
-    def __init__(self, folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        self.root = folder
-        shipped = yaml.safe_load(test_config(folder).read_text())
-        shipped["pipeline"]["batching"] = {"classify": 2, "default": 2}
-        shipped["pipeline"]["photo_split"]["batch_size"] = 2
-        shipped["pipeline"]["photo_split"]["straighten"] = False
-        shipped["pipeline"]["photo_split"]["rectify_pages"] = False
-        shipped["pipeline"]["photo_split"]["rectify_pieces"] = False
-        self.config = folder / "two_to_a_call.yml"
-        self.config.write_text(yaml.safe_dump(shipped, sort_keys=False))
-        self.pages = folder / "pages"
-        self.pages.mkdir()
-        self.names: list[str] = []
-        for number in range(2):
-            for kind in KINDS:
-                name = f"CASE{number:03d}_{kind}.png"
-                Image.new("RGB", (64, 64), "white").save(self.pages / name)
-                self.names.append(name)
-        self.names.sort(key=str.lower)
-        self.processor = Processor()
-        monkeypatch.setattr(vllm_dp.mp, "get_context", lambda method=None: InProcessContext)
-        monkeypatch.setattr("common.pipeline_ops.open_processor", self._open)
-
-    @contextlib.contextmanager
-    def _open(self, settings: Any) -> Iterator[Processor]:
-        yield self.processor
-
-    def classify(self, output: Path, model: str = ONE_ENGINE) -> Path:
-        return classify.run(self.pages, output, model_type=model, config_path=self.config)
-
-    def extract(self, classifications: Path, output: Path, model: str = ONE_ENGINE) -> Path:
-        return extract.run(classifications, self.pages, output, model_type=model, config_path=self.config)
-
-
-@pytest.fixture
-def bench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Bench:
-    return Bench(tmp_path, monkeypatch)
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped  # noqa: E402
 
 
 def names_in(path: Path) -> list[str]:

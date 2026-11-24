@@ -20,6 +20,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+import yaml
+
+from common.config_schema import ConfigError
 from common.prompt_catalog import PromptCatalog, Question
 
 # A label may follow markdown, a number or a bullet: "### 1. COLUMNS", "- PAID: YES".
@@ -80,6 +83,27 @@ def _settings() -> tuple[_Asked, dict[str, list[str]], dict[str, Any]]:
         numbered=re.compile(rf"^\s*([1-{len(questions)}])\s*[.)]\s*(.+?)\s*$", re.MULTILINE),
     )
     return asked, catalog.get_column_roles(), catalog.get_classification_evidence()
+
+
+def check() -> None:
+    """Read and check the questions, the column roles and the rules, before any page is asked about.
+
+    They are otherwise first read when the first reply is turned into a type: after the engine has
+    started and the first pages have been asked about.
+
+    Raises:
+        ConfigError: If the classification file cannot be read, or holds a block that cannot be used.
+    """
+    try:
+        _settings()
+    except (OSError, yaml.YAMLError) as err:
+        raise ConfigError(
+            f"What: the classification file cannot be read: {err}\n"
+            f"Where: prompts/document_type_detection.yaml in the repository.\n"
+            f"Expected: a YAML file with the blocks classification, column_roles and "
+            f"classification_evidence.\n"
+            f"How to fix: restore the file from the repository, or correct what the message names."
+        ) from err
 
 
 def document_type(reply: str, fallback_type: str) -> str:

@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from queue import Empty
 from typing import Any, Protocol
 
+from common.config_schema import ConfigError
 from common.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -72,8 +73,11 @@ def read_on_the_cards(
     Returns:
         One record for each item, in the order given, and the arrangement.
     """
-    from common.pipeline_ops import open_processor
+    from common.pipeline_ops import check_processor, open_processor
 
+    # Before any engine is started, and here, not in a worker's process: what would stop a processor
+    # being built then ends the run with its reason, and costs no engine's start.
+    check_processor(settings)
     engines = resolve_dp_gpus(settings, settings.model_type)
     if engines:
         return CardsRead(
@@ -288,6 +292,10 @@ def _worker(
         for record in records:
             record["gpu_id"] = gpu_id
         result_queue.put((gpu_id, _FINISHED, records))
+    except ConfigError as err:
+        # A setting that cannot be used is handed to the parent as it is, so that the run ends with
+        # its reason, as it would have had the parent met it.
+        result_queue.put((gpu_id, _FAILED, err))
     except Exception:
         tb = traceback.format_exc()
         result_queue.put((gpu_id, _FAILED, RuntimeError(f"GPU {gpu_id} worker failed:\n{tb}")))

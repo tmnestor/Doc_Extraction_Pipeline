@@ -71,22 +71,27 @@ def pages(tmp_path: Path) -> list[str]:
 # --- the orchestrator -----------------------------------------------------------
 
 
-def test_detect_many_is_one_call_with_the_detection_prompt_for_every_page(pages):
+def detect_many(processor: DocumentOrchestrator, pages: list[str]) -> list[dict]:
+    """Ask about the pages in one engine call, and turn each reply into its classification."""
+    return [processor.classified(reply) for reply in processor.ask_document_types(pages)]
+
+
+def test_pages_are_asked_about_in_one_call_with_the_detection_prompt_for_every_page(pages):
     backend = FakeBackend()
 
-    results = orchestrator(backend).detect_many(pages)
+    results = detect_many(orchestrator(backend), pages)
 
     prompt = PromptCatalog().classification_prompt()
     assert backend.many_calls == [{"prompts": [prompt] * 3, "max_tokens": 150, "n": 3}]
     assert len(results) == 3
 
 
-def test_detect_many_gives_each_page_the_result_the_single_call_gives(pages):
+def test_a_shared_call_gives_each_page_the_result_the_single_call_gives(pages):
     one_backend, many_backend = FakeBackend(), FakeBackend()
     one = orchestrator(one_backend)
 
-    singles = [one.detect_many([page])[0] for page in pages]
-    many = orchestrator(many_backend).detect_many(pages)
+    singles = [detect_many(one, [page])[0] for page in pages]
+    many = detect_many(orchestrator(many_backend), pages)
 
     assert many == singles
     assert [r["raw_response"] for r in many] == REPLIES
@@ -100,10 +105,10 @@ def test_detect_many_gives_each_page_the_result_the_single_call_gives(pages):
     assert one_backend.many_calls[0]["max_tokens"] == many_backend.many_calls[0]["max_tokens"]
 
 
-def test_detect_many_of_nothing_makes_no_call():
+def test_asking_about_no_pages_makes_no_call():
     backend = FakeBackend()
 
-    assert orchestrator(backend).detect_many([]) == []
+    assert orchestrator(backend).ask_document_types([]) == []
     assert backend.many_calls == []
 
 

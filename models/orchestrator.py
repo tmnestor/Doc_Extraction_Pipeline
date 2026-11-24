@@ -6,12 +6,10 @@ which hands the engine call to the backend. The replies of an extraction are kep
 later, by the clean stage.
 """
 
-import sys
-from pathlib import Path
-
 from PIL import Image
 
 from common import classification
+from common.config_schema import ConfigError
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
 from common.settings import Settings
@@ -64,48 +62,36 @@ class DocumentOrchestrator:
         """
         return self._backend.chat(images, prompts, max_tokens)
 
-    # -- Detection pipeline ----------------------------------------------------
+    # -- The document type of pages ---------------------------------------------
 
-    def _detection_inputs(self) -> tuple[str, str, int]:
-        """The classification prompt, its key and its completion budget."""
-        prompt = PromptCatalog().classification_prompt()
-        return prompt, DETECTION_PROMPT, self.app_config.get_token_budget("classify")
+    def ask_document_types(self, image_paths: list[str]) -> list[str]:
+        """The model's reply to the classification prompt for each page, all in one engine call.
 
-    def _detection_result(self, response: str, detection_key: str) -> dict:
-        """The classification record of one reply."""
-        return {
-            "document_type": classification.document_type(response, self._fallback_type),
-            "confidence": 1.0,
-            "raw_response": response,
-            "prompt_used": detection_key,
-        }
-
-    def detect_many(self, image_paths: list[str], verbose: bool = False) -> list[dict]:
-        """Detect the document type of several pages in one engine call.
-
-        The same prompt and token budget for every page. A failure is not caught:
-        the caller decides whether to retry one page at a time.
+        The same prompt and completion budget for every page. The replies come back as the model wrote
+        them: ``classified`` turns one into a document type, and is not part of the call, so that a
+        reply never has to be asked for twice. A failure is not caught: the caller decides whether to
+        try the pages again one at a time.
 
         Args:
-            image_paths: Pages to classify.
-            verbose: Print each page's detected type.
+            image_paths: The pages.
 
         Returns:
-            One result per page, in input order.
+            One reply for each page, in the order given.
         """
         if not image_paths:
             return []
+        prompt = PromptCatalog().classification_prompt()
+        images = [self.load_document_image(path) for path in image_paths]
+        return self.ask(images, [prompt] * len(images), self.app_config.get_token_budget("classify"))
 
-        detection_prompt, detection_key, max_tokens = self._detection_inputs()
-        images = [self.load_document_image(p) for p in image_paths]
-        responses = self.ask(images, [detection_prompt] * len(images), max_tokens)
-
-        results = [self._detection_result(r, detection_key) for r in responses]
-        if verbose:
-            for path, result in zip(image_paths, results, strict=True):
-                sys.stdout.write(f"Detected document type: {Path(path).name}: {result['document_type']}\n")
-            sys.stdout.flush()
-        return results
+    def classified(self, reply: str) -> dict:
+        """The classification of a page, from the model's reply about it."""
+        return {
+            "document_type": classification.document_type(reply, self._fallback_type),
+            "confidence": 1.0,
+            "raw_response": reply,
+            "prompt_used": DETECTION_PROMPT,
+        }
 
     def unclassified(self, error: str | None) -> dict:
         """The classification of a page the model could not be asked about: the fallback type, with why.
@@ -141,7 +127,7 @@ class DocumentOrchestrator:
             The replies as the model wrote them, in the order of the pages.
 
         Raises:
-            ValueError: If the schema file has no block for the document type.
+            ConfigError: If the schema file has no block for the document type.
         """
         if not image_paths:
             return []
@@ -149,7 +135,7 @@ class DocumentOrchestrator:
         described = get_field_schema().document_type(kind)
         if described is None:
             known = ", ".join(get_field_schema().document_types)
-            raise ValueError(
+            raise ConfigError(
                 f"What: the document type {document_type!r} has no block in the schema file.\n"
                 f"Where: config/field_definitions.yaml, key document_types.{kind}.\n"
                 f"Expected: one of {known}.\n"

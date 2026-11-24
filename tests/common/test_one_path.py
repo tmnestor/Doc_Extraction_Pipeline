@@ -51,9 +51,12 @@ class StandIn:
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
 
-    def detect_many(self, image_paths: list[str], verbose: bool = False) -> list[dict[str, Any]]:
+    def ask_document_types(self, image_paths: list[str]) -> list[str]:
         self.calls.append(("classify", [Path(p).name for p in image_paths]))
-        return [self._type(p) for p in image_paths]
+        return [Path(p).name for p in image_paths]
+
+    def classified(self, reply: str) -> dict[str, Any]:
+        return self._type(reply)
 
     def read_pages(self, image_paths: list[str], document_type: str) -> list[str]:
         self.calls.append(("extract", [Path(p).name for p in image_paths]))

@@ -42,6 +42,17 @@ CLEANED_AS = (
 SCORED_AS = ("text", "money", "date", "yes_no", "identifier")
 # What stands for a value that is not there: in a reply, in a cleaned field and in an answer.
 NOT_FOUND = "NOT_FOUND"
+
+# The scoring thresholds: the names ``common.scoring`` reads from ``evaluation.thresholds``. The file
+# must set each of them and no other.
+THRESHOLDS = (
+    "fuzzy_text_match",
+    "monetary_tolerance",
+    "anls_threshold",
+    "date_day_and_month_only",
+    "page_meets_threshold_at",
+    "transaction_text_similarity",
+)
 _EXAMPLE = (
     "document_types:\n"
     "  invoice:\n"
@@ -207,14 +218,58 @@ class FieldSchema:
                 aliases[str(other).lower()] = name
 
         fields = cls._fields(raw.get("fields"), document_types, refuse)
-        evaluation = raw.get("evaluation", {})
         return cls(
             document_types=document_types,
             fields=fields,
             aliases=aliases,
-            _thresholds={name: float(value) for name, value in evaluation.get("thresholds", {}).items()},
+            _thresholds=cls._thresholds_of(raw.get("evaluation"), refuse),
             _path=path,
         )
+
+    @staticmethod
+    def _thresholds_of(evaluation: Any, refuse: Any) -> dict[str, float]:
+        """The scoring thresholds: every one the scorer reads, each a number, and no other.
+
+        A threshold nothing reads is refused. It would look like a setting and change nothing: until
+        25 November 2026 the file carried four such, left from scoring that had been removed, and a
+        fifth, the floor for text, that the scorer had its own copy of and did not read.
+        """
+        given = evaluation.get("thresholds") if isinstance(evaluation, dict) else None
+        example = "\n".join(f"    {name}: 0.75" for name in THRESHOLDS)
+        if not isinstance(given, dict):
+            raise refuse(
+                "the field definitions file has no evaluation.thresholds section.",
+                "evaluation.thresholds",
+                f"the thresholds the scorer reads:\n  thresholds:\n{example}",
+                "add the section, with a number for each of those names.",
+            )
+        missing = [name for name in THRESHOLDS if name not in given]
+        unread = sorted(set(given) - set(THRESHOLDS))
+        if missing or unread:
+            what = []
+            if missing:
+                what.append(f"threshold(s) the scorer reads are not set: {', '.join(missing)}")
+            if unread:
+                what.append(f"threshold(s) are set that nothing reads: {', '.join(unread)}")
+            raise refuse(
+                "; ".join(what) + ".",
+                f"evaluation.thresholds.{(missing or unread)[0]}",
+                f"exactly the thresholds the scorer reads, each a number:\n  thresholds:\n{example}",
+                "add each threshold that is not set, and remove each that nothing reads. One left from "
+                "scoring that has been removed has no effect to keep.",
+            )
+        thresholds: dict[str, float] = {}
+        for name in THRESHOLDS:
+            value = given[name]
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise refuse(
+                    f"the threshold {name} is {value!r}, not a number.",
+                    f"evaluation.thresholds.{name}",
+                    f"a number, e.g. {name}: 0.75",
+                    f"give {name} a number.",
+                )
+            thresholds[name] = float(value)
+        return thresholds
 
     @staticmethod
     def _fields(raw: Any, document_types: dict[str, DocumentType], refuse: Any) -> dict[str, Field]:

@@ -194,7 +194,8 @@ def _dates_in(text: str) -> list[tuple[int, int, int]]:
 
 
 def _date_field_score(read: str, truth: str) -> float:
-    """How well a date or date range agrees: 1 the same, part for part of a range, 0.8 for day and month."""
+    """How well a date or date range agrees: 1 the same, part for part of a range, and for the same day
+    and month in another year the share ``evaluation.thresholds.date_day_and_month_only`` gives."""
     read_dates, true_dates = _dates_in(read), _dates_in(truth)
     if not read_dates or not true_dates:
         return 0.0
@@ -204,7 +205,7 @@ def _date_field_score(read: str, truth: str) -> float:
     if common:
         return len(common) / max(len(set(read_dates)), len(set(true_dates)))
     if read_dates[0][:2] == true_dates[0][:2]:
-        return 0.8
+        return get_field_schema().get_threshold("date_day_and_month_only")
     return 0.0
 
 
@@ -422,10 +423,12 @@ def score_field(read_value: Any, true_value: Any, field_name: str) -> dict[str, 
         # An identifier is right or wrong: its label, spaces, dashes and case are set aside first.
         read_id = re.sub(r"[\s\-]", "", re.sub(IDENTIFIER_LABEL, "", read, flags=re.IGNORECASE))
         true_id = re.sub(r"[\s\-]", "", re.sub(IDENTIFIER_LABEL, "", truth, flags=re.IGNORECASE))
-        return _in_part(float(read_id.lower() == true_id.lower()), counts_from=0.5)
-    # Text earns its similarity, and nothing below a half: that is a wrong answer, not a near miss.
+        return _right_or_wrong(read_id.lower() == true_id.lower())
+    # Text earns its similarity, and nothing below the floor the schema file gives (a half, as
+    # shipped): under it the value is a wrong answer, not a near miss.
+    floor = get_field_schema().get_threshold("anls_threshold")
     similarity = _text_similarity(read, truth)
-    return _in_part(similarity if similarity >= 0.5 else 0.0, counts_from=0.5)
+    return _in_part(similarity if similarity >= floor else 0.0, counts_from=floor)
 
 
 def _as_flag(value: str) -> bool | None:
@@ -587,6 +590,7 @@ def score_page(
     incorrect = [
         field for field, score in field_scores.items() if score["f1_score"] < 1.0 and field not in missing
     ]
+    meets_at = get_field_schema().get_threshold("page_meets_threshold_at")
 
     return {
         "overall_accuracy": mean_f1,
@@ -605,7 +609,7 @@ def score_page(
             "median_f1": median_f1,
             "overall_precision": precision,
             "overall_recall": recall,
-            "meets_threshold": median_f1 >= 0.8,
-            "document_type_threshold": 0.8,
+            "meets_threshold": median_f1 >= meets_at,
+            "document_type_threshold": meets_at,
         },
     }

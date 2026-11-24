@@ -482,7 +482,7 @@ when that change is intended.
 
 | Folder | Holds |
 |---|---|
-| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names |
+| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that |
 | `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder, the SROIE benchmark |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
 | `config/` | `run_config.yml` and `field_definitions.yaml` |

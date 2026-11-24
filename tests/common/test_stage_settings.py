@@ -5,7 +5,10 @@ with a helper, laid the environment over them, and built each stage's flags by h
 `common.stage_settings.resolve` does it, and `python -m stages` runs the task with the result.
 """
 
+import importlib
+import inspect
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -356,8 +359,10 @@ class Called:
 
 @pytest.fixture
 def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
+    """Every stage's own ``run`` replaced, so that each stage's ``start`` is what is being tried."""
     called = Called()
-    monkeypatch.setattr(starter, "_stage_run", lambda task: called)
+    for task in TASKS:
+        monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
     return called
 
 
@@ -370,7 +375,7 @@ def test_classify_is_given_its_folders_and_says_how_long_it_took(
         starter.run_task(settings)
 
     assert stage.args == (settings.image_dir, settings.classifications)
-    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm"}
+    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm", "config_path": RUN_CONFIG}
     assert any("Classification complete (" in record.getMessage() for record in caplog.records)
     # The runner keeps no time of its own: a stage notes what it spent (tests/common/test_stage_timing.py).
     assert not (settings.output / ".inference_elapsed").exists()
@@ -382,7 +387,7 @@ def test_extract_is_given_its_folders(tmp_path: Path, stage: Called) -> None:
     starter.run_task(settings)
 
     assert stage.args == (settings.classifications, settings.image_dir, settings.raw_extractions)
-    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm"}
+    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm", "config_path": RUN_CONFIG}
 
 
 def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called) -> None:
@@ -406,7 +411,53 @@ def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) 
     )
 
     starter.run_task(settings_for("sroie", tmp_path, sroie_max_images="40"))
-    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm", "max_images": 40}
+    assert stage.args == ()
+    assert stage.kwargs == {
+        "model_type": "gemma4-31b-w4a16-vllm",
+        "max_images": 40,
+        "config_path": RUN_CONFIG,
+    }
+
+
+def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads(
+    tmp_path: Path, stage: Called
+) -> None:
+    """Until 25 November 2026 a stage read the shipped file, whatever file the task was worked out from."""
+    another = config_with(tmp_path, with_folders)
+    environ = {
+        "model": "gemma4-31b-w4a16-vllm",
+        "image_dir": str(tmp_path),
+        "output": str(tmp_path / "out"),
+    }
+    settings = resolve("classify", environ, another)
+
+    starter.run_task(settings)
+
+    assert settings.config_path == another != RUN_CONFIG
+    assert stage.kwargs["config_path"] == another
+
+
+@pytest.mark.parametrize("task", TASKS)
+def test_every_stage_has_a_banner_and_is_started_the_one_way(task: str) -> None:
+    """The runner knows no stage by name: it asks each for these two, and nothing else."""
+    module = importlib.import_module(f"stages.{task}")
+    parameters = list(inspect.signature(module.start).parameters)
+
+    assert isinstance(module.BANNER, str) and task in module.BANNER.lower()
+    assert parameters == ["task"]
+    assert inspect.signature(module.start).return_annotation is str
+
+
+def test_the_runner_names_no_stage_but_where_a_stage_differs_in_what_it_carries_on_from() -> None:
+    source = (REPO_ROOT / "stages" / "__main__.py").read_text()
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+    code = code.split("def _stage(", 1)[1]
+
+    named = sorted({task for task in TASKS if re.search(rf"[\"\x27]{task}[\"\x27]", code)})
+    # The split stage always checks what made its folder, and extract warns if classify was made
+    # another way: both are about the note a stage leaves, not about how a stage is run.
+    assert named == ["classify", "extract", "split"]
+    assert "elif" not in code
 
 
 def test_a_run_resumes_unless_told_to_start_afresh(tmp_path: Path, stage: Called) -> None:

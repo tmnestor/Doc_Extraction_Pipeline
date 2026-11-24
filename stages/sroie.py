@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
+from common.stage_settings import StageSettings
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.sroie.config import SroieSettings
 from common.sroie.ground_truth import SroieRecord, load_sroie_split
@@ -218,3 +219,18 @@ def _finish(
         raise SystemExit(1)
 
     return summary_path
+
+
+BANNER = "SROIE benchmark: 347 public receipts, four fields each (GPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the benchmark for a task, and give the line that says it is done.
+
+    It reads its folders from ``pipeline.sroie`` in the settings file, writes over its two files every
+    time, and does not carry on from an earlier run.
+    """
+    if task.sroie_max_images is not None:
+        logger.info("  sroie_max_images: %d (a part run: not a score to publish)", task.sroie_max_images)
+    summary = run(model_type=task.model, max_images=task.sroie_max_images, config_path=task.config_path)
+    return f"SROIE benchmark complete: {summary}"

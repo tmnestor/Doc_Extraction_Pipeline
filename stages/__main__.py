@@ -17,46 +17,29 @@ import importlib
 import logging
 import os
 import sys
-import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from common import run_manifest
 from common.engine_calls import StageStopped
 from common.stage_settings import ConfigError, StageSettings, check_folder_of_pages, resolve
-from stages.io import Journal
+
 
 logger = logging.getLogger("stages")
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPOSITORY / "config" / "run_config.yml"
 
-_BANNERS = {
-    "split": "Stage 0: split, one image for each document in a photograph (GPU)",
-    "classify": "Stage 1: classify, the document type of each page (GPU)",
-    "extract": "Stage 2: extract, the fields of each page (GPU)",
-    "clean": "Stage 3: clean, the model's replies parsed and tidied (CPU)",
-    "evaluate": "Stage 4: evaluate, the fields scored against the answer key (CPU)",
-    "sroie": "SROIE benchmark: 347 public receipts, four fields each (GPU)",
-}
 
+def _stage(task: str) -> Any:
+    """The stage's own module. Imported only now, so that a task loads nothing another task needs.
 
-def _stage_run(task: str) -> Callable[..., Any]:
-    """The stage's own ``run``. Imported only now, so that a task loads nothing another task needs."""
-    return importlib.import_module(f"stages.{task}").run
-
-
-def _start_afresh(settings: StageSettings, *files: Path) -> None:
-    """Delete the stage's own earlier output, if that was asked for. Never a folder, never a log."""
-    if not settings.clear_previous_output:
-        return
-    for output in files:
-        # With an output goes its journal: what an interrupted run had read and not yet written.
-        for file in (output, Journal(output).path):
-            if file.is_file():
-                file.unlink()
-                logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
+    A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, and a
+    ``start`` that is given the task's settings, runs the stage and returns the line that says it is
+    done. What a stage reads and writes, and which of its files a run started afresh deletes, is the
+    stage's own to know. Until 25 November 2026 this module knew it for every stage, in a branch each.
+    """
+    return importlib.import_module(f"stages.{task}")
 
 
 def _check_what_made_the_folder(settings: StageSettings) -> None:
@@ -74,6 +57,7 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
             logger.info("  made by %s", line)
         return
     assert settings.image_dir is not None
+    settings.output.mkdir(parents=True, exist_ok=True)
     run_manifest.check_and_note(
         settings.output,
         settings.task,
@@ -93,54 +77,15 @@ def run_task(settings: StageSettings) -> None:
     Args:
         settings: What the task is run with.
     """
-    run = _stage_run(settings.task)
+    stage = _stage(settings.task)
     logger.info("=================================================================")
-    logger.info("    %s", _BANNERS[settings.task])
+    logger.info("    %s", stage.BANNER)
     logger.info("=================================================================")
     for name in ("model", "image_dir", "output", "ground_truth", "clear_previous_output"):
         logger.info("  %-22s %s", name + ":", getattr(settings, name))
 
-    if settings.task == "sroie":
-        # The benchmark reads its folders from pipeline.sroie in the settings file, writes over its two
-        # files every time, and does not resume.
-        if settings.sroie_max_images is not None:
-            logger.info(
-                "  sroie_max_images: %d (a part run: not a score to publish)", settings.sroie_max_images
-            )
-        run(model_type=settings.model, max_images=settings.sroie_max_images)
-        return
-
-    settings.output.mkdir(parents=True, exist_ok=True)
     _check_what_made_the_folder(settings)
-    started = time.time()
-    if settings.task == "split":
-        settings.split_dir.mkdir(parents=True, exist_ok=True)
-        run(settings.image_dir, settings.split_dir, model_type=settings.model)
-        logger.info(
-            "Split complete. Later stages read their images from: %s", settings.split_dir / "images"
-        )
-    elif settings.task == "classify":
-        _start_afresh(settings, settings.classifications)
-        run(settings.image_dir, settings.classifications, model_type=settings.model)
-        logger.info("Classification complete (%ds).", int(time.time() - started))
-    elif settings.task == "extract":
-        _start_afresh(settings, settings.raw_extractions)
-        run(
-            settings.classifications,
-            settings.image_dir,
-            settings.raw_extractions,
-            model_type=settings.model,
-        )
-        logger.info("Extraction complete (%ds).", int(time.time() - started))
-    elif settings.task == "clean":
-        _start_afresh(settings, settings.cleaned_extractions)
-        run(settings.raw_extractions, settings.cleaned_extractions)
-        logger.info("Cleaning complete.")
-    elif settings.task == "evaluate":
-        settings.evaluation_dir.mkdir(parents=True, exist_ok=True)
-        _start_afresh(settings, settings.evaluation_dir / "evaluation_results.jsonl")
-        run(settings.cleaned_extractions, settings.ground_truth, settings.evaluation_dir)
-        logger.info("Evaluation complete.")
+    logger.info(stage.start(settings))
 
 
 def main() -> int:

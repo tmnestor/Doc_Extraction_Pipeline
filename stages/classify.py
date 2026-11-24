@@ -18,7 +18,17 @@ from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common.vllm_dp import RecordSink
 from common.extraction_batching import read_classify_batch_size
 
-from .io import Journal, append_jsonl, failed, read_completed_images, take_out, write_jsonl
+from common.stage_settings import StageSettings
+
+from .io import (
+    Journal,
+    append_jsonl,
+    failed,
+    read_completed_images,
+    start_afresh,
+    take_out,
+    write_jsonl,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -313,3 +323,15 @@ def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
         why = f"{type(err).__name__}: {err}"
         logger.error("The reply about %s could not be read (%s)", Path(outcome.item).name, why)
         return {**processor.unclassified(why), "raw_response": outcome.reply}
+
+
+BANNER = "Stage 1: classify, the document type of each page (GPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the stage for a task, and give the line that says it is done."""
+    assert task.image_dir is not None
+    start_afresh(task.clear_previous_output, task.classifications)
+    started = time.time()
+    run(task.image_dir, task.classifications, model_type=task.model, config_path=task.config_path)
+    return f"Classification complete ({int(time.time() - started)}s)."

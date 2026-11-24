@@ -18,7 +18,9 @@ from typing import Any
 from common.field_schema import NOT_FOUND, get_field_schema
 from common.reply_fields import fields_from_reply
 
-from .io import read_jsonl, write_jsonl
+from common.stage_settings import StageSettings
+
+from .io import read_jsonl, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +155,13 @@ def run(
         )
 
     return output_path
+
+
+BANNER = "Stage 3: clean, the model's replies parsed and tidied (CPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the stage for a task, and give the line that says it is done."""
+    start_afresh(task.clear_previous_output, task.cleaned_extractions)
+    run(task.raw_extractions, task.cleaned_extractions)
+    return "Cleaning complete."

@@ -36,6 +36,8 @@ from typing import Any
 
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 
+from common.stage_settings import StageSettings
+
 from .io import append_jsonl, failed, read_completed_images, take_out
 
 logger = logging.getLogger(__name__)
@@ -350,3 +352,17 @@ def run(
             len(records),
         )
     return images_dir
+
+
+BANNER = "Stage 0: split, one image for each document in a photograph (GPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the stage for a task, and give the line that says it is done.
+
+    The split stage has no earlier output deleted for it: a photograph already dealt with is passed over.
+    """
+    assert task.image_dir is not None
+    task.split_dir.mkdir(parents=True, exist_ok=True)
+    images = run(task.image_dir, task.split_dir, model_type=task.model, config_path=task.config_path)
+    return f"Split complete. Later stages read their images from: {images}"

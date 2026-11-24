@@ -65,8 +65,8 @@ class Processor:
     def classified(self, reply: str) -> dict[str, Any]:
         return {"document_type": next(k for k in KINDS if k in reply).upper(), "raw_response": reply}
 
-    def unclassified(self, error: str | None) -> dict[str, Any]:
-        return {"document_type": "UNIVERSAL", "raw_response": "", "error": error or ""}
+    def unclassified(self, error: str | None, reply: str = "") -> dict[str, Any]:
+        return {"document_type": "UNIVERSAL", "raw_response": reply, "error": error or ""}
 
     def read_pages(self, image_paths: list[str], document_type: str) -> list[str]:
         self._called([Path(p).name for p in image_paths])

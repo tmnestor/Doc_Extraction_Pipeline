@@ -20,6 +20,7 @@ from common.reply_fields import fields_from_reply
 
 from common.stage_settings import StageSettings
 
+from . import records as records_of
 from .io import read_jsonl, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
@@ -58,70 +59,33 @@ def run(
 
     cleaned_records: list[dict[str, Any]] = []
 
-    for record in raw_records:
+    for record in map(records_of.as_read, raw_records):
         image_name = record["image_name"]
         doc_type = record["document_type"]
-        raw_response = record.get("raw_response", "")
-        error = record.get("error")
 
         # A page the extract stage was set not to read (pipeline.extraction.skip_labels) has no reply.
         # It is passed on as not read. Until 25 November 2026 its empty reply was parsed like any
         # other, every field came out as not found, and the evaluate stage scored the page as all wrong.
-        if record.get("skipped"):
-            cleaned_records.append(
-                {
-                    "image_name": image_name,
-                    "image_path": record.get("image_path", ""),
-                    "document_type": doc_type,
-                    "extracted_data": {},
-                    "field_count": 0,
-                    "extracted_fields_count": 0,
-                    "processing_time": record.get("processing_time", 0.0),
-                    "skipped": True,
-                    "skip_reason": record.get("skip_reason", doc_type),
-                }
-            )
+        if records_of.not_read(record):
+            cleaned_records.append(records_of.cleaned_but_unread(record))
             continue
 
-        # Skip records with extraction errors
-        if error:
-            logger.warning("Skipping %s: extraction error: %s", image_name, error)
-            cleaned_records.append(
-                {
-                    "image_name": image_name,
-                    "image_path": record.get("image_path", ""),
-                    "document_type": doc_type,
-                    "extracted_data": {},
-                    "field_count": 0,
-                    "extracted_fields_count": 0,
-                    "processing_time": record.get("processing_time", 0.0),
-                    "error": error,
-                }
-            )
+        # A page the extract stage could not read has no reply either: its error is passed on.
+        if records_of.failed(record):
+            logger.warning("Skipping %s: extraction error: %s", image_name, record["error"])
+            cleaned_records.append(records_of.cleaned_but_failed(record))
             continue
 
         # Resolve expected fields for this document type
-        doc_type_lower = doc_type.lower()
-        expected_fields = all_fields.get(doc_type_lower, [])
-
+        expected_fields = all_fields.get(doc_type.lower(), [])
         if not expected_fields:
-            logger.warning("No field definitions for doc_type '%s' -- using empty list", doc_type)
+            logger.warning("No field definitions for doc_type %r -- using empty list", doc_type)
 
         # Parse + clean + validate
-        extracted_data = fields_from_reply(raw_response, expected_fields)
-
+        extracted_data = fields_from_reply(record.get("raw_response", ""), expected_fields)
         found_count = sum(1 for v in extracted_data.values() if v != NOT_FOUND)
-
         cleaned_records.append(
-            {
-                "image_name": image_name,
-                "image_path": record.get("image_path", ""),
-                "document_type": doc_type,
-                "extracted_data": extracted_data,
-                "field_count": len(expected_fields),
-                "extracted_fields_count": found_count,
-                "processing_time": record.get("processing_time", 0.0),
-            }
+            records_of.cleaned(record, extracted_data, expected=len(expected_fields), found=found_count)
         )
 
         logger.debug(
@@ -139,7 +103,7 @@ def run(
     # Summary
     total_fields = sum(r.get("field_count", 0) for r in cleaned_records)
     total_found = sum(r.get("extracted_fields_count", 0) for r in cleaned_records)
-    error_count = sum(1 for r in cleaned_records if r.get("error"))
+    error_count = sum(1 for r in cleaned_records if records_of.failed(r))
     logger.info(
         "Summary: %d records, %d/%d fields found, %d errors",
         len(cleaned_records),
@@ -147,7 +111,7 @@ def run(
         total_fields,
         error_count,
     )
-    not_read = sum(1 for r in cleaned_records if r.get("skipped"))
+    not_read = sum(1 for r in cleaned_records if records_of.not_read(r))
     if not_read:
         logger.info(
             "%d page(s) were not read, by pipeline.extraction.skip_labels, and are passed on as not read",

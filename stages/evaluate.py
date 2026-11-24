@@ -23,6 +23,7 @@ from common.stage_timing import RunTime, read_stage_timings, run_time
 
 from common.stage_settings import StageSettings
 
+from . import records as records_of
 from .io import read_jsonl, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def headline(
         unanswered: How many of them are pages with no answer in the key.
         not_read: How many of them are pages the extract stage was set not to read.
     """
-    scored = [r for r in eval_results if "median_f1" in r and not r.get("error")]
+    scored = [r for r in eval_results if "median_f1" in r and not records_of.failed(r)]
     total_mean = 0.0
     total_median = 0.0
     for record in scored:
@@ -125,35 +126,19 @@ def run(
     unanswered: list[str] = []
     not_read: list[str] = []
 
-    for record in records:
+    for record in map(records_of.as_cleaned, records):
         image_name = record["image_name"]
-        error = record.get("error")
 
-        if record.get("skipped"):
+        if records_of.not_read(record):
             # The extract stage was set not to read this page. It is recorded as not read and is in
             # no score: until 25 November 2026 it was scored against its answer as all wrong.
             not_read.append(image_name)
-            eval_results.append(
-                {
-                    "image_name": image_name,
-                    "document_type": record["document_type"],
-                    "skipped": True,
-                    "skip_reason": record.get("skip_reason", record["document_type"]),
-                }
-            )
+            eval_results.append(records_of.scored_but_unread(record))
             continue
 
-        if error:
+        if records_of.failed(record):
             failed.append(image_name)
-            eval_results.append(
-                {
-                    "image_name": image_name,
-                    "document_type": record["document_type"],
-                    "error": error,
-                    "overall_accuracy": 0,
-                    "median_f1": 0,
-                }
-            )
+            eval_results.append(records_of.scored_but_failed(record))
             continue
 
         answer = scoring.find_answer(answers, record.get("image_path", ""))
@@ -167,13 +152,7 @@ def run(
             unanswered.append(image_name)
             evaluation = {"error": f"No ground truth for {image_name}", "overall_accuracy": 0}
 
-        eval_results.append(
-            {
-                "image_name": image_name,
-                "document_type": record["document_type"],
-                **evaluation,
-            }
-        )
+        eval_results.append(records_of.scored(record, evaluation))
 
         if evaluation and "median_f1" in evaluation:
             logger.debug(

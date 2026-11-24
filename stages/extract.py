@@ -25,11 +25,11 @@ from common.vllm_dp import RecordSink
 
 from common.stage_settings import StageSettings
 
+from . import records as records_of
 from .io import (
     Journal,
     StreamingJsonlWriter,
     append_jsonl,
-    failed,
     read_completed_images,
     read_jsonl,
     start_afresh,
@@ -105,14 +105,14 @@ def run(
         name = record.get("image_name")
         return name in now_typed and record.get("document_type") != now_typed[name]
 
-    read_again = take_out(output_path, lambda record: failed(record) or retyped(record))
+    read_again = take_out(output_path, lambda record: records_of.failed(record) or retyped(record))
     if read_again:
         logger.info(
             "%d page(s) will be read again: %d an earlier run could not read, %d given another "
             "document type since",
             len(read_again),
-            sum(1 for record in read_again if failed(record)),
-            sum(1 for record in read_again if not failed(record)),
+            sum(1 for record in read_again if records_of.failed(record)),
+            sum(1 for record in read_again if not records_of.failed(record)),
         )
 
     # Check for resumption
@@ -139,20 +139,7 @@ def run(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with StreamingJsonlWriter(output_path) as writer:
             for rec in skipped:
-                writer.write(
-                    {
-                        "image_name": rec.get("image_name", ""),
-                        "image_path": rec.get("image_path", ""),
-                        "document_type": rec.get("document_type", ""),
-                        "raw_response": "",
-                        "processing_time": 0.0,
-                        "prompt_used": "skipped",
-                        "error": None,
-                        "skipped": True,
-                        "skip_reason": rec.get("document_type", ""),
-                        "fields": {},
-                    }
-                )
+                writer.write(records_of.left_unread(rec))
 
     if not classifications:
         logger.info("All remaining images skipped -- nothing to extract")
@@ -204,7 +191,7 @@ def run(
         read_again=len(read_again),
     )
     logger.info("Wrote %d extractions to %s", len(records), output_path)
-    could_not = sum(1 for record in records if failed(record))
+    could_not = sum(1 for record in records if records_of.failed(record))
     if could_not:
         logger.warning(
             "%d of %d page(s) could not be read. Each is recorded with its error, and is read again "
@@ -302,15 +289,6 @@ def extract_pages(
     return collected.records
 
 
-def _record(classification: dict[str, Any], **rest: Any) -> dict[str, Any]:
-    return {
-        "image_name": classification["image_name"],
-        "image_path": classification["image_path"],
-        "document_type": classification["document_type"],
-        **rest,
-    }
-
-
 def _prompt_name(document_type: str) -> str:
     """What a record says its page was read with: the prompt of its type's name."""
     return document_type.lower()
@@ -345,11 +323,11 @@ def _read_batch(
             if outcome.error is not None:
                 logger.error("Error extracting %s: %s", outcome.item["image_name"], outcome.error)
             writer.write(
-                _record(
+                records_of.read(
                     outcome.item,
-                    raw_response=outcome.reply if outcome.error is None else "",
-                    processing_time=outcome.seconds,
-                    prompt_used=_prompt_name(kind) if outcome.error is None else "error",
+                    reply=outcome.reply,
+                    seconds=outcome.seconds,
+                    prompt=_prompt_name(kind),
                     error=outcome.error,
                 )
             )

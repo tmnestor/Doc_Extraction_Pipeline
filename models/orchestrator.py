@@ -95,16 +95,20 @@ class DocumentOrchestrator:
             "prompt_used": DETECTION_PROMPT,
         }
 
-    def unclassified(self, error: str | None) -> dict:
+    def unclassified(self, error: str | None, reply: str = "") -> dict:
         """The classification of a page the model could not be asked about: the fallback type, with why.
 
         The stage records it, so that one page does not end the run.
+
+        Args:
+            error: Why no type could be worked out for the page.
+            reply: The model's reply, when it gave one that could not then be read.
         """
         return {
             "document_type": self._fallback_type,
             "type_from": classification.FALLBACK_NOT_ASKED,
             "confidence": 0.1,
-            "raw_response": "",
+            "raw_response": reply,
             "prompt_used": "fallback_heuristic",
             "error": error or "",
         }

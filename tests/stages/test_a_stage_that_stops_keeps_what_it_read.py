@@ -189,7 +189,6 @@ def test_when_a_card_fails_what_every_card_had_read_is_kept(bench: Bench, tmp_pa
     output = tmp_path / "out" / "classifications.jsonl"
     settings = Settings.load(
         {
-            "data_dir": str(bench.pages),
             "output_dir": str(output.parent),
             "model_type": AN_ENGINE_ON_EACH_CARD,
         },

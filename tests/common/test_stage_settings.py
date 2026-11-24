@@ -12,7 +12,14 @@ from typing import Any
 import pytest
 import yaml
 
-from common.stage_settings import TASKS, ConfigError, StageSettings, log_dir, resolve
+from common.stage_settings import (
+    TASKS,
+    ConfigError,
+    StageSettings,
+    check_folder_of_pages,
+    log_dir,
+    resolve,
+)
 from stages import __main__ as starter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -69,24 +76,132 @@ def test_the_usual_variables_give_the_paths_the_entry_script_gave(task: str) -> 
     assert settings.clear_previous_output is False and settings.sroie_max_images is None
 
 
-def test_the_environment_wins_over_the_settings_file() -> None:
-    settings = resolve("classify", USUAL, RUN_CONFIG)
+IN_THE_FILE = {
+    "pages": "/data/trial/pages",
+    "key": "/data/trial/pages/ground_truth.jsonl",
+    "output": "/data/trial/output",
+    "logs": "/data/trial/output/logs",
+}
 
-    assert str(settings.image_dir) != shipped("pipeline.information_extraction.input.dir")
-    assert str(settings.output) != shipped("pipeline.information_extraction.output.dir")
+
+def with_folders(raw: dict[str, Any]) -> None:
+    """A settings file that names its own folders, as one kept for trials on one machine may."""
+    raw["pipeline"]["information_extraction"]["input"].update(
+        dir=IN_THE_FILE["pages"], ground_truth=IN_THE_FILE["key"]
+    )
+    raw["pipeline"]["information_extraction"]["output"]["dir"] = IN_THE_FILE["output"]
+    raw["bootstrap"]["logging"]["log_dir"] = IN_THE_FILE["logs"]
+
+
+def test_the_environment_wins_over_the_settings_file(tmp_path: Path) -> None:
+    settings = resolve("classify", USUAL, config_with(tmp_path, with_folders))
+
+    assert str(settings.image_dir) == USUAL["image_dir"] != IN_THE_FILE["pages"]
+    assert str(settings.output) == USUAL["output"] != IN_THE_FILE["output"]
+    assert str(settings.log_dir) == USUAL["DOC_EXTRACT_LOG_DIR"] != IN_THE_FILE["logs"]
 
 
 @pytest.mark.parametrize("unset", [None, "", "None"])
-def test_the_settings_file_is_used_when_a_variable_is_unset_empty_or_none(unset: str | None) -> None:
+def test_the_settings_file_is_used_when_a_variable_is_unset_empty_or_none(
+    tmp_path: Path, unset: str | None
+) -> None:
     environ = {name: unset for name in USUAL if unset is not None}
 
-    settings = resolve("evaluate", environ, RUN_CONFIG)
+    settings = resolve("evaluate", environ, config_with(tmp_path, with_folders))
 
     assert settings.model == shipped("bootstrap.model.type")
-    assert str(settings.image_dir) == shipped("pipeline.information_extraction.input.dir")
-    assert str(settings.output) == shipped("pipeline.information_extraction.output.dir")
-    assert str(settings.ground_truth) == shipped("pipeline.information_extraction.input.ground_truth")
-    assert str(settings.log_dir) == shipped("bootstrap.logging.log_dir")
+    assert str(settings.image_dir) == IN_THE_FILE["pages"]
+    assert str(settings.output) == IN_THE_FILE["output"]
+    assert str(settings.ground_truth) == IN_THE_FILE["key"]
+    assert str(settings.log_dir) == IN_THE_FILE["logs"]
+
+
+# --- the shipped file names no machine's folders ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "bootstrap.logging.log_dir",
+        "pipeline.information_extraction.input.dir",
+        "pipeline.information_extraction.input.ground_truth",
+        "pipeline.information_extraction.output.dir",
+    ],
+)
+def test_the_shipped_file_names_no_folder_for_a_run_to_fall_back_on(key: str) -> None:
+    """A folder named there would be one machine's, and a run that forgot its own would use it."""
+    assert shipped(key) is None
+
+
+@pytest.mark.parametrize(
+    ("task", "left_out", "variable", "key"),
+    [
+        ("classify", "image_dir", "image_dir", "pipeline.information_extraction.input.dir"),
+        ("classify", "output", "output", "pipeline.information_extraction.output.dir"),
+        ("clean", "output", "output", "pipeline.information_extraction.output.dir"),
+        ("evaluate", None, "ground_truth", "pipeline.information_extraction.input.ground_truth"),
+        ("clean", "DOC_EXTRACT_LOG_DIR", "DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir"),
+    ],
+)
+def test_a_job_that_does_not_name_a_folder_its_task_needs_is_stopped_and_told_what_to_set(
+    task: str, left_out: str | None, variable: str, key: str
+) -> None:
+    environ = {name: value for name, value in USUAL.items() if name != left_out}
+
+    with pytest.raises(ConfigError) as raised:
+        resolve(task, environ, RUN_CONFIG)
+
+    assert_diagnostic(str(raised.value), variable, key, str(RUN_CONFIG.resolve()))
+
+
+def test_the_benchmark_is_asked_for_neither_the_pages_nor_the_output_folder() -> None:
+    """It reads and writes its own folders. Until 25 November 2026 it was asked for both."""
+    settings = resolve("sroie", {"DOC_EXTRACT_LOG_DIR": "/data/sroie/logs"}, RUN_CONFIG)
+
+    assert settings.image_dir is None
+    assert str(settings.output) == shipped("pipeline.sroie.output_dir")
+
+
+def test_the_benchmark_with_no_folder_of_its_own_to_write_to_is_stopped(tmp_path: Path) -> None:
+    path = config_with(tmp_path, lambda raw: raw["pipeline"]["sroie"].update(output_dir=None))
+
+    with pytest.raises(ConfigError) as raised:
+        resolve("sroie", USUAL, path)
+
+    assert_diagnostic(str(raised.value), "sroie", "pipeline.sroie.output_dir", str(path.resolve()))
+
+
+@pytest.mark.parametrize("task", ["split", "classify", "extract"])
+def test_a_task_that_reads_pages_is_not_started_without_its_folder_of_pages(
+    tmp_path: Path, task: str
+) -> None:
+    environ = {**USUAL, "image_dir": str(tmp_path / "not_there")}
+    settings = resolve(task, environ, RUN_CONFIG)
+
+    with pytest.raises(ConfigError) as raised:
+        check_folder_of_pages(settings, RUN_CONFIG)
+
+    assert_diagnostic(
+        str(raised.value),
+        "does not exist",
+        str(tmp_path / "not_there"),
+        "image_dir",
+        "pipeline.information_extraction.input.dir",
+        str(RUN_CONFIG.resolve()),
+    )
+
+
+@pytest.mark.parametrize("task", ["clean", "evaluate", "sroie"])
+def test_a_task_that_reads_no_pages_is_not_asked_whether_a_folder_of_pages_is_there(task: str) -> None:
+    environ = {**USUAL, "image_dir": "/nowhere/at/all", "ground_truth": "/data/key.jsonl"}
+
+    check_folder_of_pages(resolve(task, environ, RUN_CONFIG), RUN_CONFIG)
+
+
+def test_a_folder_of_pages_that_is_there_passes(tmp_path: Path) -> None:
+    check_folder_of_pages(
+        resolve("classify", {**USUAL, "image_dir": str(tmp_path)}, RUN_CONFIG), RUN_CONFIG
+    )
 
 
 @pytest.mark.parametrize("task", ["", "run_info_extract", "trust"])
@@ -200,7 +315,17 @@ def test_a_variable_under_the_old_prefix_is_refused() -> None:
 def test_the_log_folder_alone_can_be_asked_for() -> None:
     """The entry script needs it before anything else, to keep the whole run's output."""
     assert log_dir(USUAL, RUN_CONFIG) == Path(f"{D}/output_run/logs")
-    assert str(log_dir({}, RUN_CONFIG)) == shipped("bootstrap.logging.log_dir")
+
+
+def test_the_log_folder_comes_from_the_settings_file_when_the_job_names_none(tmp_path: Path) -> None:
+    assert str(log_dir({}, config_with(tmp_path, with_folders))) == IN_THE_FILE["logs"]
+
+
+def test_a_job_with_no_log_folder_anywhere_is_stopped_before_anything_runs() -> None:
+    with pytest.raises(ConfigError) as raised:
+        log_dir({}, RUN_CONFIG)
+
+    assert_diagnostic(str(raised.value), "DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir")
 
 
 # --- running a task with its settings ---------------------------------------------------------------

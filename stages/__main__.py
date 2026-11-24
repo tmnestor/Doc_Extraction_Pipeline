@@ -24,7 +24,7 @@ from typing import Any
 
 from common import run_manifest
 from common.engine_calls import StageStopped
-from common.stage_settings import ConfigError, StageSettings, resolve
+from common.stage_settings import ConfigError, StageSettings, check_folder_of_pages, resolve
 from stages.io import Journal
 
 logger = logging.getLogger("stages")
@@ -147,7 +147,9 @@ def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        run_task(resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH))
+        settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH)
+        check_folder_of_pages(settings, CONFIG_PATH)
+        run_task(settings)
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
         return 1

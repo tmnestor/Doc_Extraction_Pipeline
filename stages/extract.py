@@ -73,7 +73,7 @@ def run(
 
     logger.info("Read %d classifications from %s", len(classifications), classifications_path)
 
-    cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_path.parent)}
+    cli_args: dict[str, Any] = {"output_dir": str(output_path.parent)}
     if model_type is not None:
         cli_args["model_type"] = model_type
 

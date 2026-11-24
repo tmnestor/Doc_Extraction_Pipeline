@@ -11,6 +11,7 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,55 @@ from common import scoring
 from .io import read_jsonl, write_jsonl
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Headline:
+    """A run's headline scores, with the pages they leave out counted beside them.
+
+    A page whose extraction failed has no fields to score, and a page with no answer in the key cannot
+    be scored at all. Neither is in ``mean_f1`` or ``median_f1``. Until 24 November 2026 nothing said how
+    many such pages there were, so a run that lost twenty pages reported the mean of the rest as if it
+    were the run's.
+    """
+
+    pages: int
+    scored: int
+    # Pages the extract stage recorded an error for.
+    failed: int
+    # Pages with no answer in the key.
+    unanswered: int
+    # Over the scored pages: the mean of their mean F1, and the mean of their median F1.
+    mean_f1: float
+    median_f1: float
+    # The mean F1 with every failed page counted as 0. The same as mean_f1 when none failed. A page
+    # with no answer is in neither: there is nothing to say it scored.
+    mean_f1_counting_failures: float
+
+
+def headline(eval_results: list[dict[str, Any]], *, failed: int, unanswered: int) -> Headline:
+    """The headline scores of a run's evaluation records.
+
+    Args:
+        eval_results: The records the stage writes, one a page.
+        failed: How many of them are pages whose extraction failed.
+        unanswered: How many of them are pages with no answer in the key.
+    """
+    scored = [r for r in eval_results if "median_f1" in r and not r.get("error")]
+    total_mean = 0.0
+    total_median = 0.0
+    for record in scored:
+        total_mean += record.get("overall_accuracy", 0.0)
+        total_median += record.get("median_f1", 0.0)
+    return Headline(
+        pages=len(eval_results),
+        scored=len(scored),
+        failed=failed,
+        unanswered=unanswered,
+        mean_f1=total_mean / len(scored) if scored else 0.0,
+        median_f1=total_median / len(scored) if scored else 0.0,
+        mean_f1_counting_failures=total_mean / (len(scored) + failed) if scored or failed else 0.0,
+    )
 
 
 def run(
@@ -67,12 +117,15 @@ def run(
     # Evaluate each record
     output_dir.mkdir(parents=True, exist_ok=True)
     eval_results: list[dict[str, Any]] = []
+    failed: list[str] = []
+    unanswered: list[str] = []
 
     for record in records:
         image_name = record["image_name"]
         error = record.get("error")
 
         if error:
+            failed.append(image_name)
             eval_results.append(
                 {
                     "image_name": image_name,
@@ -92,6 +145,7 @@ def run(
                 record["document_type"],
             )
         else:
+            unanswered.append(image_name)
             evaluation = {"error": f"No ground truth for {image_name}", "overall_accuracy": 0}
 
         eval_results.append(
@@ -116,30 +170,68 @@ def run(
     logger.info("Wrote %d evaluation results to %s", count, output_path)
 
     # Summary statistics
-    scored = [r for r in eval_results if "median_f1" in r and not r.get("error")]
-    if scored:
-        avg_f1_median = sum(r["median_f1"] for r in scored) / len(scored)
-        avg_f1_mean = sum(r.get("overall_accuracy", 0) for r in scored) / len(scored)
+    scores = headline(eval_results, failed=len(failed), unanswered=len(unanswered))
+    if scores.scored:
         logger.info(
-            "Summary: %d images scored, avg F1 (median)=%.3f, avg F1 (mean)=%.3f",
-            len(scored),
-            avg_f1_median,
-            avg_f1_mean,
+            "Summary: %d of %d images scored, avg F1 (median)=%.3f, avg F1 (mean)=%.3f",
+            scores.scored,
+            scores.pages,
+            scores.median_f1,
+            scores.mean_f1,
         )
     else:
         logger.warning("No images scored -- check ground truth alignment")
+    # The pages the scores leave out are named, so that a mean over part of a run is not read as the run's.
+    if failed:
+        logger.warning(
+            "%d page(s) failed extraction and are in no score above: %s. Counting each as 0, the mean "
+            "F1 is %.3f.",
+            len(failed),
+            _some(failed),
+            scores.mean_f1_counting_failures,
+        )
+    if unanswered:
+        logger.warning(
+            "%d page(s) have no answer in %s and are not scored: %s. Check that the answer key is the "
+            "one of this set of pages.",
+            len(unanswered),
+            ground_truth,
+            _some(unanswered),
+        )
 
     # Rich Execution Summary table (equivalent to pre-staged-pipeline output)
-    _print_summary_table(eval_results, records, output_dir, inference_seconds)
+    _print_summary_table(eval_results, records, output_dir, inference_seconds, scores)
 
     return output_path
+
+
+def score_rows(scores: Headline) -> list[tuple[str, str]]:
+    """The summary table's rows of scores. Pages left out of the scores have a row of their own."""
+    rows = [("Images Scored", f"{scores.scored} of {scores.pages}")]
+    if scores.failed:
+        rows.append(("Failed Extraction", f"{scores.failed} (in no score below)"))
+    if scores.unanswered:
+        rows.append(("No Answer In Key", f"{scores.unanswered} (not scored)"))
+    if scores.scored:
+        rows.append(("Avg F1 (mean)", f"{scores.mean_f1:.3f}"))
+        rows.append(("Avg F1 (median)", f"{scores.median_f1:.3f}"))
+    if scores.failed:
+        rows.append(("Avg F1 (mean), failed as 0", f"{scores.mean_f1_counting_failures:.3f}"))
+    return rows
+
+
+def _some(names: list[str], most: int = 10) -> str:
+    """The first few names, and how many more there are."""
+    shown = ", ".join(names[:most])
+    return shown if len(names) <= most else f"{shown} and {len(names) - most} more"
 
 
 def _print_summary_table(
     eval_results: list[dict[str, Any]],
     cleaned_records: list[dict[str, Any]],
     output_dir: Path,
-    inference_seconds: float | None = None,
+    inference_seconds: float | None,
+    scores: Headline,
 ) -> None:
     """Render an Execution Summary table and document-type breakdown.
 
@@ -173,10 +265,6 @@ def _print_summary_table(
     inference_time = resolved.inference_seconds
     throughput = (num / inference_time * 60.0) if inference_time and inference_time > 0 else None
 
-    scored = [r for r in eval_results if "median_f1" in r and not r.get("error")]
-    avg_f1_mean = sum(r.get("overall_accuracy", 0.0) for r in scored) / len(scored) if scored else 0.0
-    avg_f1_median = sum(r.get("median_f1", 0.0) for r in scored) / len(scored) if scored else 0.0
-
     doc_types: dict[str, int] = {}
     for r in eval_results:
         dt = r.get("document_type", "UNKNOWN")
@@ -205,9 +293,8 @@ def _print_summary_table(
         table.add_row("Execution Mode", timing_summary.execution_mode)
         table.add_row("Total Wall Clock", f"{timing_summary.wall_clock:.1f}s")
         table.add_row("Engine Startup", f"{timing_summary.startup_seconds:.1f}s")
-    if scored:
-        table.add_row("Avg F1 (mean)", f"{avg_f1_mean:.3f}")
-        table.add_row("Avg F1 (median)", f"{avg_f1_median:.3f}")
+    for metric, value in score_rows(scores):
+        table.add_row(metric, value)
     table.add_row("Output Directory", str(output_dir))
 
     console.print()

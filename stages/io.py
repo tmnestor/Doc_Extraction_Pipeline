@@ -5,10 +5,14 @@ so that partial output survives crashes (critical at 10K images).
 """
 
 import json
+import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+
+logger = logging.getLogger("stages")
 
 
 def write_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
@@ -76,6 +80,23 @@ class StreamingJsonlWriter:
     def count(self) -> int:
         """Number of records written so far."""
         return self._count
+
+
+def start_afresh(asked_for: bool, *files: Path) -> None:
+    """Delete a stage's own earlier output, if that was asked for. Never a folder, never a log.
+
+    Args:
+        asked_for: Whether the job asked for it (``CLEAR_PREV_OUTPUT=true``).
+        files: The stage's output files. With each goes its journal: what an interrupted run had read
+            and not yet written.
+    """
+    if not asked_for:
+        return
+    for output in files:
+        for file in (output, Journal(output).path):
+            if file.is_file():
+                file.unlink()
+                logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
 
 
 class Journal:

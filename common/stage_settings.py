@@ -49,6 +49,8 @@ class StageSettings:
     log_dir: Path
     clear_previous_output: bool
     sroie_max_images: int | None
+    # The settings file these were worked out from. A stage that reads more of it reads this one.
+    config_path: Path
 
     # Every file a stage writes is under the output folder, so that one stage finds what another wrote.
 
@@ -207,6 +209,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         log_dir=log_dir(environ, config_path),
         clear_previous_output=_start_afresh(environ),
         sroie_max_images=_whole_number(environ, "sroie_max_images"),
+        config_path=config_path,
     )
 
 

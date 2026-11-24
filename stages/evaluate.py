@@ -21,7 +21,9 @@ from rich.table import Table
 from common import scoring
 from common.stage_timing import RunTime, read_stage_timings, run_time
 
-from .io import read_jsonl, write_jsonl
+from common.stage_settings import StageSettings
+
+from .io import read_jsonl, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -321,3 +323,15 @@ def _print_summary_table(
         console.print("\n[bold]Document Types:[/bold]")
         for doc_type, count in sorted(doc_types.items()):
             console.print(f"  {doc_type}: {count}")
+
+
+BANNER = "Stage 4: evaluate, the fields scored against the answer key (CPU)"
+
+
+def start(task: StageSettings) -> str:
+    """Run the stage for a task, and give the line that says it is done."""
+    assert task.ground_truth is not None
+    task.evaluation_dir.mkdir(parents=True, exist_ok=True)
+    start_afresh(task.clear_previous_output, task.evaluation_dir / "evaluation_results.jsonl")
+    run(task.cleaned_extractions, task.ground_truth, task.evaluation_dir)
+    return "Evaluation complete."

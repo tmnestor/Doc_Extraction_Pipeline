@@ -30,9 +30,10 @@ bootstrap:
     num_gpus: 0                # 0 = every card that can be seen; N = use N cards
     data_parallel_size: null   # null = one engine on each card, for a model that fits on one
   logging:
-    # Where the entry script writes its log when the job does not set DOC_EXTRACT_LOG_DIR. A measured run
-    # sets it, to a folder under its own output folder.
-    log_dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run/logs
+    # Where the entry script writes its log when the job does not set DOC_EXTRACT_LOG_DIR. Null as
+    # shipped: a job that sets neither is stopped and told what to set, where a folder named here would
+    # be one machine's, and a run that forgot its own would write into it.
+    log_dir: null
 
 
 # The vLLM engine's settings for each model, and the trace of what is sent to it. There is no setting
@@ -111,15 +112,17 @@ inference:
 
 # What each task does.
 pipeline:
-  # The folders of split, classify, extract, clean and evaluate, when the job does not set them. A
-  # measured run sets all three (image_dir, ground_truth, output): these are for trials.
+  # The folders of split, classify, extract, clean and evaluate, when the job does not set them
+  # (image_dir, ground_truth, output). All three are null as shipped: a task that needs one and is given
+  # none is stopped and told what to set. A folder named here would be one machine's, and a run that
+  # forgot to name its own would read it, or write into it, without a word.
   information_extraction:
     input:
       # The folder of pages. Absolute, and not beginning with ~: nothing expands it.
-      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812
+      dir: null
       # The answer key, a JSON lines file, for evaluate. It MUST be the key of the folder of pages above:
       # file names repeat from one set to another, so the wrong key still gives plausible scores.
-      ground_truth: /home/jovyan/nfs_share/tod_2026/evaluation_data/synthetic_20260812/ground_truth.jsonl
+      ground_truth: null
       # Applied by the classify stage when it lists the folder. Both are null as shipped: a value left
       # from a short trial would make a later run read fewer pages than intended.
       max_images: null       # null = every page; N = the first N
@@ -127,7 +130,7 @@ pipeline:
     output:
       # Where the tasks write. A folder belongs to one run: a task carries on from what it holds, and
       # refuses to carry on from another model's, folder of pages' or commit's (run_manifest.json).
-      dir: /home/jovyan/nfs_share/tod_2026/evaluation_data/output_unnamed_run
+      dir: null
 
   # The SROIE benchmark (KFP_TASK=sroie): 347 public receipts, four fields each. It has its own data,
   # prompt, scorer and output folder, and reads only this block.

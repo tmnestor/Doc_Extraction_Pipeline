@@ -59,10 +59,7 @@ def run(
     from common.settings import Settings
     from stages.io import discover_images
 
-    cli_args: dict[str, Any] = {
-        "data_dir": str(image_dir),
-        "output_dir": str(output_path.parent),
-    }
+    cli_args: dict[str, Any] = {"output_dir": str(output_path.parent)}
     if model_type is not None:
         cli_args["model_type"] = model_type
 
@@ -75,16 +72,16 @@ def run(
     # 12-image request processed all 165 (fixed 2026-09-21).
     images = list(
         discover_images(
-            config.data_dir,
+            image_dir,
             document_types=config.document_types,
             max_images=config.max_images,
         )
     )
     if not images:
-        msg = f"No images found in {config.data_dir}"
+        msg = f"No images found in {image_dir}"
         raise FileNotFoundError(msg)
 
-    logger.info("Found %d images in %s", len(images), config.data_dir)
+    logger.info("Found %d images in %s", len(images), image_dir)
 
     # Resume: skip images already classified in a prior (possibly crashed) run,
     # and APPEND below instead of truncating. A clean-slate re-run is the opt-in

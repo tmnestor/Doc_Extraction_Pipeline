@@ -1,10 +1,15 @@
 """The run's settings: one object, read once from ``config/run_config.yml``.
 
-    settings = Settings.load({"model_type": ..., "data_dir": ..., "output_dir": ...})
+    settings = Settings.load({"model_type": ..., "output_dir": ...})
 
-A stage that reads pages loads its settings here and hands them to whatever needs them. Three things a
-task is started with (the model, the folder of pages, the output folder) may be given to ``load`` and
-then stand in place of the file's. Everything else comes from the file.
+A stage that reads pages loads its settings here and hands them to whatever needs them. The model a task
+is started with may be given to ``load`` and then stands in place of the file's. Everything else comes
+from the file.
+
+The folders a task reads and writes are not here. They are worked out once, when the task starts
+(``common.stage_settings``), and handed to the stage. Until 25 November 2026 this object worked the
+folder of pages out a second time, and refused to load without one: so the SROIE task, which reads its
+own folder, could not start unless the pipeline's folder of pages existed.
 
 Nothing is defaulted in Python. A key that is needed and absent stops the run with a message that says
 what is wrong, where, what it should look like and how to mend it. A key the pipeline does not know is
@@ -134,8 +139,9 @@ class Settings:
     # What a task is started with.
     model_type: str
     model_path: Path
-    data_dir: Path
-    output_dir: Path
+    # The folder the stage writes to, when it gave one: only to place the record of what was sent to
+    # the model, when that is kept and no place is named for it.
+    output_dir: Path | None
     # Which pages of the folder are read.
     max_images: int | None
     document_types: list[str] | None
@@ -166,8 +172,8 @@ class Settings:
         """Read and check the settings.
 
         Args:
-            overrides: Any of ``model_type``, ``data_dir``, ``output_dir`` and ``num_gpus``, to stand
-                in place of the file's. A value of None is taken as not given.
+            overrides: Any of ``model_type`` and ``num_gpus``, to stand in place of the file's, and
+                ``output_dir``, the folder the stage writes to. A value of None is taken as not given.
             config_path: The settings file, or None for the shipped one.
 
         Raises:
@@ -181,26 +187,11 @@ class Settings:
         self = object.__new__(cls)
         self.config_path, self.raw, self._stage = path, raw, None
 
+        unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir"})
+        if unknown:
+            raise TypeError(f"Settings.load does not take {', '.join(unknown)}")
         folders = "pipeline.information_extraction"
-        data_dir = given.get("data_dir") or value_at(raw, f"{folders}.input.dir")
-        output_dir = given.get("output_dir") or value_at(raw, f"{folders}.output.dir")
-        if data_dir in (None, _ABSENT) or output_dir in (None, _ABSENT):
-            missing = "image_dir" if data_dir in (None, _ABSENT) else "output"
-            key = f"{folders}.input.dir" if missing == "image_dir" else f"{folders}.output.dir"
-            raise ConfigError(
-                f"What: the {'folder of pages' if missing == 'image_dir' else 'output folder'} is not set.\n"
-                f"Where: the variable {missing} in the job's environment, or {path} -> {key}\n"
-                f"Expected: a folder, e.g. {missing}=/data/run_20261121\n"
-                f"How to fix: set {missing} in the job's environment, or give {key} a value."
-            )
-        self.data_dir, self.output_dir = Path(data_dir), Path(output_dir)
-        if not self.data_dir.exists():
-            raise ConfigError(
-                f"What: the folder of pages does not exist: {self.data_dir}\n"
-                f"Where: the variable image_dir in the job's environment, or {path} -> {folders}.input.dir\n"
-                f"Expected: a folder that holds the pages to read.\n"
-                f"How to fix: correct the folder, or create it and put the pages in it."
-            )
+        self.output_dir = Path(given["output_dir"]) if "output_dir" in given else None
         self.max_images = _need(
             raw, f"{folders}.input.max_images", path, "null for every page, or a number"
         )

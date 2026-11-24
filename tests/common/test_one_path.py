@@ -77,7 +77,7 @@ class Bench:
         self.config_path = test_config(folder)
         self.folder = folder / "pages"
         self.folder.mkdir()
-        self.overrides = {"data_dir": str(self.folder), "output_dir": str(folder / "out")}
+        self.overrides = {"output_dir": str(folder / "out")}
         self.processor = StandIn()
         self.opened_with: list[Any] = []
         monkeypatch.setattr(vllm_dp.mp, "get_context", lambda method=None: InProcessContext)

@@ -81,6 +81,7 @@ def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
         )
 
     monkeypatch.setattr(starter, "_stage_run", lambda task: refuses)
+    (tmp_path / "pages").mkdir()
     for name, value in {
         "KFP_TASK": "split",
         "model": "gemma4-31b-w4a16-vllm",

@@ -217,12 +217,18 @@ A variable that is unset, empty or the word `None` counts as not set. A setting 
 neither place stops the run before any work is done, with a message that says what is missing, where to put
 it, what it should look like and how to mend it.
 
+The four folders (`image_dir`, `output`, `ground_truth` and `DOC_EXTRACT_LOG_DIR`) are null in the settings
+file as shipped, so a job names each folder its task needs. A folder written into the file would be one
+machine's, and a run that forgot to name its own would read it, or write into it, without a word. A task
+is asked only for the folders it uses: `clean` and `evaluate` for no folder of pages, and `sroie` for
+neither that nor `output`, since it reads and writes the folders of its own block.
+
 | Variable | Meaning | Needed by | Key in `run_config.yml` when unset | Name before 21 November 2026 |
 |---|---|---|---|---|
 | `KFP_TASK` | The task to run | every start | none: it must be set | unchanged |
 | `model` | A registered model | every task | `bootstrap.model.type` | unchanged |
 | `image_dir` | The folder of pages | `split`, `classify`, `extract` | `pipeline.information_extraction.input.dir` | unchanged |
-| `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
+| `output` | The folder the tasks write to | every task but `sroie` | `pipeline.information_extraction.output.dir` | unchanged |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `sroie_max_images` | Score only the first N receipts of the benchmark | optional, `sroie` only | none | unchanged |

@@ -291,7 +291,7 @@ def run(
     from common.settings import Settings
     from common.pipeline_ops import open_processor
 
-    cli_args: dict[str, Any] = {"data_dir": str(image_dir), "output_dir": str(output_dir)}
+    cli_args: dict[str, Any] = {"output_dir": str(output_dir)}
     if model_type is not None:
         cli_args["model_type"] = model_type
     app_cfg = Settings.load(cli_args, config_path=config_path)

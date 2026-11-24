@@ -407,7 +407,7 @@ def settings_with(bench: Bench, value: Any) -> Settings:
         )
     else:
         stop_after(bench, value)
-    return Settings.load({"data_dir": str(bench.pages), "model_type": ONE_ENGINE}, config_path=bench.config)
+    return Settings.load({"model_type": ONE_ENGINE}, config_path=bench.config)
 
 
 def test_the_shipped_number_of_failed_requests_allowed_is_stated(bench: Bench) -> None:

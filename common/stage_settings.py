@@ -34,6 +34,7 @@ _IMAGE_DIR = ("image_dir", "pipeline.information_extraction.input.dir")
 _GROUND_TRUTH = ("ground_truth", "pipeline.information_extraction.input.ground_truth")
 _OUTPUT = ("output", "pipeline.information_extraction.output.dir")
 _LOG_DIR = ("DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir")
+_SROIE_OUTPUT = "pipeline.sroie.output_dir"
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,21 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
     image_dir = value(
         _IMAGE_DIR, task in _READS_IMAGES, "the folder of pages to read, e.g. image_dir=/data/pages"
     )
-    output = value(_OUTPUT, True, "the folder the stages write to, e.g. output=/data/run_20261121")
+    if task == "sroie":
+        # The benchmark writes to its own folder, named in its own block of the settings file. It is
+        # asked for no other: until 25 November 2026 it was asked for the pipeline's output folder,
+        # which it never writes to.
+        output = _from_file(raw, _SROIE_OUTPUT)
+        if output is None:
+            raise ConfigError(
+                f"What: the task 'sroie' has no folder to write to.\n"
+                f"Where: the key {_SROIE_OUTPUT} in {config_path.resolve()}.\n"
+                f"Expected: a folder for the benchmark's two files, one for each model, e.g. "
+                f"output_dir: /data/sroie/output_gemma4\n"
+                f"How to fix: give {_SROIE_OUTPUT} a folder in that file."
+            )
+    else:
+        output = value(_OUTPUT, True, "the folder the stages write to, e.g. output=/data/run_20261121")
     ground_truth = value(
         _GROUND_TRUTH,
         task == "evaluate",
@@ -193,6 +208,26 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         clear_previous_output=_start_afresh(environ),
         sroie_max_images=_whole_number(environ, "sroie_max_images"),
     )
+
+
+def check_folder_of_pages(settings: StageSettings, config_path: Path) -> None:
+    """Refuse to start a task that reads pages when its folder of pages is not there.
+
+    Only the tasks that read pages are asked: the others are given no such folder, and need none.
+
+    Raises:
+        ConfigError: If the task reads pages and its folder of pages does not exist.
+    """
+    if settings.task not in _READS_IMAGES:
+        return
+    if settings.image_dir is None or not settings.image_dir.is_dir():
+        variable, key = _IMAGE_DIR
+        raise ConfigError(
+            f"What: the folder of pages does not exist: {settings.image_dir}\n"
+            f"Where: the environment variable {variable}, or the key {key} in {config_path.resolve()}.\n"
+            f"Expected: a folder that holds the pages to read, e.g. {variable}=/data/pages\n"
+            f"How to fix: correct the folder, or create it and put the pages in it."
+        )
 
 
 def _start_afresh(environ: Mapping[str, str]) -> bool:

@@ -355,13 +355,17 @@ def test_a_job_whose_engine_stops_answering_ends_with_its_reason_and_exit_code_o
 TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [0, 520, 1000, 1000], "label": "receipt"}]'
 
 
-def test_a_photograph_split_could_not_ask_about_is_asked_about_again(bench: Bench, tmp_path: Path) -> None:
+def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
+    bench: Bench, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     stop_after(bench, 100)
     output = tmp_path / "out" / "split"
     bench.processor.dead_from_attempt = 1
 
-    split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+    with caplog.at_level(logging.WARNING):
+        split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
 
+    assert "The model could not be asked about 6 of 6 photograph(s)" in caplog.text
     first = records_by_name(output / "splits.jsonl")
     assert set(first) == set(bench.names) and all(record["error"] for record in first.values())
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names

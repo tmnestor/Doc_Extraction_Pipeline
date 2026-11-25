@@ -12,15 +12,14 @@ import types
 from pathlib import Path
 
 import pytest
-import yaml
 from PIL import Image
 
 from common.engine_calls import EngineWatch
-from common.extraction_batching import plan_extraction_batches, read_batch_sizes
+from common.extraction_batching import plan_extraction_batches
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
 from models.backends.vllm_backend import VllmBackend
-from models.orchestrator import DocumentOrchestrator
+from models.orchestrator import EXTRACT_BASE_TOKENS, EXTRACT_TOKENS_PER_FIELD, DocumentOrchestrator
 from stages import extract as extract_stage
 
 # A watch that never stops a stage: these tests are not of an engine that has stopped answering.
@@ -64,13 +63,6 @@ def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._model_type_key = MODEL
-
-    orch.app_config = types.SimpleNamespace(
-        get_token_budget=lambda name: {
-            "extract_base": 500,
-            "extract_per_field": 50,
-        }[name]
-    )  # type: ignore[assignment]
     return orch
 
 
@@ -118,7 +110,13 @@ def test_other_types_are_one_call_with_the_prompt_of_their_name_and_a_budget_by_
 
     receipt_prompt = PromptCatalog().get_prompt(MODEL, "receipt")
     fields = len(get_field_schema().document_type("receipt").fields)
-    assert backend.calls == [{"prompts": [receipt_prompt] * 3, "max_tokens": 500 + fields * 50, "n": 3}]
+    assert backend.calls == [
+        {
+            "prompts": [receipt_prompt] * 3,
+            "max_tokens": EXTRACT_BASE_TOKENS + fields * EXTRACT_TOKENS_PER_FIELD,
+            "n": 3,
+        }
+    ]
     assert len(replies) == 3
 
 
@@ -236,7 +234,7 @@ def test_a_prompt_for_each_image_is_required():
 
 
 def test_statements_are_planned_into_shared_calls_like_any_type(pages):
-    batches = plan_extraction_batches(classified(pages), batch_sizes={"bank_statement": 2, "default": 10})
+    batches = plan_extraction_batches(classified(pages), 2)
 
     assert [len(batch) for batch in batches] == [2, 1]
 
@@ -298,21 +296,6 @@ def test_records_round_trip_as_json(pages):
     for record in writer.records:
         assert json.loads(json.dumps(record)) == record
         assert record["raw_response"].endswith("\n")
-
-
-# --- the shipped config --------------------------------------------------------
-
-
-def test_the_shipped_bank_batch_size_is_stated_and_explained():
-    sizes = read_batch_sizes(yaml.safe_load(RUN_CONFIG.read_text()), config_path=RUN_CONFIG)
-    text = RUN_CONFIG.read_text()
-
-    assert sizes["bank_statement"] >= 1
-    assert "it is NOT in effect today" not in text
-    # The reason for the sizes is written above them: a page is one request, and a call is several
-    # times what an engine runs at once.
-    reason = text.split("# How many pages go to the engine in one call")[1].split("processing:")[0]
-    assert "one independent" in reason and "several times max_num_seqs" in reason
 
 
 def test_an_image_with_transparency_is_put_on_white_and_an_rgb_image_is_left_as_it_is():

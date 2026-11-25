@@ -245,7 +245,7 @@ def test_config(folder: Path) -> Path:
     """The shipped settings, changed only where a run away from the sandbox must differ.
 
     The model's folder, the log folder, the input folder and the SROIE folders are pointed at a temporary
-    place. The number of cards is stated, since there are none to count here. Every document type is read
+    place. Every document type is read
     and the photo split is switched on, as the evaluation runs do by editing the same two settings.
     """
     raw = yaml.safe_load(RUN_CONFIG.read_text())
@@ -254,7 +254,6 @@ def test_config(folder: Path) -> Path:
     (model_folder / "config.json").write_text("{}")
     paths = raw["bootstrap"]["model"]["default_paths"]
     raw["bootstrap"]["model"]["default_paths"] = dict.fromkeys(paths, str(model_folder))
-    raw["bootstrap"]["gpus"]["num_gpus"] = CARDS
     raw["bootstrap"]["logging"]["log_dir"] = str(folder / "logs")
     raw["pipeline"]["information_extraction"]["input"]["document_types"] = None
     raw["pipeline"]["information_extraction"]["input"]["dir"] = str(folder / "pages")
@@ -268,16 +267,21 @@ def test_config(folder: Path) -> Path:
 def recording(recorder: Recorder, model_folder: Path) -> Iterator[None]:
     """Put the stand-ins in place for vLLM and for worker processes, and take them away afterwards."""
     import common.vllm_dp as data_parallel
+    from common import cards
 
     real_vllm = sys.modules.get("vllm")
     real_context = data_parallel.mp.get_context
     real_cards = os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+    # The machine has CARDS cards, as nvidia-smi would list them: there are none to count here.
+    real_listed = cards.listed_by_nvidia_smi
+    cards.listed_by_nvidia_smi = lambda: CARDS
     sys.modules["vllm"] = stand_in_vllm(recorder, model_folder)
     data_parallel.mp.get_context = lambda method=None: InProcessContext  # type: ignore[assignment]
     try:
         yield
     finally:
         data_parallel.mp.get_context = real_context  # type: ignore[assignment]
+        cards.listed_by_nvidia_smi = real_listed
         if real_vllm is None:
             del sys.modules["vllm"]
         else:

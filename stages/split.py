@@ -234,7 +234,7 @@ def ask_about_photographs(
     """
     config = photo_split.CONFIG
     prompt = PromptCatalog().photo_split_prompt()
-    watch = EngineWatch(app_config.stop_after_failed_requests)
+    watch = EngineWatch()
 
     def ask(batch: list[Path]) -> list[str]:
         images = [processor.load_document_image(str(photograph)) for photograph in batch]

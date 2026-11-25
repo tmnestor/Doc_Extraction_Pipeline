@@ -192,7 +192,7 @@ def test_a_stage_is_stopped_when_as_many_requests_fail_in_a_row_as_are_allowed()
     message = str(stopped.value)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
     assert "3 requests in a row failed" in message and "cannot read ink" in message
-    assert "pipeline.processing.stop_after_failed_requests" in message
+    assert "STOP_AFTER_FAILED_REQUESTS" in message
     assert engine.calls == [["quill"], ["feather"], ["ink"]]
 
 

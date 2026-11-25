@@ -7,10 +7,9 @@ afresh deleted its earlier output, before the stage had read its own settings. S
   with another model was refused as "output from another run";
 - a task started afresh that could not start had already deleted the output it was to replace.
 
-And two settings were first met after that: a key the engine is started with (a ``KeyError`` as the
-engine loaded), and ``resources.infrastructure.dp_join_timeout`` (only with an engine on each card). A
-tracing block left out was taken for "off". The share of a card's memory a job may set was read by
-``float()`` as the engine loaded: ``entrypoint.sh`` now checks it at launch.
+A tracing block left out of the settings file was taken for "off". The share of a card's memory a job
+may set was read by ``float()`` as the engine loaded: ``entrypoint.sh`` now checks it at launch. What an
+engine is started with, and the values the code was tuned to, are no longer settings at all.
 
 The pages are blank images made by the bench, and every reply is invented.
 """
@@ -26,6 +25,7 @@ import yaml
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
 from common import classification, run_manifest
 from common.config_schema import ConfigError
+from common.prompt_catalog import PromptCatalog
 from common.settings import Settings
 from common.stage_settings import TASKS, resolve
 from models.registry import get_model
@@ -58,11 +58,19 @@ def everything_under(folder: Path) -> list[str]:
 
 
 def a_setting_that_cannot_be_used(bench: Bench) -> None:
-    bench.with_settings(lambda settings: settings["pipeline"]["batching"].update(classify=0, default=0))
+    """A prompt file that does not agree with the schema file: every task that loads a model checks it."""
+
+    def refuse(self: PromptCatalog, model_type: str) -> None:
+        raise ConfigError(
+            "What: document type(s) with no prompt: payslip.\nWhere: the prompt file.\n"
+            "Expected: one prompt for each document type.\nHow to fix: give the type a prompt."
+        )
+
+    bench.monkeypatch.setattr(PromptCatalog, "check_extraction_prompts", refuse)
 
 
 def mended(bench: Bench) -> None:
-    bench.with_settings(lambda settings: settings["pipeline"]["batching"].update(classify=2, default=2))
+    bench.monkeypatch.setattr(PromptCatalog, "check_extraction_prompts", lambda self, model_type: None)
 
 
 # --- nothing is written by a task that cannot start -----------------------------------------------------
@@ -79,7 +87,7 @@ def test_a_task_that_cannot_start_leaves_nothing_in_its_output_folder(
     noted = run_manifest.read(out)
     a_setting_that_cannot_be_used(bench)
 
-    with pytest.raises(ConfigError, match="pipeline.batching"):
+    with pytest.raises(ConfigError, match="payslip"):
         starter.run_task(task(bench, name, out))
 
     assert everything_under(out) == before
@@ -176,30 +184,6 @@ def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: s
     assert {"max_model_len", "max_num_seqs", "gpu_memory_utilization"} <= read
     assert all(hasattr(get_model(model), name) for name in read)
     assert "tuning[" not in loader and "get_vllm_config" not in loader
-
-
-@pytest.mark.parametrize("model", [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD])
-def test_the_wait_for_a_worker_is_missed_when_the_settings_are_loaded_whichever_the_model(
-    bench: Bench, model: str
-) -> None:
-    def left_out(settings: dict[str, Any]) -> None:
-        del settings["resources"]
-
-    with pytest.raises(ConfigError) as refused:
-        loaded_with(bench, left_out, model)
-
-    message = str(refused.value)
-    assert all(part in message for part in PARTS)
-    assert "resources.infrastructure.dp_join_timeout" in message
-
-
-@pytest.mark.parametrize("value", [True, "sixty", -1])
-def test_a_wait_for_a_worker_that_is_no_number_of_seconds_is_refused(bench: Bench, value: Any) -> None:
-    def spoilt(settings: dict[str, Any]) -> None:
-        settings["resources"]["infrastructure"]["dp_join_timeout"] = value
-
-    with pytest.raises(ConfigError, match="dp_join_timeout"):
-        loaded_with(bench, spoilt)
 
 
 def test_a_tracing_block_left_out_is_not_taken_for_off(bench: Bench) -> None:
@@ -313,7 +297,7 @@ def test_the_share_of_memory_a_job_sets_reaches_the_engine_with_the_settings(
     assert run_settings(with_a_share).gpu_memory_utilization == 0.85
     assert run_settings(without).gpu_memory_utilization is None
     # A copy made for a worker's process carries it.
-    assert run_settings(with_a_share).on_one_card().gpu_memory_utilization == 0.85
+    assert run_settings(with_a_share).gpu_memory_utilization == 0.85
 
 
 def test_the_engine_loader_reads_no_variable_of_the_job_itself() -> None:

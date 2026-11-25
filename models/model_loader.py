@@ -53,9 +53,9 @@ def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
 
     engine = None
     try:
-        # The engine is split across every card the run has (common.cards). A worker that has one card
-        # to itself is handed settings that say so.
-        cards = cards_to_use(settings)
+        # The engine is split across every card the process sees (common.cards). A worker's process
+        # sees the one card it was given.
+        cards = cards_to_use()
 
         # The share of each card's memory: the job's, else the settings file's. The job's is read
         # and checked once, with the job's other variables (common.stage_settings), and comes here

@@ -16,7 +16,7 @@ And a page that fails is only its own failure while other pages are being answer
 request fails with none answered between them, the engine has stopped answering, or a setting makes
 every page fail. Going on would record every page left as failed, in seconds, and end as if the stage
 had done its work. An ``EngineWatch`` counts the failures in a row and stops the stage
-(``StageStopped``) at the number ``pipeline.processing.stop_after_failed_requests`` gives.
+(``StageStopped``) at ``STOP_AFTER_FAILED_REQUESTS``.
 """
 
 import logging
@@ -27,6 +27,11 @@ from dataclasses import dataclass
 from common.config_schema import ConfigError
 
 logger = logging.getLogger(__name__)
+
+
+# How many requests may fail in a row, with none answered between them, before a stage stops. A page
+# that fails among pages that are answered is recorded with its error, and the stage goes on.
+STOP_AFTER_FAILED_REQUESTS = 8
 
 
 class StageStopped(RuntimeError):
@@ -40,13 +45,13 @@ class EngineWatch:
     across its calls.
     """
 
-    def __init__(self, limit: int) -> None:
+    def __init__(self, limit: int | None = None) -> None:
         """
         Args:
             limit: How many requests may fail in a row, with none answered between them, before the
-                stage is stopped (``pipeline.processing.stop_after_failed_requests``).
+                stage is stopped. None: ``STOP_AFTER_FAILED_REQUESTS``.
         """
-        self._limit = limit
+        self._limit = STOP_AFTER_FAILED_REQUESTS if limit is None else limit
         self._in_a_row = 0
 
     def answered(self) -> None:
@@ -66,7 +71,7 @@ class EngineWatch:
                 f"so the stage has stopped. The last error: {error}\n"
                 f"Where: the engine, which has stopped answering, or a setting that makes every page "
                 f"fail (the context length, a completion budget). The number allowed is "
-                f"pipeline.processing.stop_after_failed_requests in config/run_config.yml.\n"
+                f"STOP_AFTER_FAILED_REQUESTS in common/engine_calls.py.\n"
                 f"Expected: a page that fails among pages that are answered. That page is recorded with "
                 f"its error and the stage goes on.\n"
                 f"How to fix: read the last error above and the engine's own lines in the log. What "

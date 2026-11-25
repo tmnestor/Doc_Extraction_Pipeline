@@ -7,7 +7,6 @@ a count for it, ``run_dp`` starts two whole engines and runs out of memory at lo
 
 import pytest
 
-from common.settings import Settings
 from common.vllm_dp import resolve_dp_gpus
 from models.registry import get_model
 
@@ -15,22 +14,19 @@ GEMMA = "gemma4-31b-w4a16-vllm"
 
 
 @pytest.fixture
-def two_gpu_config() -> Settings:
-    """Settings that report two cards. Nothing else is read by the choice of arrangement."""
-    settings = object.__new__(Settings)
-    settings.num_gpus = 2
-    settings.data_parallel_size = None
-    return settings
+def two_cards(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A process that sees two cards. Nothing else is read by the choice of arrangement."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
 
 
-def test_two_gpus_still_take_the_single_engine_path(two_gpu_config):
-    assert resolve_dp_gpus(two_gpu_config, GEMMA) is None
+def test_two_gpus_still_take_the_single_engine_path(two_cards):
+    assert resolve_dp_gpus(GEMMA) is None
 
 
-def test_the_12b_still_does_take_the_data_parallel_path(two_gpu_config):
+def test_the_12b_still_does_take_the_data_parallel_path(two_cards):
     # Control: the capability is per model, not a blanket disable. The QAT 12B
     # is 9.56 GiB and genuinely does fit one engine per card.
-    assert resolve_dp_gpus(two_gpu_config, "gemma4-12b-unified-w4a16-vllm") == 2
+    assert resolve_dp_gpus("gemma4-12b-unified-w4a16-vllm") == 2
 
 
 def test_gemma31b_description_states_the_real_size_and_topology():

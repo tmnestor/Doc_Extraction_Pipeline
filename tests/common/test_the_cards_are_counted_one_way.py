@@ -18,15 +18,11 @@ import pytest
 
 from common import cards, vllm_dp
 from common.cards import cards_to_use
-from common.vllm_dp import CardsRead, resolve_dp_gpus, resolve_gpu_count
+from common.vllm_dp import CardsRead, resolve_dp_gpus
 
 REPO = Path(__file__).resolve().parents[2]
 ON_EACH_CARD = "gemma4-12b-unified-w4a16-vllm"
 ACROSS_THE_CARDS = "gemma4-31b-w4a16-vllm"
-
-
-def settings(num_gpus: int = 0, data_parallel_size: int | None = None) -> Any:
-    return types.SimpleNamespace(num_gpus=num_gpus, data_parallel_size=data_parallel_size)
 
 
 def nvidia_smi_lists(monkeypatch: pytest.MonkeyPatch, lines: int | None, returncode: int = 0) -> None:
@@ -45,21 +41,23 @@ def nvidia_smi_lists(monkeypatch: pytest.MonkeyPatch, lines: int | None, returnc
 # --- the count ------------------------------------------------------------------------------------------
 
 
-def test_the_settings_number_is_the_count_when_they_give_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2,3")
-    nvidia_smi_lists(monkeypatch, 8)
+def test_the_count_takes_no_setting() -> None:
+    """Until 26 November 2026 the settings file could give a number of cards, and a number of engines
+    apart from it. No run ever set either: the cards are counted."""
+    import inspect
 
-    assert cards_to_use(settings(num_gpus=2)) == 2
+    assert list(inspect.signature(cards_to_use).parameters) == []
+    assert list(inspect.signature(resolve_dp_gpus).parameters) == ["model_type"]
 
 
 @pytest.mark.parametrize(("visible", "count"), [("0", 1), ("0,1", 2), ("1, 3 ,5", 3), ("", 1)])
-def test_with_no_number_set_the_cards_the_process_may_see_are_counted(
+def test_the_cards_the_process_may_see_are_counted(
     monkeypatch: pytest.MonkeyPatch, visible: str, count: int
 ) -> None:
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
     nvidia_smi_lists(monkeypatch, 8)
 
-    assert cards_to_use(settings()) == count
+    assert cards_to_use() == count
 
 
 @pytest.mark.parametrize("listed", [1, 2, 4])
@@ -69,7 +67,7 @@ def test_with_nothing_else_said_the_cards_nvidia_smi_lists_are_counted(
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     nvidia_smi_lists(monkeypatch, listed)
 
-    assert cards_to_use(settings()) == listed
+    assert cards_to_use() == listed
 
 
 def test_a_machine_that_says_nothing_of_its_cards_is_taken_to_have_one(
@@ -78,10 +76,10 @@ def test_a_machine_that_says_nothing_of_its_cards_is_taken_to_have_one(
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
     nvidia_smi_lists(monkeypatch, None)
-    assert cards_to_use(settings()) == 1
+    assert cards_to_use() == 1
 
     nvidia_smi_lists(monkeypatch, 2, returncode=9)
-    assert cards_to_use(settings()) == 1
+    assert cards_to_use() == 1
 
 
 # --- one count for both uses ----------------------------------------------------------------------------
@@ -89,8 +87,8 @@ def test_a_machine_that_says_nothing_of_its_cards_is_taken_to_have_one(
 
 @pytest.mark.parametrize(
     ("number_set", "visible", "listed"),
-    [(2, None, 8), (0, "0,1", 8), (0, None, 2), (0, "0", 2), (0, None, 4), (0, None, None)],
-    ids=["set", "visible", "listed", "one visible of two", "four listed", "nothing said"],
+    [(0, "0,1", 8), (0, None, 2), (0, "0", 2), (0, None, 4), (0, None, None)],
+    ids=["visible", "listed", "one visible of two", "four listed", "nothing said"],
 )
 def test_the_engines_started_and_the_cards_an_engine_is_split_across_are_one_number(
     monkeypatch: pytest.MonkeyPatch, number_set: int, visible: str | None, listed: int | None
@@ -101,24 +99,11 @@ def test_the_engines_started_and_the_cards_an_engine_is_split_across_are_one_num
     else:
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
     nvidia_smi_lists(monkeypatch, listed)
-    run = settings(num_gpus=number_set)
+    split_across = cards_to_use()
 
-    split_across = cards_to_use(run)
-
-    assert resolve_gpu_count(run) == split_across
     # A model that fits on one card has an engine on each; one that does not has one across them all.
-    assert resolve_dp_gpus(run, ON_EACH_CARD) == (split_across if split_across > 1 else None)
-    assert resolve_dp_gpus(run, ACROSS_THE_CARDS) is None
-
-
-def test_the_number_of_engines_may_be_set_apart_from_the_number_of_cards(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    nvidia_smi_lists(monkeypatch, 4)
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-
-    assert resolve_gpu_count(settings(data_parallel_size=2)) == 2
-    assert cards_to_use(settings(data_parallel_size=2)) == 4
+    assert resolve_dp_gpus(ON_EACH_CARD) == (split_across if split_across > 1 else None)
+    assert resolve_dp_gpus(ACROSS_THE_CARDS) is None
 
 
 def test_nothing_else_counts_the_cards() -> None:
@@ -159,7 +144,8 @@ def test_one_page_left_to_read_starts_one_engine_and_the_stage_says_so(
 
     monkeypatch.setattr(vllm_dp, "run_dp", run_dp)
     monkeypatch.setattr("common.pipeline_ops.check_processor", lambda settings: None)
-    run: Any = types.SimpleNamespace(num_gpus=2, data_parallel_size=None, model_type=ON_EACH_CARD)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
+    run: Any = types.SimpleNamespace(model_type=ON_EACH_CARD)
 
     read = vllm_dp.read_on_the_cards(run, [f"page_{n}.png" for n in range(pages)], lambda *a, **k: [])
 

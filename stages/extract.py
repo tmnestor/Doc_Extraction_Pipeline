@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from common import extraction_batching
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
 from common.pipeline_ops import check_processor
@@ -58,10 +59,7 @@ def run(output_path: Path, checked: "Checked") -> Path:
     # Pages of a type the settings say not to read are set apart. The rest are put one document type
     # after another, so that the engine reuses its work on a type's prompt.
     to_read, set_apart = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
-    in_order = sort_for_extraction(to_read, app_cfg.extraction_order, secondary_sort=app_cfg.secondary_sort)
-    logger.info(
-        "Sorted %d records by extraction_order (secondary=%s)", len(in_order), app_cfg.secondary_sort
-    )
+    in_order = sort_for_extraction(to_read, app_cfg.extraction_order)
     # The order of the output: the pages set apart, as they were classified, then the pages read.
     order = [page["image_name"] for page in set_apart] + [page["image_name"] for page in in_order]
 
@@ -171,18 +169,15 @@ def check(task: StageSettings) -> Checked:
 def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> None:
     """Everything reading the pages' fields depends on that can be wrong, checked before any engine starts.
 
-    The pages to a call for each document type, and that every type the pages were given has a block
-    in the schema file. Each is read again where it is used. Until 25 November 2026 that was the first
-    time, after the engine had started, and a type with no block was recorded as a failed page for
-    every page of that type.
+    That every type the pages were given has a block in the schema file. Until 25 November 2026 a
+    type with no block was first met after the engine had started, and was recorded as a failed page
+    for every page of that type.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    from common.extraction_batching import read_batch_sizes
     from common.field_schema import get_field_schema
 
-    read_batch_sizes(app_config.raw, config_path=app_config.config_path)
     schema = get_field_schema()
     not_read = {label.lower() for label in app_config.extraction_skip_labels}
     given = {
@@ -227,7 +222,7 @@ def extract_pages(
     calls it with its share. It loads no model and decides nothing about which pages are already done: the
     stage's ``run`` does those.
 
-    Pages are grouped into engine calls by document type, by the sizes in ``pipeline.batching``. A call that
+    Pages are grouped into engine calls by document type (``common.extraction_batching``). A call that
     fails is tried again one page at a time, and a page that still fails is recorded with its error, so one
     page never ends the run.
 
@@ -243,9 +238,9 @@ def extract_pages(
     collected = _Collected(sink)
     # One watch for the whole of this engine's reading: pages that fail one after another are counted
     # across its calls.
-    watch = EngineWatch(app_config.stop_after_failed_requests)
+    watch = EngineWatch()
     done, total = 0, len(classified)
-    for batch in _plan_batches(classified, app_config):
+    for batch in _plan_batches(classified):
         # A dense statement can take a while, so say what is in flight before it starts.
         logger.info(
             "[%d/%d] reading %d %s...", done + len(batch), total, len(batch), batch[0]["document_type"]
@@ -299,17 +294,15 @@ def _read_batch(
             )
 
 
-def _plan_batches(classifications: list[dict[str, Any]], app_config: Any) -> list[list[dict[str, Any]]]:
-    """Group the pages into engine calls, by the sizes in ``pipeline.batching``."""
-    from common.extraction_batching import plan_extraction_batches, read_batch_sizes
-
-    batch_sizes = read_batch_sizes(app_config.raw, config_path=app_config.config_path)
-    batches = plan_extraction_batches(classifications, batch_sizes=batch_sizes)
+def _plan_batches(classifications: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group the pages into engine calls of one document type."""
+    size = extraction_batching.PAGES_PER_CALL
+    batches = extraction_batching.plan_extraction_batches(classifications, size)
     logger.info(
-        "Extraction batching: %d documents in %d calls (sizes: %s)",
+        "Extraction batching: %d documents in %d calls (%d to a call)",
         len(classifications),
         len(batches),
-        batch_sizes,
+        size,
     )
     return batches
 

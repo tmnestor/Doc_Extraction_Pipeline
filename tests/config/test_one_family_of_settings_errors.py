@@ -14,7 +14,6 @@ from common.config_schema import ConfigError
 from stages import __main__ as starter
 
 FAMILY = [
-    ("common.extraction_batching", "BatchingConfigError"),
     ("common.field_schema", "FieldSchemaError"),
 ]
 

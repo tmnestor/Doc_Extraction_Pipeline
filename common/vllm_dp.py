@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 type Reading = Callable[..., list[dict[str, Any]]]
 
 
+# How long to wait for a finished worker's process to end. There is no limit on the work itself.
+JOIN_TIMEOUT_SECONDS = 60
+
 # The kinds of message a worker's process sends its parent.
 _A_RECORD, _FINISHED, _FAILED = "record", "finished", "failed"
 
@@ -83,7 +86,7 @@ def read_on_the_cards(
     # Before any engine is started, and here, not in a worker's process: what would stop a processor
     # being built then ends the run with its reason, and costs no engine's start.
     check_processor(settings)
-    engines = resolve_dp_gpus(settings, settings.model_type)
+    engines = resolve_dp_gpus(settings.model_type)
     if engines:
         records = run_dp(num_gpus=engines, items=items, read=read, settings=settings, sink=sink)
         return CardsRead(records, max(1, min(engines, len(items))))
@@ -93,36 +96,17 @@ def read_on_the_cards(
         return CardsRead(read(processor, items, settings), None)
 
 
-def resolve_gpu_count(config: Settings) -> int:
-    """How many engines to start, one on each card: ``data_parallel_size`` if the settings give it, else
-    the number of cards the run has (``common.cards``), counted as the engine loader counts them.
-    """
-    if config.data_parallel_size is not None:
-        return config.data_parallel_size
-    return cards_to_use(config)
+def resolve_dp_gpus(model_type: str) -> int | None:
+    """How many engines to start, one on each card, or None for one engine across the cards.
 
-
-def resolve_dp_gpus(config: Settings, model_type: str) -> int | None:
-    """Resolve the DP rank count, or None when the DP fast path must not run.
-
-    ``None`` means "use the single-engine path", for one of two reasons: only one
-    GPU is available, or *model_type* cannot hold one whole engine per GPU (a
-    quantised 31B still wants the entire card once KV cache and vision
-    activations are counted, so N engines would OOM).
-
-    The second case is logged: an operator who asked for N GPUs and silently got
-    a slower single-engine run would have no way to tell from the output.
-
-    Args:
-        config: Pipeline config carrying the GPU/DP counts.
-        model_type: Registered model type, used to look up the capability.
-
-    Returns:
-        Number of DP ranks to spawn, or None to skip the data-parallel path.
+    None for one of two reasons: the run has one card, or the model cannot hold a whole engine on each
+    card (a quantised 31B still wants the entire card once its cache and its vision activations are
+    counted, so an engine on each would run out of memory). The second is logged: an operator who has
+    two cards and got one slower engine would have no way to tell from the output.
     """
     from models.registry import supports_data_parallel
 
-    gpus = resolve_gpu_count(config)
+    gpus = cards_to_use()
     if gpus <= 1:
         return None
     if not supports_data_parallel(model_type):
@@ -183,8 +167,7 @@ def run_dp(
         items: What ``read`` reads, in order; they are dealt out to the cards.
         read: The stage's reading function. It crosses a process boundary by name, as do the items and
             the settings by value, so all three must pickle.
-        settings: The run's settings. How long to wait for a finished worker's process to end is
-            ``resources.infrastructure.dp_join_timeout``.
+        settings: The run's settings.
         sink: Where each record is written as soon as its card has made it, if anywhere. Each
             worker then sends its records one at a time as well as all together at the end.
 
@@ -193,7 +176,6 @@ def run_dp(
         that the slowest card's time can be reported: the cards work at once, and adding their times
         would give the work done, not the time taken.
     """
-    join_timeout = int(settings.get_infra("dp_join_timeout"))
     poll_interval = 10  # seconds between liveness checks
     shares = _shares(items, num_gpus)
     cards = len(shares)
@@ -203,12 +185,9 @@ def run_dp(
     ctx = mp.get_context("spawn")
     result_queue: mp.Queue = ctx.Queue()
     procs: list[Any] = []  # SpawnProcess (mp.Process subtype)
-    # Each worker's process sees one card only.
-    one_card = settings.on_one_card()
-
     for gpu_id, share in enumerate(shares):
         p = ctx.Process(
-            target=_worker, args=(gpu_id, share, read, one_card, result_queue, sink is not None)
+            target=_worker, args=(gpu_id, share, read, settings, result_queue, sink is not None)
         )
         p.start()
         procs.append(p)
@@ -245,7 +224,7 @@ def run_dp(
         raise
     finally:
         for p in procs:
-            p.join(timeout=join_timeout)
+            p.join(timeout=JOIN_TIMEOUT_SECONDS)
 
     for i, p in enumerate(procs):
         if p.exitcode and p.exitcode != 0:

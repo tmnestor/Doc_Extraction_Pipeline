@@ -158,9 +158,7 @@ def test_with_an_engine_on_each_card_a_stage_whose_engine_stopped_carries_on_to_
     """A stop that the bench stages truly with an engine on each card: the engine stops answering, the
     card's worker hands that to its parent, and the parent has by then kept what the cards had sent.
     """
-    bench.with_settings(
-        lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=2)
-    )
+    bench.stop_after(2)
     two_receipts_in_each(bench)
     straight, stopped = tmp_path / "straight", tmp_path / "stopped"
     run(bench, straight, AN_ENGINE_ON_EACH_CARD)
@@ -267,9 +265,7 @@ def test_stopped_part_way_with_an_engine_on_each_card_the_next_run_asks_only_abo
 def test_with_an_engine_on_each_card_the_stage_stops_when_the_engine_stops_answering(
     bench: Bench, tmp_path: Path
 ) -> None:
-    bench.with_settings(
-        lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=2)
-    )
+    bench.stop_after(2)
     output = tmp_path / "split"
     bench.processor.dead_from_attempt = 2
 

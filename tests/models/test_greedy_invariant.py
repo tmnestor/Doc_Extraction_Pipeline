@@ -33,11 +33,13 @@ def test_no_setting_offers_a_sampler():
 
 def test_both_models_have_the_same_token_budget():
     # The same completion budget for both, or a comparison of the two is confounded: a model given fewer
-    # tokens can be cut off mid-answer on the dense tables of a bank statement. The budgets are keyed by
-    # what is asked, never by model.
-    budgets = sorted(key for key in KNOWN_KEYS if "token_budgets" in key)
-    assert budgets == [
-        "pipeline.token_budgets.classify",
-        "pipeline.token_budgets.extract_base",
-        "pipeline.token_budgets.extract_per_field",
-    ]
+    # tokens can be cut off mid-answer on the dense tables of a bank statement. The budgets are constants
+    # beside the requests, keyed by what is asked and never by model.
+    from models import orchestrator
+
+    assert (
+        orchestrator.CLASSIFY_TOKENS,
+        orchestrator.EXTRACT_BASE_TOKENS,
+        orchestrator.EXTRACT_TOKENS_PER_FIELD,
+    ) == (150, 512, 64)
+    assert "model" not in "".join(name.lower() for name in dir(orchestrator) if name.endswith("_TOKENS"))

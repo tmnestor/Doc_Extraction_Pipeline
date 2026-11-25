@@ -8,21 +8,15 @@
 # the values tried and rejected) is in the evaluation repository's decisions notes, and in this file's own
 # history before 24 November 2026.
 
-# What is needed before any work begins: the model, the cards and the log.
+# What is needed before any work begins: the model and the log.
 bootstrap:
   model:
     # The model a task loads when the job names none. One of the names registered in models/registry.py.
     type: gemma4-31b-w4a16-vllm
-    # null = the folder default_paths gives for the model in use. A path here is used only for the model
-    # named in `type` above, so that one model's weights are never loaded under another's name.
-    path: null
     # The folder of each model's weights.
     default_paths:
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
       gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
-  gpus:
-    num_gpus: 0                # 0 = every card that can be seen; N = use N cards
-    data_parallel_size: null   # null = one engine on each card, for a model that fits on one
   logging:
     # Where the entry script writes its log when the job does not set DOC_EXTRACT_LOG_DIR. Null as
     # shipped: a job that sets neither is stopped and told what to set, where a folder named here would
@@ -81,45 +75,6 @@ pipeline:
   classification:
     fallback_type: UNIVERSAL     # the type of a page whose classification reply cannot be read
 
-  # How many pages go to the engine in one call. A page is one independent request, so the engine runs
-  # up to the model's max_num_seqs of a call's pages at once and queues the rest; a size of 1 is one
-  # call a page. A call holds pages of one document type, since a type has its own prompt and
-  # completion budget. A call that fails is tried again one page at a time, so a size too large costs
-  # time and never a result.
-  #
-  # Every size is several times max_num_seqs, so that the engine stays full as a call's short pages
-  # finish: a call no larger than that ends with a few slow pages running alone, and the next call
-  # waits for them. Measured on 55 statements with 8 in flight: 16 to a call took 484 s, one call of
-  # 55 took 418 s.
-  batching:
-    classify: 64               # pages to a classify call. Not a document type
-    receipt: 64
-    invoice: 64
-    bank_statement: 64
-    sroie_receipt: 64          # the receipts of the SROIE dataset: four short fields each
-    default: 64                # a type with no size of its own
-
-  processing:
-    verbose: false             # true = the classify stage prints each page's type as it is detected
-    # A page that fails among pages that are answered is recorded with its error, and the stage goes
-    # on. When this many requests in a row have failed with none answered between them, the engine
-    # has stopped answering, or a setting makes every page fail, and the stage stops with its reason.
-    # What it had read is kept, and the next run carries on from there.
-    stop_after_failed_requests: 8
-
-  # Completion budgets: the most tokens a reply may run to. The same for every model, so that a
-  # comparison of two models is not one of two budgets: a model given fewer tokens can be cut off
-  # part way through the dense table of a bank statement.
-  #   classify            the reply to the classification prompt
-  #   extract_base        a page's fields: this many tokens ...
-  #   extract_per_field   ... and this many more for each field of its document type
-  # A document type with `completion_tokens` in config/field_definitions.yaml has that fixed budget
-  # in place of the two extract numbers.
-  token_budgets:
-    classify: 150
-    extract_base: 512
-    extract_per_field: 64
-
   # The split stage (KFP_TASK=split), which runs before classify on photographs. It asks the model where
   # each receipt is, cuts a photograph of several into one image for each, and straightens an image
   # whose rows of print drift far enough to mislead a reader. The later tasks then read
@@ -136,12 +91,5 @@ pipeline:
       - bank_statement
       - invoice
       - receipt
-    secondary_sort: none              # within a type: none | image_area_asc | image_area_desc
     # Types that are not read at all. A page of one is written as a skipped record.
     skip_labels: []
-
-resources:
-  infrastructure:
-    # How long to wait for a finished worker's process to end, in seconds. There is no limit on the
-    # work itself.
-    dp_join_timeout: 60

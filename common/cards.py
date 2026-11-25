@@ -5,38 +5,29 @@ and how many cards one engine is split across when it does not. Until 25 Novembe
 out by its own count, one asking torch and the other asking nvidia-smi, so the two could disagree about
 the machine they were both on.
 
-The count is the settings' number when they give one. Otherwise it is every card the process can see:
-those named in ``CUDA_VISIBLE_DEVICES`` if that is set, else those ``nvidia-smi`` lists. A machine on
-which neither says anything is taken to have one.
+The count is every card the process can see: those named in ``CUDA_VISIBLE_DEVICES`` if that is set, else
+those ``nvidia-smi`` lists. A machine on which neither says anything is taken to have one. Until
+26 November 2026 the settings file could give a number in their place, and no run ever did.
 """
 
-import logging
 import os
 import shutil
 import subprocess
-from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
-def cards_to_use(settings: Any) -> int:
-    """How many cards the run has.
-
-    Args:
-        settings: The run's settings. ``num_gpus`` above 0 is the number; 0 is every card that can be
-            seen.
-
-    Returns:
-        The number of cards, never less than 1.
-    """
-    if settings.num_gpus and settings.num_gpus > 0:
-        return int(settings.num_gpus)
+def cards_to_use() -> int:
+    """How many cards the run has, never less than 1."""
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible is not None:
         return max(1, len([card for card in visible.split(",") if card.strip()]))
+    return max(1, listed_by_nvidia_smi())
+
+
+def listed_by_nvidia_smi() -> int:
+    """How many cards nvidia-smi lists; 0 where it is not on the machine, or fails."""
     if shutil.which("nvidia-smi") is None:
-        return 1
+        return 0
     listed = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, check=False)
     if listed.returncode != 0:
-        return 1
-    return max(1, len([line for line in listed.stdout.splitlines() if line.strip()]))
+        return 0
+    return len([line for line in listed.stdout.splitlines() if line.strip()])

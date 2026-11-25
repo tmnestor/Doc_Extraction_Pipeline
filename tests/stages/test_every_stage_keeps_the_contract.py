@@ -193,9 +193,7 @@ def through_all_five(bench: Bench, out: Path, model: str, *, stop_each_card_stag
     raw_extractions = out / "raw_extractions.jsonl"
     if stop_each_card_stage_once:
         # Two requests that fail one after another stop a stage: the bench has six pages.
-        bench.with_settings(
-            lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=2)
-        )
+        bench.stop_after(2)
 
     def split_it() -> Path:
         return bench.split(out / "split", model)

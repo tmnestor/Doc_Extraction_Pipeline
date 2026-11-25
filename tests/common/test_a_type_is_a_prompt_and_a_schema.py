@@ -7,7 +7,6 @@ The type, its fields and its values are invented.
 
 import re
 import subprocess
-import types
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,7 @@ from PIL import Image
 from common import field_schema, scoring
 from common.field_schema import FieldSchema, FieldSchemaError
 from common.prompt_catalog import PromptCatalog
-from models.orchestrator import DocumentOrchestrator
+from models.orchestrator import EXTRACT_BASE_TOKENS, EXTRACT_TOKENS_PER_FIELD, DocumentOrchestrator
 
 REPO = Path(__file__).resolve().parents[2]
 MODEL = "gemma4-31b-w4a16-vllm"
@@ -75,10 +74,6 @@ def processor(backend: Backend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._model_type_key = MODEL
-
-    orch.app_config = types.SimpleNamespace(
-        get_token_budget=lambda name: {"extract_base": 500, "extract_per_field": 50}[name]
-    )  # type: ignore[assignment]
     return orch
 
 
@@ -95,7 +90,9 @@ def test_a_new_type_is_read_with_its_own_prompt_and_a_budget_by_its_fields(tmp_p
 
     processor(backend).read_pages([page], "PARKING_PERMIT")
 
-    assert backend.calls == [{"prompts": [PROMPT], "max_tokens": 500 + 3 * 50}]
+    assert backend.calls == [
+        {"prompts": [PROMPT], "max_tokens": EXTRACT_BASE_TOKENS + 3 * EXTRACT_TOKENS_PER_FIELD}
+    ]
 
 
 def test_a_new_type_may_fix_its_own_budget(tmp_path, monkeypatch, page):
@@ -211,16 +208,3 @@ def test_no_python_names_a_document_type():
             if quoted.search(code):
                 found.append(f"{name}:{number}: {line.strip()}")
     assert found == []
-
-
-def test_a_new_type_may_be_given_its_own_batch_size_in_the_settings_file(tmp_path, monkeypatch):
-    from common.extraction_batching import read_batch_sizes
-    from common.settings import read_settings_file
-
-    with_a_new_type(tmp_path, monkeypatch)
-    settings = yaml.safe_load((REPO / "config" / "run_config.yml").read_text())
-    settings["pipeline"]["batching"]["parking_permit"] = 5
-    path = tmp_path / "run_config.yml"
-    path.write_text(yaml.safe_dump(settings))
-
-    assert read_batch_sizes(read_settings_file(path), config_path=path)["parking_permit"] == 5

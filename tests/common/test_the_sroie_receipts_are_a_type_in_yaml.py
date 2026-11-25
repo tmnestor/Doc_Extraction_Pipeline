@@ -13,12 +13,10 @@ Every reply and value here is invented, and none is a value of the dataset's ans
 import hashlib
 
 import pytest
-import yaml
 
 from common.field_schema import FieldSchema, get_field_schema
 from common.prompt_catalog import PromptCatalog
 from common.reply_fields import fields_from_reply
-from common.settings import DEFAULT_CONFIG
 
 TYPE = "sroie_receipt"
 FIELDS = ["COMPANY", "DATE", "ADDRESS", "TOTAL"]
@@ -61,15 +59,6 @@ def test_the_dataset_s_type_is_four_fields_of_kinds_the_pipeline_has_with_a_fixe
         "ADDRESS": kind_of(schema, "BUSINESS_ADDRESS"),
         "TOTAL": kind_of(schema, "TOTAL_AMOUNT"),
     }
-
-
-def test_the_receipts_have_a_size_of_engine_call_as_every_type_has() -> None:
-    """The size is every type's (tests/config/test_every_engine_call_fills_the_engine.py). Until
-    25 November 2026 it was 8, the old task's, which left half an engine's places empty.
-    """
-    sizes = yaml.safe_load(DEFAULT_CONFIG.read_text())["pipeline"]["batching"]
-
-    assert sizes[TYPE] == sizes["bank_statement"]
 
 
 # --- a reply in the dataset's form, read by the pipeline's parser and cleaners ---------------------------

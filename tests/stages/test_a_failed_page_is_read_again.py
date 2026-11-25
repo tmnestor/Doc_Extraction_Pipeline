@@ -9,7 +9,7 @@ seconds, the stage ended with exit code 0, and the next run found nothing to do.
 Now:
 
 - when request after request fails with none answered between them, the stage stops with its reason,
-  at the number ``pipeline.processing.stop_after_failed_requests`` gives;
+  at ``common.engine_calls.STOP_AFTER_FAILED_REQUESTS``;
 - a stage that carries on takes the failed pages' records out of its output and reads those pages again;
 - the extract stage also reads again a page that has been given another document type since.
 
@@ -22,13 +22,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped
 from bench import split_checked
-from common.config_schema import ConfigError
 from common.engine_calls import StageStopped
-from common.settings import Settings
 from common.stage_timing import StageTiming, read_stage_timings, write_stage_timing
 from stages import __main__ as starter
 from stages import split
@@ -51,9 +48,7 @@ def in_reading_order(bench: Bench) -> list[str]:
 
 
 def stop_after(bench: Bench, requests: int) -> None:
-    bench.with_settings(
-        lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=requests)
-    )
+    bench.stop_after(requests)
 
 
 def classified(bench: Bench, folder: Path, types: dict[str, str] | None = None) -> Path:
@@ -280,7 +275,7 @@ def test_classify_stops_when_its_engine_stops_answering_and_the_next_run_reads_e
     message = str(stopped.value)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
     assert "2 requests in a row failed" in message and "the engine has stopped answering" in message
-    assert "pipeline.processing.stop_after_failed_requests" in message
+    assert "STOP_AFTER_FAILED_REQUESTS" in message
     # The stage did not go on to record every page left as failed, and did not write its output.
     assert not output.exists()
     kept = read_jsonl(output.with_name(output.name + ".journal"))
@@ -308,7 +303,7 @@ def test_pages_recorded_as_failed_before_the_stage_stopped_are_read_again(
 ) -> None:
     """With one page to a call a failed page is recorded before the next is tried, so some are on disk."""
     stop_after(bench, 3)
-    bench.with_settings(lambda settings: settings["pipeline"]["batching"].update(default=1))
+    bench.pages_to_a_call(1)
     out = tmp_path / "out"
     classifications, output = classified(bench, out), out / "raw_extractions.jsonl"
     bench.processor.dead_from_attempt = 2
@@ -440,37 +435,3 @@ def test_split_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Pat
     # stage's journal, and the images written.
     assert sorted(records_by_name(output / "splits.jsonl.journal")) == bench.names[:2]
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:2]
-
-
-# --- the setting ----------------------------------------------------------------------------------------
-
-
-def settings_with(bench: Bench, value: Any) -> Settings:
-    if value is None:
-        bench.with_settings(
-            lambda settings: settings["pipeline"]["processing"].pop("stop_after_failed_requests")
-        )
-    else:
-        stop_after(bench, value)
-    return Settings.load({"model_type": ONE_ENGINE}, config_path=bench.config)
-
-
-def test_the_shipped_number_of_failed_requests_allowed_is_stated(bench: Bench) -> None:
-    shipped = yaml.safe_load(
-        (Path(__file__).resolve().parents[2] / "config" / "run_config.yml").read_text()
-    )
-
-    assert shipped["pipeline"]["processing"]["stop_after_failed_requests"] >= 2
-
-
-@pytest.mark.parametrize("value", [0, -1, True, "eight", 2.5, None])
-def test_a_number_of_failed_requests_that_cannot_be_used_is_refused_with_how_to_mend_it(
-    bench: Bench, value: Any
-) -> None:
-    with pytest.raises(ConfigError) as refused:
-        settings_with(bench, value)
-
-    message = str(refused.value)
-    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-    assert "pipeline.processing.stop_after_failed_requests" in message and str(bench.config) in message
-    assert "stop_after_failed_requests: 8" in message

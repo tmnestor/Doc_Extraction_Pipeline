@@ -120,6 +120,14 @@ export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
 # Suppress vLLM usage telemetry (avoids TLS cert errors in air-gapped envs).
 export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 
+# vLLM's compile cache: both lines are off, and vLLM is left to do as it does. It keeps what
+# torch.compile makes under ~/.cache/vllm/torch_compile_cache, which is in the pod (6 files in a run
+# of both models on the sandbox, 26 November 2026). If a pod refuses that write, uncomment ONE:
+#   the first moves vLLM's cache folder to storage the job can write to (name a real folder);
+#   the second keeps no compile cache at all, so every engine start compiles again.
+# export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-/data/vllm_cache}"
+# export VLLM_DISABLE_COMPILE_CACHE="${VLLM_DISABLE_COMPILE_CACHE:-1}"
+
 # NCCL shared memory: KFP pods may default /dev/shm to 64 MB, which is
 # too small for NCCL's SHM transport under tensor parallelism: after ~11
 # images the SHM region fills and NCCL silently deadlocks. The fix is to

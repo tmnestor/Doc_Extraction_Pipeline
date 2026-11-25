@@ -15,6 +15,13 @@ from common.prompt_catalog import PromptCatalog
 from common.settings import Settings
 from models.backends.vllm_backend import VllmBackend
 
+# Completion budgets: the most tokens a reply may run to. The same for every model, so that a comparison
+# of two models is not one of two budgets. A page's fields have the base and so many more for each field
+# of its document type, unless the type's block in the schema file gives it a fixed budget.
+CLASSIFY_TOKENS = 150
+EXTRACT_BASE_TOKENS = 512
+EXTRACT_TOKENS_PER_FIELD = 64
+
 # What a classification record says its page was read with.
 DETECTION_PROMPT = "detection"
 
@@ -32,9 +39,8 @@ class DocumentOrchestrator:
     # -- Completion budgets ----------------------------------------------------
 
     def _calculate_max_tokens(self, field_count: int) -> int:
-        """The completion budget of a page with this many fields (``pipeline.token_budgets``)."""
-        base = self.app_config.get_token_budget("extract_base")
-        return base + field_count * self.app_config.get_token_budget("extract_per_field")
+        """The completion budget of a page with this many fields."""
+        return EXTRACT_BASE_TOKENS + field_count * EXTRACT_TOKENS_PER_FIELD
 
     # -- Image loading ---------------------------------------------------------
 
@@ -82,7 +88,7 @@ class DocumentOrchestrator:
             return []
         prompt = PromptCatalog().classification_prompt()
         images = [self.load_document_image(path) for path in image_paths]
-        return self.ask(images, [prompt] * len(images), self.app_config.get_token_budget("classify"))
+        return self.ask(images, [prompt] * len(images), CLASSIFY_TOKENS)
 
     def classified(self, reply: str) -> dict:
         """The classification of a page, from the model's reply about it, and how its type was reached."""

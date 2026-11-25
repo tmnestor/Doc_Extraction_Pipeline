@@ -201,7 +201,7 @@ flowchart TD
 
 ### Inside a run
 
-1. **Pages share an engine call.** How many is in `pipeline.batching`. A call that fails says nothing
+1. **Pages share an engine call**, 64 of them (`PAGES_PER_CALL` in `common/extraction_batching.py`). A call that fails says nothing
    about which of its pages was at fault.
 2. **So each page of a failed call is asked again on its own, once.** One bad page then costs the pages
    it shared a call with only that call.
@@ -269,7 +269,7 @@ adds one. A call that fails does not count by itself: its pages do, as each is a
 or call that is answered sets the count back to nothing. With an engine on each card, each card keeps
 its own count.
 
-When the count reaches `pipeline.processing.stop_after_failed_requests` (8 as shipped), the task stops:
+When the count reaches 8 (`STOP_AFTER_FAILED_REQUESTS` in `common/engine_calls.py`), the task stops:
 
 - it prints `FATAL: the task was stopped part way.`, with the number of requests, the last error and
   where to look, and exits with code 1;
@@ -367,7 +367,8 @@ is asked only for the folders it uses: `clean` and `evaluate` for no folder of p
 A job that still sets a variable under the old `LMM_` prefix is refused with a message naming the new
 variables. It is not run with the setting silently dropped.
 
-The number of cards is not a variable. It comes from `bootstrap.gpus` in the settings file.
+The number of cards is not a variable or a setting. They are counted: those named in
+`CUDA_VISIBLE_DEVICES` if that is set, else those `nvidia-smi` lists.
 
 ## Where a task writes
 
@@ -575,12 +576,10 @@ model. There may be nine questions at most.
 
 A type with no rule is still a type: a page can be read as it, but no page will be classified as it.
 
-### 5. Optional settings
+### 5. An optional setting
 
-In `config/run_config.yml`. Neither is needed for the type to work.
+In `config/run_config.yml`. It is not needed for the type to work.
 
-- `pipeline.batching.payslip`: how many of its pages go to the engine in one call. Without it the type
-  has `pipeline.batching.default`.
 - `pipeline.extraction.order`: the order the types are read in. A type that is not listed is read last.
 
 ### 6. Its answers

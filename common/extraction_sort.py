@@ -1,82 +1,26 @@
-"""Sort utilities for extraction batch ordering.
+"""The order pages are read in: one document type after another, so that the engine reuses its work on a prompt."""
 
-Sorts classification records by doc_type (primary) and optionally by
-image dimensions (secondary) to maximize vLLM prefix cache reuse.
-"""
-
-from pathlib import Path
 from typing import Any
 
-from PIL import Image
 
+def sort_for_extraction(records: list[dict[str, Any]], type_order: list[str]) -> list[dict[str, Any]]:
+    """The classification records with the types in ``type_order`` first, in that order.
 
-def sort_for_extraction(
-    records: list[dict[str, Any]],
-    type_order: list[str],
-    *,
-    secondary_sort: str = "none",
-) -> list[dict[str, Any]]:
-    """Sort classification records for optimal extraction batching.
-
-    Primary key: doc_type position in *type_order* (stable sort preserves
-    input order within each type). Unknown types land at the end.
-
-    Secondary key (within each type group):
-    - ``none``: no secondary sort (input order preserved).
-    - ``image_area_asc``: ascending by image width * height.
-    - ``image_area_desc``: descending by image width * height.
+    Within a type the records keep the order they came in, and a type that is not named comes last.
+    Until 26 November 2026 a second sort, by the area of the page's image, could be asked for in the
+    settings file; no run ever did.
 
     Args:
-        records: Classification dicts, each with at least ``document_type``.
-        type_order: Ordered list of doc_type strings (first = highest priority).
-        secondary_sort: One of ``none``, ``image_area_asc``, ``image_area_desc``.
+        records: Classification records, each with at least ``document_type``.
+        type_order: The document types, the first to be read first.
 
     Returns:
-        A new list in the desired order (does not mutate *records*).
+        A new list: ``records`` is not changed.
     """
-    sentinel = len(type_order)
-    order_map = {t.lower(): i for i, t in enumerate(type_order)}
-
-    def _primary_key(rec: dict[str, Any]) -> int:
-        return order_map.get(rec.get("document_type", "").lower(), sentinel)
-
-    if secondary_sort == "none":
-        return sorted(records, key=_primary_key)
-
-    # For image_area sorts, compute area lazily per record
-    area_cache: dict[str, int] = {}
-
-    def _get_area(rec: dict[str, Any]) -> int:
-        image_path = rec.get("image_path", "")
-        if image_path in area_cache:
-            return area_cache[image_path]
-        area = _read_image_area(image_path)
-        area_cache[image_path] = area
-        return area
-
-    ascending = secondary_sort == "image_area_asc"
-
-    def _composite_key(rec: dict[str, Any]) -> tuple[int, int]:
-        area = _get_area(rec)
-        return (_primary_key(rec), area if ascending else -area)
-
-    return sorted(records, key=_composite_key)
-
-
-def _read_image_area(image_path: str) -> int:
-    """Read image dimensions and return width * height.
-
-    Returns 0 if the file cannot be opened (graceful degradation).
-    """
-    try:
-        p = Path(image_path)
-        if p.exists():
-            with Image.open(p) as img:
-                w, h = img.size
-                return w * h
-    except Exception:
-        pass
-    return 0
+    place = {kind.lower(): position for position, kind in enumerate(type_order)}
+    return sorted(
+        records, key=lambda record: place.get(record.get("document_type", "").lower(), len(place))
+    )
 
 
 def filter_skip_labels(

@@ -11,18 +11,10 @@ and statements and classify were given 64. Receipts and invoices were not looked
 25 November a call of 10 left 6 of an engine's 16 places empty.
 """
 
-from typing import Any
-
-import yaml
-
-from common.settings import DEFAULT_CONFIG
+from common.extraction_batching import PAGES_PER_CALL
 from models.registry import get_model, list_models
 
 SEVERAL = 3
-
-
-def shipped() -> dict[str, Any]:
-    return yaml.safe_load(DEFAULT_CONFIG.read_text())
 
 
 def most_at_once() -> int:
@@ -30,17 +22,7 @@ def most_at_once() -> int:
     return max(get_model(model).max_num_seqs for model in list_models())
 
 
-def test_every_size_of_call_is_several_times_what_an_engine_runs_at_once() -> None:
-    raw = shipped()
-    least = SEVERAL * most_at_once()
-
-    too_small = {name: size for name, size in raw["pipeline"]["batching"].items() if size < least}
-
-    assert too_small == {}, f"each must be at least {least}"
-
-
-def test_no_type_is_left_with_a_size_of_its_own_that_differs_from_the_rest() -> None:
-    """One rule for every type: a size that stands apart is a size someone has to explain."""
-    sizes = shipped()["pipeline"]["batching"]
-
-    assert len(set(sizes.values())) == 1, sizes
+def test_a_call_is_several_times_what_any_engine_runs_at_once() -> None:
+    """One size for every type and for classify: a size that stands apart is one someone has to explain."""
+    assert PAGES_PER_CALL == 64
+    assert PAGES_PER_CALL >= SEVERAL * most_at_once()

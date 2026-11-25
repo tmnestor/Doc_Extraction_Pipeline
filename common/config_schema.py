@@ -16,22 +16,16 @@ from typing import Any
 
 KNOWN_KEYS: frozenset[str] = frozenset(
     {
-        "bootstrap.gpus.data_parallel_size",
-        "bootstrap.gpus.num_gpus",
         "bootstrap.logging.log_dir",
         "bootstrap.model.default_paths.*",
-        "bootstrap.model.path",
         "bootstrap.model.type",
         "inference.tracing.path",
         "inference.tracing.raw_prompts",
-        # `classify`, `default`, and a size for any document type by its name.
-        "pipeline.batching.*",
         "pipeline.classification.fallback_type",
         # A dataset by any name, each with its two keys.
         "pipeline.datasets.*.document_type",
         "pipeline.datasets.*.image_dir",
         "pipeline.extraction.order",
-        "pipeline.extraction.secondary_sort",
         "pipeline.extraction.skip_labels",
         "pipeline.information_extraction.input.dir",
         "pipeline.information_extraction.input.document_types",
@@ -39,12 +33,6 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "pipeline.information_extraction.input.max_images",
         "pipeline.information_extraction.output.dir",
         "pipeline.photo_split.enabled",
-        "pipeline.processing.stop_after_failed_requests",
-        "pipeline.processing.verbose",
-        "pipeline.token_budgets.classify",
-        "pipeline.token_budgets.extract_base",
-        "pipeline.token_budgets.extract_per_field",
-        "resources.infrastructure.dp_join_timeout",
     }
 )
 

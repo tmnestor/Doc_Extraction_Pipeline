@@ -9,7 +9,6 @@ batched run would not classify the way an unbatched one does.
 The replies below are invented for these tests.
 """
 
-import types
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ import yaml
 from PIL import Image
 
 from common.engine_calls import EngineWatch
-from common.extraction_batching import BatchingConfigError, read_classify_batch_size
 from common.prompt_catalog import PromptCatalog
 from models.orchestrator import DocumentOrchestrator
 from stages import classify as classify_stage
@@ -58,7 +56,6 @@ def orchestrator(backend: FakeBackend) -> DocumentOrchestrator:
     orch = object.__new__(DocumentOrchestrator)
     orch._backend = backend  # type: ignore[assignment]
     orch._fallback_type = "INVOICE"
-    orch.app_config = types.SimpleNamespace(get_token_budget=lambda name: {"classify": 150}[name])  # type: ignore[assignment]
     return orch
 
 
@@ -122,9 +119,7 @@ def test_asking_about_no_pages_makes_no_call():
 def test_pages_are_classified_in_shared_calls_of_the_configured_size(pages):
     backend = FakeBackend()
 
-    records = classify_stage._classify_images(
-        orchestrator(backend), pages, batch_size=2, verbose=False, watch=NEVER
-    )
+    records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=2, watch=NEVER)
 
     assert [call["n"] for call in backend.many_calls] == [2, 1]
     assert [r["image_path"] for r in records] == pages
@@ -132,10 +127,10 @@ def test_pages_are_classified_in_shared_calls_of_the_configured_size(pages):
 
 def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
     together = classify_stage._classify_images(
-        orchestrator(FakeBackend()), pages, batch_size=3, verbose=False, watch=NEVER
+        orchestrator(FakeBackend()), pages, batch_size=3, watch=NEVER
     )
     one_by_one = classify_stage._classify_images(
-        orchestrator(FakeBackend()), pages, batch_size=1, verbose=False, watch=NEVER
+        orchestrator(FakeBackend()), pages, batch_size=1, watch=NEVER
     )
 
     # A page's time is a measurement, and differs from one call to the next.
@@ -161,7 +156,7 @@ def test_a_shared_call_writes_the_records_the_single_calls_write(pages):
 def test_a_batch_size_of_one_keeps_one_call_a_page(pages):
     backend = FakeBackend()
 
-    classify_stage._classify_images(orchestrator(backend), pages, batch_size=1, verbose=False, watch=NEVER)
+    classify_stage._classify_images(orchestrator(backend), pages, batch_size=1, watch=NEVER)
 
     assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
 
@@ -170,9 +165,7 @@ def test_a_failed_shared_call_is_retried_one_page_at_a_time(pages, caplog):
     backend = FakeBackend(fail_shared=True)
 
     with caplog.at_level("WARNING"):
-        records = classify_stage._classify_images(
-            orchestrator(backend), pages, batch_size=3, verbose=False, watch=NEVER
-        )
+        records = classify_stage._classify_images(orchestrator(backend), pages, batch_size=3, watch=NEVER)
 
     assert [call["n"] for call in backend.many_calls] == [1, 1, 1]
     assert [r["document_type"] for r in records] == [
@@ -190,37 +183,12 @@ def test_a_page_that_fails_alone_is_given_the_fallback_type_and_carries_the_erro
 
     processor = orchestrator(Refuses())  # type: ignore[arg-type]
 
-    (record,) = classify_stage._classify_images(
-        processor, pages[:1], batch_size=1, verbose=False, watch=NEVER
-    )
+    (record,) = classify_stage._classify_images(processor, pages[:1], batch_size=1, watch=NEVER)
 
     assert record["document_type"] == "INVOICE"
     assert record["error"] == "engine refused the page"
     assert record["prompt_used"] == "fallback_heuristic"
     assert record["confidence"] == 0.1 and record["raw_response"] == ""
-
-
-# --- the config -----------------------------------------------------------------
-
-
-def test_the_shipped_classify_batch_size_is_stated():
-    size = read_classify_batch_size(yaml.safe_load(RUN_CONFIG.read_text()), config_path=RUN_CONFIG)
-
-    assert size >= 1
-
-
-@pytest.mark.parametrize("block", [{"default": 2}, {"default": 2, "classify": 0}, {"classify": True}, None])
-def test_a_missing_or_invalid_classify_batch_size_fails_with_a_diagnostic(block):
-    raw = {"pipeline": {"batching": block}} if block is not None else {"pipeline": {}}
-
-    with pytest.raises(BatchingConfigError) as caught:
-        read_classify_batch_size(raw, config_path=RUN_CONFIG)
-
-    message = str(caught.value)
-    assert "What:" in message and "classify" in message
-    assert "Where:" in message and str(RUN_CONFIG) in message and "pipeline.batching" in message
-    assert "Expected:" in message and "classify: 64" in message
-    assert "How to fix:" in message
 
 
 def test_a_reply_that_only_names_a_type_in_words_is_given_the_fallback_type() -> None:

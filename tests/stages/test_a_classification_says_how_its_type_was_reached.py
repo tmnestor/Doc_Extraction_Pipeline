@@ -133,9 +133,7 @@ def pages(tmp_path: Path) -> list[str]:
 
 
 def classified(backend: Backend, pages: list[str]) -> list[dict]:
-    return classify_stage._classify_images(
-        processor(backend), pages, batch_size=4, verbose=False, watch=EngineWatch(100)
-    )
+    return classify_stage._classify_images(processor(backend), pages, batch_size=4, watch=EngineWatch(100))
 
 
 def test_each_record_says_how_its_pages_type_was_reached(pages: list[str]) -> None:

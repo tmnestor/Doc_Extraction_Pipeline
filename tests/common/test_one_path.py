@@ -24,7 +24,7 @@ sys.path.insert(0, str(HERE.parent / "reference"))
 
 from model_inputs import InProcessContext, test_config  # noqa: E402
 
-from common import vllm_dp  # noqa: E402
+from common import extraction_batching, vllm_dp  # noqa: E402
 from common.settings import Settings  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.extract import extract_pages  # noqa: E402
@@ -78,6 +78,7 @@ class Bench:
         self.folder = folder / "pages"
         self.folder.mkdir()
         self.overrides = {"output_dir": str(folder / "out")}
+        monkeypatch.setattr(extraction_batching, "PAGES_PER_CALL", 2)
         self.processor = StandIn()
         self.opened_with: list[Any] = []
         monkeypatch.setattr(vllm_dp.mp, "get_context", lambda method=None: InProcessContext)
@@ -112,7 +113,7 @@ class Bench:
         """What the stage's reading gives for these pages, without the times, which are measurements."""
         self.processor.calls.clear()
         if engines == 1:
-            app_config = Settings.load({**self.overrides, "num_gpus": 1}, config_path=self.config_path)
+            app_config = Settings.load(dict(self.overrides), config_path=self.config_path)
             if stage == "classify":
                 found = classify_pages(self.processor, pages, app_config)
             else:
@@ -165,9 +166,9 @@ def test_an_engine_on_a_card_is_started_with_the_settings_the_stage_hands_over(b
     vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=staged)
 
     assert len(bench.opened_with) == 2
-    assert all(opened.num_gpus == 1 for opened in bench.opened_with)
-    # The stage's own settings are not changed by making a card's copy.
-    assert staged.num_gpus != 1 or staged is not bench.opened_with[0]
+    # Each worker's process is handed the stage's settings as they are: it sees one card because it
+    # is given one card, and not because a setting says so.
+    assert all(opened is staged for opened in bench.opened_with)
 
 
 def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
@@ -179,9 +180,9 @@ def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
     import pickle
 
     settings = Settings.load(dict(bench.overrides), config_path=bench.config_path)
-    crossed = pickle.loads(pickle.dumps(settings.on_one_card()))
+    crossed = pickle.loads(pickle.dumps(settings))
 
-    assert (crossed.model_type, crossed.num_gpus) == (settings.model_type, 1)
+    assert crossed.model_type == settings.model_type
     assert crossed.raw == settings.raw and crossed.model_path == settings.model_path
     for read in (classify_pages, extract_pages):
         assert pickle.loads(pickle.dumps(read)) is read
@@ -204,7 +205,7 @@ def test_every_record_is_written_as_it_is_made_whichever_way_the_engines_are_arr
     names = [page.name for page in pages]
 
     for engines in (None, 2):
-        monkeypatch.setattr(vllm_dp, "resolve_dp_gpus", lambda config, model_type, n=engines: n)
+        monkeypatch.setattr(vllm_dp, "resolve_dp_gpus", lambda model_type, n=engines: n)
         sink = Sink()
 
         read = vllm_dp.read_on_the_cards(settings, bench.classified(pages), extract_pages, sink=sink)
@@ -258,7 +259,7 @@ def test_each_engine_groups_its_pages_as_one_engine_would(bench: Bench, stage: s
 
 def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: Bench) -> None:
     pages = bench.pages(2)
-    app_config = Settings.load({**bench.overrides, "num_gpus": 1}, config_path=bench.config_path)
+    app_config = Settings.load(dict(bench.overrides), config_path=bench.config_path)
 
     one = classify_pages(bench.processor, pages, app_config)
     two = vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=app_config)

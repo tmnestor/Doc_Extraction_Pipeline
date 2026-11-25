@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
 from model_inputs import InProcessContext, run_settings, split_checked, test_config  # noqa: E402
 
-from common import photo_split, vllm_dp  # noqa: E402
+from common import cards, engine_calls, extraction_batching, photo_split, vllm_dp  # noqa: E402
 from stages import classify, clean, evaluate, extract, split  # noqa: E402
 
 test_config.__test__ = False  # type: ignore[attr-defined]
@@ -91,8 +91,12 @@ class Bench:
 
     def __init__(self, folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.root = folder
+        self.monkeypatch = monkeypatch
         shipped = yaml.safe_load(test_config(folder).read_text())
-        shipped["pipeline"]["batching"] = {"classify": 2, "default": 2}
+        # Two pages to an engine call, and two cards, where the code has 64 and counts the machine's.
+        self.pages_to_a_call(2)
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        monkeypatch.setattr(cards, "listed_by_nvidia_smi", lambda: 2)
         monkeypatch.setattr(
             photo_split,
             "CONFIG",
@@ -125,6 +129,13 @@ class Bench:
     def _open(self, settings: Any) -> Iterator[Processor]:
         self.engines_started += 1
         yield self.processor
+
+    def pages_to_a_call(self, pages: int) -> None:
+        self.monkeypatch.setattr(extraction_batching, "PAGES_PER_CALL", pages)
+
+    def stop_after(self, failures: int) -> None:
+        """Have a stage stop when this many requests in a row have failed."""
+        self.monkeypatch.setattr(engine_calls, "STOP_AFTER_FAILED_REQUESTS", failures)
 
     def with_settings(self, change: Any) -> None:
         """Write the settings file again, with ``change`` applied to its contents."""

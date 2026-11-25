@@ -84,19 +84,6 @@ def test_a_rule_that_cannot_be_used_stops_classify_before_an_engine_starts(
     assert not output.exists()
 
 
-def test_a_number_of_pages_to_a_call_that_cannot_be_used_stops_classify_before_an_engine_starts(
-    bench: Bench, tmp_path: Path
-) -> None:
-    bench.with_settings(lambda settings: settings["pipeline"]["batching"].update(classify=0))
-
-    with pytest.raises(ConfigError) as refused:
-        bench.classify(tmp_path / "out" / "classifications.jsonl")
-
-    assert all(part in str(refused.value) for part in PARTS)
-    assert "pipeline.batching" in str(refused.value)
-    assert bench.engines_started == 0
-
-
 def test_a_fallback_type_that_is_no_document_type_stops_classify_before_an_engine_starts(
     bench: Bench, tmp_path: Path
 ) -> None:
@@ -118,19 +105,6 @@ def test_the_shipped_fallback_type_is_a_document_type(bench: Bench, tmp_path: Pa
     bench.classify(tmp_path / "out" / "classifications.jsonl")
 
     assert bench.engines_started == 1
-
-
-def test_a_number_of_pages_to_a_call_that_cannot_be_used_stops_extract_before_an_engine_starts(
-    bench: Bench, tmp_path: Path
-) -> None:
-    bench.with_settings(lambda settings: settings["pipeline"]["batching"].update(default=0))
-    out = tmp_path / "out"
-
-    with pytest.raises(ConfigError) as refused:
-        bench.extract(classified(bench, out), out / "raw_extractions.jsonl")
-
-    assert all(part in str(refused.value) for part in PARTS)
-    assert bench.engines_started == 0
 
 
 def test_a_page_given_a_type_with_no_block_stops_extract_before_an_engine_starts(

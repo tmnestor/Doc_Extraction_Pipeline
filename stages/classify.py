@@ -8,7 +8,6 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 """
 
 import logging
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +16,7 @@ from typing import Any
 from common.classification import BY_THE_DATASET
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
-from common.extraction_batching import read_classify_batch_size
+from common import extraction_batching
 from common.pipeline_ops import check_processor
 from common.settings import Settings
 from common.stage_settings import StageSettings, run_settings
@@ -212,11 +211,10 @@ def check(task: StageSettings) -> Checked:
 def check_settings(app_config: Any) -> None:
     """Everything classifying reads that can be wrong, checked before any engine is started.
 
-    The pages to a call, the classification file (its questions, its column roles and its rules), and
-    the fallback type. Each is read again where it is used. Until 25 November 2026 that was the first
-    time: the pages to a call after the engine had started, and the classification file when the first
-    reply was turned into a type, inside the engine call. A mistake in a rule was then taken for a
-    failed call, and every page was given the fallback type.
+    The classification file (its questions, its column roles and its rules), and the fallback type.
+    Until 25 November 2026 the classification file was first read when the first reply was turned into
+    a type, inside the engine call. A mistake in a rule was then taken for a failed call, and every
+    page was given the fallback type.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
@@ -224,7 +222,6 @@ def check_settings(app_config: Any) -> None:
     from common import classification
     from common.field_schema import get_field_schema
 
-    read_classify_batch_size(app_config.raw, config_path=app_config.config_path)
     classification.check()
     fallback = app_config.classification_fallback_type
     types = get_field_schema().document_types
@@ -262,10 +259,9 @@ def classify_pages(
     return _classify_images(
         processor,
         [str(image) for image in images],
-        read_classify_batch_size(app_config.raw, config_path=app_config.config_path),
-        app_config.verbose,
+        extraction_batching.PAGES_PER_CALL,
         sink,
-        watch=EngineWatch(app_config.stop_after_failed_requests),
+        watch=EngineWatch(),
     )
 
 
@@ -273,7 +269,6 @@ def _classify_images(
     processor: Any,
     image_paths: list[str],
     batch_size: int,
-    verbose: bool,
     sink: RecordSink | None = None,
     *,
     watch: EngineWatch,
@@ -291,7 +286,6 @@ def _classify_images(
         processor: The document processor (orchestrator).
         image_paths: Pages to classify, in order.
         batch_size: Pages per engine call. 1 means one call a page.
-        verbose: Whether each page's type is also printed as it is found.
         sink: Where to write each record as soon as it is made, if anywhere.
         watch: Counts the pages that fail one after another, and stops the stage when the engine has
             stopped answering.
@@ -321,9 +315,6 @@ def _classify_images(
                 sink.write(record)
             name = Path(outcome.item).name
             logger.info("[%d/%d] %s -> %s", len(records), total, name, result["document_type"])
-            if verbose:
-                sys.stdout.write(f"Detected document type: {name}: {result['document_type']}\n")
-                sys.stdout.flush()
     return records
 
 

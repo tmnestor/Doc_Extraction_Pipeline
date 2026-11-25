@@ -88,54 +88,13 @@ def test_a_setting_from_before_the_refactor_is_refused(tmp_path: Path, removed: 
     def put_back(raw: dict[str, Any]) -> None:
         block = raw
         for name in section:
-            block = block[name]
+            block = block.setdefault(name, {})
         block[key] = value
 
     with pytest.raises(ValueError) as raised:
         read_settings_file(config_with(tmp_path, put_back))
 
     assert ".".join((*section, key)) in str(raised.value)
-
-
-@pytest.mark.parametrize("name", ["classify", "extract_base", "extract_per_field"])
-def test_a_completion_budget_is_never_supplied_by_the_code(name: str) -> None:
-    """Each is needed, and found missing when the settings are read: not minutes later, at the first page."""
-    from common.settings import Settings
-
-    raw = shipped()
-    del raw["pipeline"]["token_budgets"][name]
-
-    with pytest.raises(ValueError) as raised:
-        Settings._budgets(raw, RUN_CONFIG)
-
-    message = str(raised.value)
-    assert f"pipeline.token_budgets.{name}" in message and str(RUN_CONFIG) in message
-    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-
-
-@pytest.mark.parametrize("value", [0, -5, 51.2, "512", True, None])
-def test_a_completion_budget_is_a_positive_whole_number(value: object) -> None:
-    from common.settings import Settings
-
-    raw = shipped()
-    raw["pipeline"]["token_budgets"]["extract_base"] = value
-
-    with pytest.raises(ValueError) as raised:
-        Settings._budgets(raw, RUN_CONFIG)
-
-    message = str(raised.value)
-    assert "pipeline.token_budgets.extract_base" in message
-    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-
-
-def test_the_shipped_completion_budgets_are_read() -> None:
-    from common.settings import Settings
-
-    assert Settings._budgets(shipped(), RUN_CONFIG) == {
-        "classify": 150,
-        "extract_base": 512,
-        "extract_per_field": 64,
-    }
 
 
 @pytest.mark.parametrize(
@@ -164,27 +123,14 @@ def test_a_setting_that_nothing_read_is_now_refused(tmp_path: Path, old_key: tup
 
 
 def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -> None:
-    path = config_with(tmp_path, lambda raw: raw["pipeline"]["token_budgets"].update(clasify=150))
+    path = config_with(tmp_path, lambda raw: raw["pipeline"]["extraction"].update(skip_label=[]))
 
     with pytest.raises(ValueError) as raised:
         read_settings_file(path)
 
     message = str(raised.value)
-    assert "pipeline.token_budgets.clasify" in message
-    assert "pipeline.token_budgets.classify" in message
-
-
-def test_a_batch_size_for_a_misspelt_document_type_is_refused(tmp_path: Path) -> None:
-    from common.extraction_batching import read_batch_sizes
-
-    path = config_with(tmp_path, lambda raw: raw["pipeline"]["batching"].update(reciept=10))
-
-    with pytest.raises(ValueError) as raised:
-        read_batch_sizes(read_settings_file(path), config_path=path)
-
-    message = str(raised.value)
-    assert "pipeline.batching.reciept" in message and "receipt" in message
-    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+    assert "pipeline.extraction.skip_label" in message
+    assert "pipeline.extraction.skip_labels" in message
 
 
 @pytest.mark.parametrize("key", sorted(KNOWN_KEYS))

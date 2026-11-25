@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped
+from bench import split_checked
 from common.config_schema import ConfigError
 from common.engine_calls import StageStopped
 from common.settings import Settings
@@ -405,7 +406,7 @@ def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
     bench.processor.dead_from_attempt = 1
 
     with caplog.at_level(logging.WARNING):
-        split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+        split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
 
     assert "The model could not be asked about 6 of 6 photograph(s)" in caplog.text
     first = records_by_name(output / "splits.jsonl")
@@ -415,7 +416,7 @@ def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
     # This time the model answers, and says each photograph holds two receipts.
     bench.processor.dead_from_attempt = None
     bench.processor.ask = lambda images, prompts, max_tokens: [TWO_RECEIPTS] * len(images)  # type: ignore[method-assign]
-    split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+    split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
 
     second = records_by_name(output / "splits.jsonl")
     assert set(second) == set(bench.names) and not any(record.get("error") for record in second.values())
@@ -433,7 +434,7 @@ def test_split_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Pat
     bench.processor.dead_from_attempt = 2
 
     with pytest.raises(StageStopped):
-        split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+        split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
 
     # The first call's two photographs were dealt with and are kept: the model's replies in the
     # stage's journal, and the images written.

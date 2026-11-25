@@ -18,7 +18,7 @@ from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common.extraction_batching import read_classify_batch_size
 from common.pipeline_ops import check_processor
 from common.settings import Settings
-from common.stage_settings import StageSettings
+from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
 from . import records as records_of
@@ -28,14 +28,7 @@ from .io import discover_images, in_the_order, read_completed_images, start_afre
 logger = logging.getLogger(__name__)
 
 
-def run(
-    image_dir: Path,
-    output_path: Path,
-    *,
-    model_type: str | None = None,
-    config_path: Path | None = None,
-    given_type: str | None = None,
-) -> Path:
+def run(image_dir: Path, output_path: Path, app_cfg: Settings, *, given_type: str | None = None) -> Path:
     """Detect document types for all images, write classifications.jsonl.
 
     When the pages are of a dataset that says what they are (``pipeline.datasets``), each is given that
@@ -48,14 +41,13 @@ def run(
     Args:
         image_dir: Directory containing images.
         output_path: Path to write classifications.jsonl.
-        model_type: A registered model.
-        config_path: Optional path to run_config.yml.
+        app_cfg: The run's settings as the stage loads its engine with them, checked: what
+            ``checked`` gave.
         given_type: The document type the pages' dataset gives them, or None to ask the model.
 
     Returns:
         Path to the written classifications.jsonl.
     """
-    app_cfg = _checked_settings(model_type, config_path, output_path.parent)
     # Both filters are config-driven and MUST be passed: calling with the
     # directory alone silently ignored max_images and document_types, so a
     # 12-image request processed all 165 (fixed 2026-09-21).
@@ -168,30 +160,32 @@ def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
         )
 
 
-def _checked_settings(model_type: str | None, config_path: Path | None, output_dir: Path) -> Settings:
+def checked(settings: Settings) -> Settings:
     """The run's settings as classify loads its engine with them, with what classifying reads checked.
 
-    The one place the stage works its settings out: ``check`` calls it before anything is written, and
-    ``run`` calls it for the settings it reads the pages with.
+    The one place the stage works its settings out. What it gives is what ``run`` is handed: nothing
+    is worked out a second time.
+
+    Args:
+        settings: The run's settings.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    given: dict[str, Any] = {"output_dir": str(output_dir)}
-    if model_type is not None:
-        given["model_type"] = model_type
-    settings = Settings.load(given, config_path=config_path).for_stage("classify")
-    check_settings(settings)
+    staged = settings.for_stage("classify")
+    check_settings(staged)
+    return staged
+
+
+def check(task: StageSettings) -> Settings:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    settings = checked(run_settings(task))
+    check_processor(settings)
     return settings
-
-
-def check(task: StageSettings) -> None:
-    """Read and check everything the stage will use. Nothing is written.
-
-    Raises:
-        ConfigError: With what is wrong, where, what is expected and how to mend it.
-    """
-    check_processor(_checked_settings(task.model, task.config_path, task.classifications.parent))
 
 
 def check_settings(app_config: Any) -> None:
@@ -333,16 +327,10 @@ def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
 BANNER = "Stage 1: classify, the document type of each page (GPU)"
 
 
-def start(task: StageSettings) -> str:
-    """Run the stage for a task, and give the line that says it is done."""
+def start(task: StageSettings, checked: Settings) -> str:
+    """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
     assert task.image_dir is not None
     start_afresh(task.clear_previous_output, task.classifications)
     started = time.time()
-    run(
-        task.image_dir,
-        task.classifications,
-        model_type=task.model,
-        config_path=task.config_path,
-        given_type=task.given_type,
-    )
+    run(task.image_dir, task.classifications, checked, given_type=task.given_type)
     return f"Classification complete ({int(time.time() - started)}s)."

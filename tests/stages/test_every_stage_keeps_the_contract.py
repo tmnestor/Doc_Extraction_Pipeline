@@ -2,7 +2,7 @@
 
 A stage stands alone:
 
-1. it is one module of ``stages`` with a ``BANNER``, a ``check(task)`` and a ``start(task)``;
+1. it is one module of ``stages`` with a ``BANNER``, a ``check(task)`` and a ``start(task, checked)``;
 2. it reads its settings and the file the stage before it wrote, writes its own file, and imports no
    other stage;
 3. a record it hands on is made by ``stages/records.py``
@@ -88,7 +88,7 @@ def test_a_stage_is_started_one_way(name: str) -> None:
     stage = importlib.import_module(f"stages.{name}")
 
     assert isinstance(stage.BANNER, str) and stage.BANNER
-    assert list(inspect.signature(stage.start).parameters) == ["task"]
+    assert list(inspect.signature(stage.start).parameters) == ["task", "checked"]
     assert list(inspect.signature(stage.check).parameters) == ["task"]
 
 

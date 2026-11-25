@@ -33,7 +33,8 @@ from common.photo_split import (
     worth_straightening,
 )
 from common.sheet_finder_config import load_finder_params
-from stages.split import apply_reply, cut_name, run
+from stages.split import apply_reply, checked, cut_name
+from stages.split import run as run_the_stage
 
 RUN_CONFIG = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
 RAW = yaml.safe_load(RUN_CONFIG.read_text())
@@ -46,6 +47,15 @@ TWO = (
     '  {"box_2d": [120, 520, 880, 760], "label": "receipt"}\n]\n```'
 )
 ONE = '```json\n[\n  {"box_2d": [131, 363, 923, 621], "label": "receipt"}\n]\n```'
+
+
+def run(image_dir: Path, output_dir: Path) -> Path:
+    """The stage as shipped: the photo split is off, so no model is asked and none is looked for."""
+
+    def never() -> Any:
+        raise AssertionError("with the photo split off the run's settings are not asked for")
+
+    return run_the_stage(image_dir, output_dir, checked(RAW, RUN_CONFIG, never))
 
 
 def reply_for(*boxes: list[int]) -> str:

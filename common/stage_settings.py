@@ -19,11 +19,11 @@ Run as a module it prints the log folder, which the entry script needs before it
 import os
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from common.settings import ConfigError, read_settings_file, value_at
+from common.settings import ConfigError, Settings, read_settings_file, value_at
 
 TASKS = ("split", "classify", "extract", "clean", "evaluate")
 
@@ -57,6 +57,11 @@ class StageSettings:
     # The dataset the job names, if it names one, and the document type that dataset gives its pages.
     dataset: str | None = None
     given_type: str | None = None
+    # The share of each card's memory the job sets, or None for the settings file's.
+    gpu_memory_utilization: float | None = None
+    # What the settings file holds, as it was read to work these out. A stage that reads more of the
+    # file reads this, so that one start of a task reads its settings file once.
+    raw: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
     # Every file a stage writes is under the output folder, so that one stage finds what another wrote.
 
@@ -226,19 +231,18 @@ def settings_file(environ: Mapping[str, str], shipped: Path) -> Path:
     return path
 
 
-def _check_memory_share(environ: Mapping[str, str]) -> None:
-    """Refuse a share of each card's memory that is not a share.
+def _memory_share(environ: Mapping[str, str]) -> float | None:
+    """The share of each card's memory the job sets, or None if it sets none.
 
-    The engine loader reads the variable when it starts an engine (``models.model_loader``). It is
-    checked here, with every other variable of the job, so that one that cannot be used stops the run
-    before anything is written and not as an engine starts.
+    Read and checked here, with every other variable of the job, and handed to the engine loader with
+    the run's settings: one that cannot be used stops the run before anything is written.
 
     Raises:
         ConfigError: If the variable is set and is not a number above 0 and at most 1.
     """
     given = _set(environ, _MEMORY_SHARE)
     if given is None:
-        return
+        return None
     try:
         usable = 0.0 < float(given) <= 1.0
     except ValueError:
@@ -251,6 +255,27 @@ def _check_memory_share(environ: Mapping[str, str]) -> None:
             f"the model's gpu_memory_utilization in the settings file.\n"
             f"How to fix: set {_MEMORY_SHARE} to such a number, or leave it unset."
         )
+    return float(given)
+
+
+def run_settings(task: StageSettings) -> Settings:
+    """The run's settings for a task that uses the cards, from what the task was worked out from.
+
+    The settings file is not read again: the task holds what it held. The model's folder is looked
+    for here, so this is asked only for a task that loads a model.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    return Settings.load(
+        {
+            "model_type": task.model,
+            "output_dir": str(task.output),
+            "gpu_memory_utilization": task.gpu_memory_utilization,
+        },
+        config_path=task.config_path,
+        raw=task.raw,
+    )
 
 
 def log_dir(environ: Mapping[str, str], config_path: Path) -> Path:
@@ -288,7 +313,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
             value cannot be read.
     """
     _refuse_old_names(environ)
-    _check_memory_share(environ)
+    memory_share = _memory_share(environ)
     if task not in TASKS:
         raise ConfigError(
             f"What: KFP_TASK is {task!r}, which is not a task of this pipeline.\n"
@@ -355,6 +380,8 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         config_path=config_path,
         dataset=dataset,
         given_type=given_type,
+        gpu_memory_utilization=memory_share,
+        raw=raw,
     )
 
 

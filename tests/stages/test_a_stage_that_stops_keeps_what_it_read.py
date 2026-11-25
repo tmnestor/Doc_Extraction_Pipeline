@@ -35,7 +35,7 @@ from stages.io import Journal, read_jsonl  # noqa: E402
 
 test_config.__test__ = False  # type: ignore[attr-defined]
 
-from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped  # noqa: E402
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped, split_checked  # noqa: E402
 
 
 def names_in(path: Path) -> list[str]:
@@ -256,7 +256,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
     bench.processor.stop_at_call = 3
 
     with pytest.raises(Stopped):
-        split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+        split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
 
     # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
     # the journal, their images are written, and the stage's own file is not yet there.
@@ -267,7 +267,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
 
     bench.processor.stop_at_call = None
     bench.processor.calls.clear()
-    split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
+    split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
 
     assert bench.processor.calls == [["2 photographs"]]
     assert names_in(output / "splits.jsonl") == bench.names

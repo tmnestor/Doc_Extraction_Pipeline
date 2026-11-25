@@ -224,6 +224,21 @@ class InProcessContext:
     Process = InProcess
 
 
+def run_settings(model: str, config: Path) -> Any:
+    """The run's settings for a model, from a settings file: what a task's own would be."""
+    from common.settings import Settings
+
+    return Settings.load({"model_type": model}, config_path=config)
+
+
+def split_checked(model: str, config: Path) -> Any:
+    """What the split stage's check gives for a model and a settings file."""
+    from common.settings import read_settings_file
+    from stages import split
+
+    return split.checked(read_settings_file(config), config, lambda: run_settings(model, config))
+
+
 def test_config(folder: Path) -> Path:
     """The shipped settings, changed only where a run away from the sandbox must differ.
 
@@ -289,15 +304,12 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
     recorder = Recorder()
     with recording(recorder, folder / "model"):
         recorder.stage = "classify"
-        classifications = classify.run(
-            pages, output / "classifications.jsonl", model_type=model, config_path=config
-        )
+        settings = run_settings(model, config)
+        classifications = classify.run(pages, output / "classifications.jsonl", classify.checked(settings))
         recorder.stage = "extract"
-        extract.run(
-            classifications, pages, output / "raw_extractions.jsonl", model_type=model, config_path=config
-        )
+        extract.run(output / "raw_extractions.jsonl", extract.checked(classifications, settings))
         recorder.stage = "split"
-        split.run(pages, output / "split", model_type=model, config_path=config)
+        split.run(pages, output / "split", split_checked(model, config))
         # A dataset whose pages are all of one type: given their type by classify, which asks no
         # model, and read by extract by the prompt of that type.
         receipts = folder / "receipts"
@@ -305,16 +317,9 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         given = classify.run(
             receipts,
             output / "dataset" / "classifications.jsonl",
-            model_type=model,
-            config_path=config,
+            classify.checked(settings),
             given_type="SROIE_RECEIPT",
         )
         recorder.stage = "dataset_sroie"
-        extract.run(
-            given,
-            receipts,
-            output / "dataset" / "raw_extractions.jsonl",
-            model_type=model,
-            config_path=config,
-        )
+        extract.run(output / "dataset" / "raw_extractions.jsonl", extract.checked(given, settings))
     return recorder.as_record()

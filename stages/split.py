@@ -29,14 +29,16 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 
 import logging
 import shutil
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.pipeline_ops import check_processor
-from common.settings import Settings
-from common.stage_settings import StageSettings
+from common.settings import Settings, read_settings_file
+from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
@@ -260,60 +262,63 @@ def _remove_the_images_of(records: list[dict[str, Any]], images_dir: Path) -> No
                 (images_dir / name).unlink(missing_ok=True)
 
 
-def _checked(
-    model_type: str | None, config_path: Path | None, output_dir: Path
-) -> tuple[Any, Any | None, Settings | None]:
+@dataclass(frozen=True)
+class Checked:
+    """What the stage is run with, read and checked."""
+
+    # The photo split settings (``common.photo_split.PhotoSplitConfig``).
+    split_config: Any
+    # The settings for finding print and its direction (``common.sheet_finder.FinderParams``). None
+    # when no image is to be straightened, or the photo split is off.
+    finder: Any | None
+    # The run's settings. None when the photo split is off: no model is asked, and none is looked for.
+    settings: Settings | None
+
+
+def checked(raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Settings]) -> Checked:
     """The photo split settings, the sheet finder's, and the run's settings, each read and checked.
 
-    The one place the stage works its settings out: ``check`` calls it before anything is written, and
-    ``run`` calls it for what it deals with the photographs by. With the photo split off no model is
-    asked: the finder's settings and the run's are not read, and come back as None. The finder's are
-    None too when no image is to be straightened.
+    The one place the stage works its settings out. What it gives is what ``run`` is handed: nothing
+    is read or worked out a second time.
+
+    Args:
+        raw: What the settings file holds.
+        config_path: That file, named in each error.
+        settings_of: Gives the run's settings. Called only when the photo split is on: with it off no
+            model is asked, and a model's folder that is not there must not stop the stage.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     from common.photo_split import photo_split_config_from
-    from common.settings import DEFAULT_CONFIG, read_settings_file
 
-    resolved_config = config_path or DEFAULT_CONFIG
-    raw_config = read_settings_file(resolved_config)
-    split_config = photo_split_config_from(raw_config, config_path=resolved_config)
+    split_config = photo_split_config_from(raw, config_path=config_path)
     if not split_config.enabled:
-        return split_config, None, None
-
-    given: dict[str, Any] = {"output_dir": str(output_dir)}
-    if model_type is not None:
-        given["model_type"] = model_type
-    settings = Settings.load(given, config_path=config_path)
+        return Checked(split_config, None, None)
+    settings = settings_of()
     finder = None
     if split_config.straighten:
         from common.sheet_finder_config import finder_params_from
 
-        finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
-        finder = finder_params_from(finder_section, config_path=resolved_config)
-    return split_config, finder, settings
+        finder_section = raw.get("pipeline", {}).get("photo_split", {}).get("finder")
+        finder = finder_params_from(finder_section, config_path=config_path)
+    return Checked(split_config, finder, settings)
 
 
-def check(task: StageSettings) -> None:
-    """Read and check everything the stage will use. Nothing is written.
+def check(task: StageSettings) -> Checked:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    _, _, settings = _checked(task.model, task.config_path, task.split_dir)
-    if settings is not None:
-        check_processor(settings)
+    raw = task.raw if task.raw is not None else read_settings_file(task.config_path)
+    found = checked(raw, task.config_path, lambda: run_settings(task))
+    if found.settings is not None:
+        check_processor(found.settings)
+    return found
 
 
-def run(
-    image_dir: Path,
-    output_dir: Path,
-    *,
-    model_type: str | None = None,
-    config_path: Path | None = None,
-    timing: Path | None = None,
-) -> Path:
+def run(image_dir: Path, output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Path:
     """Split every photograph in a directory, writing images/ and splits.jsonl.
 
     A run carries on from what an earlier one left (``stages.carry_on``): photographs already dealt with
@@ -325,8 +330,7 @@ def run(
     Args:
         image_dir: Directory containing the photographs.
         output_dir: Directory to write images/ and splits.jsonl into.
-        model_type: Model type (e.g. "gemma4-31b-w4a16-vllm"). None = from the run config.
-        config_path: Optional path to run_config.yml.
+        checked: The photo split settings, the finder's and the run's, checked: what ``checked`` gave.
         timing: The run's output folder, to note a row of the stage's time in. None: no row.
 
     Returns:
@@ -338,8 +342,7 @@ def run(
     """
     from stages.io import discover_images
 
-    # Read before the engine is started, so that a setting that cannot be used stops the run first.
-    split_config, finder, app_cfg = _checked(model_type, config_path, output_dir)
+    split_config, finder, app_cfg = checked.split_config, checked.finder, checked.settings
 
     # Every image in the directory is examined. The selection the later stages apply (document types, a
     # limit on the number of images) is theirs to apply, to what this stage writes.
@@ -450,7 +453,7 @@ def run(
 BANNER = "Stage 0: split, one image for each document in a photograph (GPU)"
 
 
-def start(task: StageSettings) -> str:
+def start(task: StageSettings, checked: Checked) -> str:
     """Run the stage for a task, and give the line that says it is done.
 
     The split stage has no earlier output deleted for it: a photograph already dealt with is passed over.
@@ -460,8 +463,7 @@ def start(task: StageSettings) -> str:
     images = run(
         task.image_dir,
         task.split_dir,
-        model_type=task.model,
-        config_path=task.config_path,
+        checked,
         # The row of the stage's time goes with the other stages', in the run's output folder.
         timing=task.output,
     )

@@ -332,7 +332,7 @@ def check(task: StageSettings) -> None:
     get_field_schema()
 
 
-def start(task: StageSettings) -> str:
+def start(task: StageSettings, checked: None) -> str:
     """Run the stage for a task, and give the line that says it is done."""
     assert task.ground_truth is not None
     task.evaluation_dir.mkdir(parents=True, exist_ok=True)

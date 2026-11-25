@@ -51,13 +51,17 @@ def environ(folder: Path, **more: str) -> dict[str, str]:
 
 
 class Called:
-    """Stands in for a stage's ``run``: notes what it was given."""
+    """Stands in for a stage's ``run`` and its ``check``."""
 
     def __init__(self) -> None:
-        self.kwargs: dict[str, Any] = {}
+        self.checked: Any = None
 
     def __call__(self, *args: Any, **kwargs: Any) -> None:
-        self.kwargs = kwargs
+        return None
+
+    def check(self, task: Any) -> None:
+        """Stands in for the stage's ``check``: notes the task it was given."""
+        self.checked = task
 
 
 @pytest.fixture
@@ -65,7 +69,7 @@ def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
     module = importlib.import_module("stages.classify")
     monkeypatch.setattr(module, "run", called)
-    monkeypatch.setattr(module, "check", lambda task: None)
+    monkeypatch.setattr(module, "check", called.check)
     monkeypatch.setattr(run_manifest, "code_version", lambda repository: ("0a1b2c3", False))
     return called
 
@@ -113,7 +117,8 @@ def test_the_task_is_worked_out_from_the_file_the_job_names(
 
     assert started_with(monkeypatch, environ(tmp_path, **{SETTINGS_FILE: str(named)})) == 0
 
-    assert stage.kwargs["config_path"] == named != SHIPPED
+    assert stage.checked.config_path == named != SHIPPED
+    assert stage.checked.raw == yaml.safe_load(named.read_text())
 
 
 def test_a_value_changed_in_the_file_named_is_the_value_the_task_has(tmp_path: Path) -> None:

@@ -128,7 +128,7 @@ def test_the_runner_checks_a_task_before_it_notes_it_and_starts_it(
         order.append("note")
         noting(task)
 
-    def started(task: Any) -> str:
+    def started(task: Any, checked: Any) -> str:
         order.append("start")
         return "done"
 
@@ -279,3 +279,89 @@ def test_working_a_task_out_reads_the_settings_file_once(
     task(bench, "clean", tmp_path / "out")
 
     assert len(read) == 1
+
+
+# --- a task is worked out once: what its check built is what it runs with ------------------------------
+
+
+@pytest.mark.parametrize("name", ["split", "classify", "extract"])
+def test_one_start_of_a_task_reads_its_settings_file_once_and_loads_its_settings_once(
+    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Until 26 November 2026 the file was read to work the task out, and again by the stage; and for
+    a day the stage's settings were built by its check and built again by its run."""
+    out = tmp_path / "out"
+    if name == "extract":
+        starter.run_task(task(bench, "classify", out))
+    read: list[str] = []
+    real_read = yaml.safe_load
+
+    def counted(text: str) -> Any:
+        parsed = real_read(text)
+        if isinstance(parsed, dict) and "bootstrap" in parsed:
+            read.append("read")
+        return parsed
+
+    loaded: list[str] = []
+    real_load = Settings.load.__func__  # type: ignore[attr-defined]
+
+    def counted_load(cls: Any, *args: Any, **kwargs: Any) -> Settings:
+        loaded.append("loaded")
+        return real_load(cls, *args, **kwargs)
+
+    monkeypatch.setattr("common.settings.yaml.safe_load", counted)
+    monkeypatch.setattr(Settings, "load", classmethod(counted_load))
+
+    starter.run_task(task(bench, name, out))
+
+    assert read == ["read"]
+    assert loaded == ["loaded"]
+
+
+@pytest.mark.parametrize("name", ["split", "classify", "extract"])
+def test_what_a_stages_check_gives_is_what_its_run_is_handed(
+    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    out = tmp_path / "out"
+    if name == "extract":
+        starter.run_task(task(bench, "classify", out))
+    stage = importlib.import_module(f"stages.{name}")
+    handed: list[Any] = []
+    given: list[Any] = []
+    real_check = stage.check
+
+    def check(the_task: Any) -> Any:
+        given.append(real_check(the_task))
+        return given[-1]
+
+    def run(*args: Any, **kwargs: Any) -> Path:
+        handed.extend(args)
+        return out
+
+    monkeypatch.setattr(stage, "check", check)
+    monkeypatch.setattr(stage, "run", run)
+
+    starter.run_task(task(bench, name, out))
+
+    assert any(argument is given[0] for argument in handed)
+
+
+def test_the_share_of_memory_a_job_sets_reaches_the_engine_with_the_settings(
+    bench: Bench, tmp_path: Path
+) -> None:
+    from common.stage_settings import run_settings
+
+    with_a_share = task(bench, "classify", tmp_path / "out", DOC_EXTRACT_GPU_MEMORY_UTILIZATION="0.85")
+    without = task(bench, "classify", tmp_path / "out")
+
+    assert run_settings(with_a_share).gpu_memory_utilization == 0.85
+    assert run_settings(without).gpu_memory_utilization is None
+    # A copy made for a worker's process, or for a stage, carries it.
+    assert run_settings(with_a_share).on_one_card().for_stage("classify").gpu_memory_utilization == 0.85
+
+
+def test_the_engine_loader_reads_no_variable_of_the_job_itself() -> None:
+    loader = (Path(starter.REPOSITORY) / "models" / "model_loader.py").read_text()
+
+    assert "os.environ.get" not in loader and "os.getenv" not in loader
+    assert "settings.gpu_memory_utilization" in loader

@@ -42,9 +42,10 @@ def _stage(task: str) -> Any:
     """The stage's own module. Imported only now, so that a task loads nothing another task needs.
 
     A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, a
-    ``check`` that is given the task's settings, reads everything the stage will use and writes
-    nothing, and a ``start`` that is given the same, runs the stage and returns the line that says it
-    is done. What a stage reads and writes, and which of its files a run started afresh deletes, is the
+    ``check`` that is given the task's settings, reads everything the stage will use, writes nothing
+    and gives what it worked out, and a ``start`` that is given the task's settings and what
+    ``check`` gave, runs the stage and returns the line that says it is done. Nothing a stage reads
+    to be checked is read or worked out again to be used. What a stage reads and writes, and which of its files a run started afresh deletes, is the
     stage's own to know. Until 25 November 2026 this module knew it for every stage, in a branch each.
     """
     return importlib.import_module(f"stages.{task}")
@@ -100,9 +101,9 @@ def run_task(settings: StageSettings) -> None:
     # A task that could not start then left a note in a folder that held none of its output, and the
     # next start with another model was refused as "output from another run"; started afresh, it had
     # deleted the earlier output before it found that it could not replace it.
-    stage.check(settings)
+    checked = stage.check(settings)
     _check_what_made_the_folder(settings)
-    logger.info(stage.start(settings))
+    logger.info(stage.start(settings, checked))
 
 
 def main() -> int:

@@ -133,7 +133,7 @@ def check(task: StageSettings) -> None:
     get_field_schema()
 
 
-def start(task: StageSettings) -> str:
+def start(task: StageSettings, checked: None) -> str:
     """Run the stage for a task, and give the line that says it is done."""
     start_afresh(task.clear_previous_output, task.cleaned_extractions)
     run(task.raw_extractions, task.cleaned_extractions)

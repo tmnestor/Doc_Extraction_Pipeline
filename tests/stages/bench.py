@@ -17,7 +17,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
-from model_inputs import InProcessContext, test_config  # noqa: E402
+from model_inputs import InProcessContext, run_settings, split_checked, test_config  # noqa: E402
 
 from common import vllm_dp  # noqa: E402
 from stages import classify, clean, evaluate, extract, split  # noqa: E402
@@ -126,13 +126,13 @@ class Bench:
 
     def split(self, output: Path, model: str = ONE_ENGINE) -> Path:
         """Run the split stage on the bench's pages. Gives the folder the later stages read images from."""
-        return split.run(self.pages, output, model_type=model, config_path=self.config)
+        return split.run(self.pages, output, split_checked(model, self.config))
 
     def classify(self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None) -> Path:
-        return classify.run(pages or self.pages, output, model_type=model, config_path=self.config)
+        return classify.run(pages or self.pages, output, classify.checked(run_settings(model, self.config)))
 
     def extract(self, classifications: Path, output: Path, model: str = ONE_ENGINE) -> Path:
-        return extract.run(classifications, self.pages, output, model_type=model, config_path=self.config)
+        return extract.run(output, extract.checked(classifications, run_settings(model, self.config)))
 
     def clean(self, raw_extractions: Path, output: Path) -> Path:
         return clean.run(raw_extractions, output)

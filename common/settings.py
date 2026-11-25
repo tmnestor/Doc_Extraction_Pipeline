@@ -172,6 +172,9 @@ class Settings:
     # The folder the stage writes to, when it gave one: only to place the record of what was sent to
     # the model, when that is kept and no place is named for it.
     output_dir: Path | None
+    # The share of each card's memory the job sets (DOC_EXTRACT_GPU_MEMORY_UTILIZATION), checked when
+    # the task was worked out. None: the model's own gpu_memory_utilization, of the settings file.
+    gpu_memory_utilization: float | None
     # Which pages of the folder are read.
     max_images: int | None
     document_types: list[str] | None
@@ -198,13 +201,22 @@ class Settings:
     _stage: str | None
 
     @classmethod
-    def load(cls, overrides: dict[str, Any], *, config_path: Path | None = None) -> "Settings":
+    def load(
+        cls,
+        overrides: dict[str, Any],
+        *,
+        config_path: Path | None = None,
+        raw: dict[str, Any] | None = None,
+    ) -> "Settings":
         """Read and check the settings.
 
         Args:
-            overrides: Any of ``model_type`` and ``num_gpus``, to stand in place of the file's, and
-                ``output_dir``, the folder the stage writes to. A value of None is taken as not given.
+            overrides: Any of ``model_type`` and ``num_gpus``, to stand in place of the file's;
+                ``output_dir``, the folder the stage writes to; and ``gpu_memory_utilization``, the
+                share of each card's memory the job sets. A value of None is taken as not given.
             config_path: The settings file, or None for the shipped one.
+            raw: What that file holds, when it has been read already (``read_settings_file``): a task
+                is worked out from one reading of its settings file. None reads the file.
 
         Raises:
             ConfigError: If the settings file does not exist, holds a key the pipeline does not know,
@@ -212,16 +224,18 @@ class Settings:
                 under a name no model has.
         """
         path = config_path or DEFAULT_CONFIG
-        raw = read_settings_file(path)
+        if raw is None:
+            raw = read_settings_file(path)
         given = {name: value for name, value in overrides.items() if value is not None}
         self = object.__new__(cls)
         self.config_path, self.raw, self._stage = path, raw, None
 
-        unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir"})
+        unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir", "gpu_memory_utilization"})
         if unknown:
             raise TypeError(f"Settings.load does not take {', '.join(unknown)}")
         folders = "pipeline.information_extraction"
         self.output_dir = Path(given["output_dir"]) if "output_dir" in given else None
+        self.gpu_memory_utilization = given.get("gpu_memory_utilization")
         self.max_images = _need(
             raw, f"{folders}.input.max_images", path, "null for every page, or a number"
         )

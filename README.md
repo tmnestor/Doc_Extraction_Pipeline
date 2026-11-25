@@ -89,10 +89,12 @@ Seven rules, which `tests/stages/test_every_stage_keeps_the_contract.py` holds.
 
 A task stands alone:
 
-1. It is one module of `stages/` with a `BANNER`, a `check(task)` and a `start(task)`. The runner knows
-   no more. `check` reads everything the task will use and writes nothing, and the runner calls it
-   before the note of what made the folder is written and before a task started afresh deletes its
-   earlier output: a task that cannot start leaves the folder as it found it.
+1. It is one module of `stages/` with a `BANNER`, a `check(task)` and a `start(task, checked)`. The
+   runner knows no more. `check` reads everything the task will use, writes nothing and gives what it
+   worked out, and the runner calls it before the note of what made the folder is written and before a
+   task started afresh deletes its earlier output: a task that cannot start leaves the folder as it
+   found it. `start` is handed what `check` gave, so a task is worked out once: its settings file is
+   read once, and nothing that was read to be checked is read again to be used.
 2. It reads its settings and the file the task before it wrote, and writes its own file. It imports no
    other task.
 3. A record handed from one task to the next is made by `stages/records.py` and by nothing else.

@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
+from bench import split_checked
 from common.engine_calls import StageStopped
 from common.settings import Settings
 from common.stage_settings import resolve
@@ -28,7 +29,7 @@ TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [
 
 
 def run(bench: Bench, output: Path, model: str) -> Path:
-    return split.run(bench.pages, output, model_type=model, config_path=bench.config)
+    return split.run(bench.pages, output, split_checked(model, bench.config))
 
 
 def names_in(path: Path) -> list[str]:
@@ -182,11 +183,11 @@ def test_split_carries_on_though_a_photograph_it_had_finished_has_gone(
     shutil.copytree(bench.pages, photographs)
     bench.processor.stop_at_call = 2
     with pytest.raises(Stopped):
-        split.run(photographs, output, model_type=ONE_ENGINE, config_path=bench.config)
+        split.run(photographs, output, split_checked(ONE_ENGINE, bench.config))
     bench.processor.stop_at_call = None
     (photographs / bench.names[0]).unlink()
 
-    split.run(photographs, output, model_type=ONE_ENGINE, config_path=bench.config)
+    split.run(photographs, output, split_checked(ONE_ENGINE, bench.config))
 
     # Its record is kept, after those of the photographs that are still there, and so is its image.
     assert names_in(output / "splits.jsonl") == [*bench.names[1:], bench.names[0]]
@@ -301,8 +302,7 @@ def test_a_run_of_split_given_the_runs_folder_notes_a_row_of_its_time(bench: Ben
     split.run(
         bench.pages,
         tmp_path / "out" / "split",
-        model_type=ONE_ENGINE,
-        config_path=bench.config,
+        split_checked(ONE_ENGINE, bench.config),
         timing=tmp_path / "out",
     )
 
@@ -320,7 +320,8 @@ def test_split_started_as_a_task_notes_its_row_in_the_runs_output_folder(
         "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
     }
 
-    split.start(resolve("split", environ, bench.config))
+    task = resolve("split", environ, bench.config)
+    split.start(task, split.check(task))
 
     (row,) = read_stage_timings(tmp_path / "out")
     assert (row.stage, row.images, row.execution_mode) == ("split", 6, "data-parallel (2 GPUs)")

@@ -379,12 +379,15 @@ not used once the pipeline has started. After that nothing is written beside the
   `inference.tracing.path` when what is sent to the model is kept. `entrypoint.sh` stops a job whose
   `output` or log folder is the code's folder, or inside it, before either is made.
 - **A setting is changed in a file of the job's own** (`run_config`, below), never in the shipped file.
-- **Python writes no compiled copies of the code** (`PYTHONDONTWRITEBYTECODE`, set by `entrypoint.sh`).
 - **No task runs git.** `entrypoint.sh` reads the commit from the files the checkout left (`.git/HEAD`
   and the reference it names), and each task notes it in `run_manifest.json`. Whether files differed
   from that commit cannot be told that way, and is noted as unknown.
 
-All three are a few lines of bash at the top of `entrypoint.sh`, which every job starts with.
+The folder check and the commit are a few lines of bash at the top of `entrypoint.sh`, which every job
+starts with.
+
+Python's compiled copies of the code (`__pycache__`) are left to Python. It writes them beside the code
+where it can, and where it cannot it goes on without them: an import does not fail for want of one.
 
 `tests/scripts/test_the_launch_is_decided_in_the_entry_script.py` runs the script, and
 `tests/common/test_nothing_is_written_beside_the_code.py` watches a whole run of the five tasks for any

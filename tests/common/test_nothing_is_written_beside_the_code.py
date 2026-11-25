@@ -5,8 +5,7 @@ there is stopped part way. git writes that folder once, when the job is launched
 not used after that.
 
 What is decided at launch is decided in ``entrypoint.sh``, in bash: the folders a job names are refused
-there if they are beside the code, Python is told to write no compiled copies of the code, and the
-commit is read from the checkout's files (``tests/scripts/test_the_launch_is_decided_in_the_entry_script.py``).
+there if they are beside the code, and the commit is read from the checkout's files (``tests/scripts/test_the_launch_is_decided_in_the_entry_script.py``).
 Here the Python is held to its part: no module a task runs starts git, and a whole run of the five tasks
 is watched, by Python's own audit of every file opened for writing, made, moved or removed, and touches
 nothing beside the code.
@@ -43,21 +42,6 @@ def environ(bench: Bench, out: Path, **more: str) -> dict[str, str]:
 
 
 # --- what is not the pipeline's own writing ------------------------------------------------------------
-
-
-def test_python_is_told_to_write_no_compiled_code_before_the_first_python_starts() -> None:
-    script = (REPO / "entrypoint.sh").read_text()
-    code = [line for line in script.splitlines() if not line.lstrip().startswith("#")]
-    told = next(i for i, line in enumerate(code) if line.strip() == "export PYTHONDONTWRITEBYTECODE=1")
-    first_python = next(i for i, line in enumerate(code) if "CONDA_PY" in line and "-m " in line)
-
-    assert told < first_python
-    assert all("python" not in line for line in code[:told])
-
-
-# --- git is not used once a task has started -------------------------------------------------------------
-# A job under a pipeline is launched from a commit: git writes the code's folder then, and that is the
-# last it is used. Until 26 November 2026 every task that uses the cards ran git twice as it started.
 
 
 def test_no_module_a_task_runs_starts_git() -> None:

@@ -63,10 +63,8 @@ fi
 # ---- Nothing is written beside the code ---- #
 # Under a pipeline this folder is in the job's pod: its storage is not kept, and a job that writes
 # there is stopped. git writes it once, when the job is launched from its commit, and is not used
-# after that. So Python is told to write no compiled copies of the code here (__pycache__), and
-# the folders the job names for its output and its log are refused, further down, if they are
-# inside this folder.
-export PYTHONDONTWRITEBYTECODE=1
+# after that. So the folders the job names for its output and its log are refused, further down,
+# if they are inside this folder.
 CODE_DIR="$(pwd -P)"
 beside_the_code() {
   case "$(realpath -m -- "$1")/" in "$CODE_DIR"/*) return 0 ;; *) return 1 ;; esac

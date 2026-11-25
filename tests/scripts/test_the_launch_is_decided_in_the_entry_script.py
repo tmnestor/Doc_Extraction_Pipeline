@@ -4,8 +4,8 @@ Every job starts with that script, and it is where a reader looks first. So the 
 settled before a task is worked out are settled there, in a few lines each:
 
 - which settings file is read: the shipped one, or the job's own, named in ``run_config``;
-- that nothing is written beside the code: Python is told to write no compiled copies there, and a
-  folder the job names for its output or its log is refused if it is inside the code's folder;
+- that nothing is written beside the code: a folder the job names for its output or its log is
+  refused if it is inside the code's folder;
 - which commit of the code this is, read from the checkout's own files, since git is not run once a
   job has started.
 
@@ -38,7 +38,7 @@ def started(
     environment = {
         key: value
         for key, value in os.environ.items()
-        if key not in JOB_VARIABLES and not key.startswith(("DOC_EXTRACT_", "PYTHONDONTWRITE"))
+        if key not in JOB_VARIABLES and not key.startswith("DOC_EXTRACT_")
     }
     return subprocess.run(
         ["bash", "entrypoint.sh"],
@@ -114,17 +114,6 @@ def test_a_share_that_is_one_or_is_not_set_gets_past_that_check(unset: str) -> N
     assert "bootstrap interpreter not found" in result.stdout
 
 
-def test_python_is_told_to_write_no_compiled_code_before_the_first_python_starts() -> None:
-    code = [
-        line
-        for line in (REPO / "entrypoint.sh").read_text().splitlines()
-        if not line.lstrip().startswith("#")
-    ]
-    told = next(i for i, line in enumerate(code) if line.strip() == "export PYTHONDONTWRITEBYTECODE=1")
-
-    assert all("python" not in line.lower() for line in code[:told])
-
-
 def test_the_script_runs_git_nowhere() -> None:
     code = [
         line
@@ -169,7 +158,6 @@ def test_a_job_that_names_its_own_settings_file_is_run_with_it_and_the_code_is_n
         ["git", "status", "--short"], cwd=REPO, capture_output=True, text=True, check=True
     )
     assert after.stdout == before.stdout
-    assert not list(REPO.glob("common/__pycache__/stage_settings.*.pyc.*"))
 
 
 @needs_the_environment

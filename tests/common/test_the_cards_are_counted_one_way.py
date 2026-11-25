@@ -145,7 +145,7 @@ def test_one_page_left_to_read_starts_one_engine_and_the_stage_says_so(
     monkeypatch.setattr(vllm_dp, "run_dp", run_dp)
     monkeypatch.setattr("common.pipeline_ops.check_processor", lambda settings: None)
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
-    run: Any = types.SimpleNamespace(model_type=ON_EACH_CARD)
+    run: Any = types.SimpleNamespace(model=ON_EACH_CARD)
 
     read = vllm_dp.read_on_the_cards(run, [f"page_{n}.png" for n in range(pages)], lambda *a, **k: [])
 

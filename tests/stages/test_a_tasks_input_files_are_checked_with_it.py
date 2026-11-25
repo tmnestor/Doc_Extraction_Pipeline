@@ -39,14 +39,13 @@ def environ(bench: Bench, out: Path, **more: str) -> dict[str, str]:
         "model": "gemma4-31b-w4a16-vllm",
         "image_dir": str(bench.pages),
         "output": str(out),
-        "DOC_EXTRACT_LOG_DIR": str(out.parent / "logs"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         "ground_truth": str(out.parent / "ground_truth.jsonl"),
         **more,
     }
 
 
 def started(bench: Bench, monkeypatch: pytest.MonkeyPatch, name: str, out: Path, **more: str) -> int:
-    monkeypatch.setattr(starter, "CONFIG_PATH", bench.config)
     monkeypatch.setattr(starter.os, "environ", {"KFP_TASK": name, **environ(bench, out, **more)})
     return starter.main()
 
@@ -57,7 +56,7 @@ def run_up_to(bench: Bench, name: str, out: Path) -> None:
     for earlier in ("classify", "extract", "clean"):
         if earlier == name:
             return
-        starter.run_task(resolve(earlier, environ(bench, out), bench.config))
+        starter.run_task(resolve(earlier, environ(bench, out)))
 
 
 def everything_under(folder: Path) -> dict[Path, bytes]:
@@ -188,7 +187,7 @@ def test_an_answer_key_that_cannot_be_used_ends_with_its_reason_and_no_traceback
 ) -> None:
     out = tmp_path / "out"
     run_up_to(bench, "evaluate", out)
-    starter.run_task(resolve("clean", environ(bench, out), bench.config))
+    starter.run_task(resolve("clean", environ(bench, out)))
     answers = tmp_path / "ground_truth.jsonl"
     answers.unlink()
     if key is not None:
@@ -223,7 +222,7 @@ def test_a_tasks_input_is_read_once(
 
     monkeypatch.setattr(stage, "read_input", counted)
 
-    starter.run_task(resolve(name, environ(bench, out), bench.config))
+    starter.run_task(resolve(name, environ(bench, out)))
 
     assert read == [file]
 
@@ -232,7 +231,7 @@ def test_the_tasks_all_run_and_score_after_these_checks(bench: Bench, tmp_path: 
     out = tmp_path / "out"
     run_up_to(bench, "evaluate", out)
     for name in ("clean", "evaluate"):
-        starter.run_task(resolve(name, environ(bench, out), bench.config))
+        starter.run_task(resolve(name, environ(bench, out)))
 
     results = [
         json.loads(line)

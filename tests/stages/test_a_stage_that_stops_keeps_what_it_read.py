@@ -23,7 +23,6 @@ import pytest
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
 
-from model_inputs import test_config  # noqa: E402
 
 from common import vllm_dp  # noqa: E402
 from common.stage_settings import resolve  # noqa: E402
@@ -33,7 +32,6 @@ from stages import split  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.io import Journal, read_jsonl  # noqa: E402
 
-test_config.__test__ = False  # type: ignore[attr-defined]
 
 from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped, split_checked  # noqa: E402
 
@@ -215,10 +213,10 @@ def read_and_then_fall_over(
 
 
 def test_when_a_card_fails_what_every_card_had_read_is_kept(bench: Bench, tmp_path: Path) -> None:
-    from common.settings import Settings
+    from bench import run_settings
 
     output = tmp_path / "out" / "classifications.jsonl"
-    settings = Settings.load({"model_type": AN_ENGINE_ON_EACH_CARD}, config_path=bench.config)
+    settings = run_settings(AN_ENGINE_ON_EACH_CARD, bench.models)
     pages = [bench.pages / name for name in bench.names]
     journal = Journal(output)
 
@@ -250,7 +248,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
     bench.processor.stop_at_call = 3
 
     with pytest.raises(Stopped):
-        split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
+        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
 
     # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
     # the journal, their images are written, and the stage's own file is not yet there.
@@ -261,7 +259,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
 
     bench.processor.stop_at_call = None
     bench.processor.calls.clear()
-    split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
+    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
 
     assert bench.processor.calls == [["2 photographs"]]
     assert names_in(output / "splits.jsonl") == bench.names
@@ -285,12 +283,10 @@ def test_a_stage_started_afresh_has_its_journal_deleted_with_its_output(
         "model": ONE_ENGINE,
         "image_dir": str(tmp_path / "pages"),
         "output": str(out),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
         "CLEAR_PREV_OUTPUT": "true",
     }
-    config = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
 
-    starter.run_task(resolve("classify", environ, config))
+    starter.run_task(resolve("classify", environ))
 
     assert not (out / "classifications.jsonl").exists()
     assert not (out / "classifications.jsonl.journal").exists()

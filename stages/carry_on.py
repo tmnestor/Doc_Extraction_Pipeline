@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from common.settings import Settings
+from common.stage_settings import StageSettings
 from common.stage_timing import inference_seconds_from_records, note_recovered, note_stage_timing
 from common.vllm_dp import Reading, read_on_the_cards
 
@@ -113,7 +113,7 @@ class _Kept:
         self.made.append(record if made is None else made)
 
 
-def carry_on(settings: Settings | None, work: Work) -> Carried:
+def carry_on(settings: StageSettings | None, work: Work) -> Carried:
     """Read what a stage has left to read, and leave its output as a run straight through would.
 
     In this order:
@@ -131,8 +131,7 @@ def carry_on(settings: Settings | None, work: Work) -> Carried:
     7. The stage's time is noted.
 
     Args:
-        settings: The run's settings; for a stage with its own engine settings, the copy made by
-            ``for_stage``. None is allowed only for work whose records are made with no model asked.
+        settings: The run's settings. None is allowed only for work whose records are made with no model asked.
         work: What the stage has to read, and where its records go.
 
     Returns:

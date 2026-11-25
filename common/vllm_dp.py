@@ -21,9 +21,9 @@ from queue import Empty
 from typing import Any, Protocol
 
 from common.cards import cards_to_use
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.engine_calls import StageStopped
-from common.settings import Settings
+from common.stage_settings import StageSettings
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +63,14 @@ class CardsRead:
 
 
 def read_on_the_cards(
-    settings: Settings, items: list[Any], read: Reading, *, sink: RecordSink | None = None
+    settings: StageSettings, items: list[Any], read: Reading, *, sink: RecordSink | None = None
 ) -> CardsRead:
     """Read a stage's pages with one engine on each card where the model allows it, else with one engine.
 
     The one place the arrangement is chosen. Either way the pages are read by ``read``.
 
     Args:
-        settings: The run's settings; for a stage with its own engine settings, the copy made by
-            ``for_stage``.
+        settings: The run's settings.
         items: What ``read`` reads: pages, or the records of pages, in order.
         read: The stage's reading function.
         sink: Where each record is written the moment it is made, if anywhere, so that a run that
@@ -86,7 +85,7 @@ def read_on_the_cards(
     # Before any engine is started, and here, not in a worker's process: what would stop a processor
     # being built then ends the run with its reason, and costs no engine's start.
     check_processor(settings)
-    engines = resolve_dp_gpus(settings.model_type)
+    engines = resolve_dp_gpus(settings.model)
     if engines:
         records = run_dp(num_gpus=engines, items=items, read=read, settings=settings, sink=sink)
         return CardsRead(records, max(1, min(engines, len(items))))
@@ -153,7 +152,7 @@ def run_dp(
     num_gpus: int,
     items: list[Any],
     read: Reading,
-    settings: Settings,
+    settings: StageSettings,
     sink: RecordSink | None = None,
 ) -> list[dict[str, Any]]:
     """Start an engine on each card, read each card's share, and give the records in the items' order.
@@ -247,7 +246,7 @@ class _ToTheParent:
 
 
 def _worker(
-    gpu_id: int, share: list[Any], read: Reading, settings: Settings, result_queue: Any, streams: bool
+    gpu_id: int, share: list[Any], read: Reading, settings: StageSettings, result_queue: Any, streams: bool
 ) -> None:
     """A worker's process: pin its card, start the engine on it, read its share, hand the records back."""
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)

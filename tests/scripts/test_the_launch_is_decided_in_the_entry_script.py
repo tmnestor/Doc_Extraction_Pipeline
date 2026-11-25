@@ -124,6 +124,9 @@ def test_a_task_that_is_not_one_of_the_five_is_refused(tmp_path: Path, task: str
         ("clean", "output"),
         ("evaluate", "ground_truth"),
         ("clean", "DOC_EXTRACT_LOG_DIR"),
+        ("split", "DOC_EXTRACT_MODELS_DIR"),
+        ("classify", "DOC_EXTRACT_MODELS_DIR"),
+        ("extract", "DOC_EXTRACT_MODELS_DIR"),
     ],
 )
 @pytest.mark.parametrize("blank", [None, "", "None"])
@@ -138,6 +141,7 @@ def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
         "output": str(tmp_path / "out"),
         "ground_truth": str(tmp_path / "ground_truth.jsonl"),
         "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+        "DOC_EXTRACT_MODELS_DIR": str(tmp_path / "models"),
     }
     if blank is None:
         del job[left_out]
@@ -150,7 +154,7 @@ def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
     assert not (tmp_path / "logs").exists()
 
 
-def test_clean_needs_no_model_no_pages_and_no_answer_key(tmp_path: Path) -> None:
+def test_clean_needs_no_model_no_weights_no_pages_and_no_answer_key(tmp_path: Path) -> None:
     result = started(a_clean_job(tmp_path))
 
     assert "FATAL: the task" not in result.stdout
@@ -159,7 +163,11 @@ def test_clean_needs_no_model_no_pages_and_no_answer_key(tmp_path: Path) -> None
 
 def test_a_folder_of_pages_that_is_not_there_is_refused(tmp_path: Path) -> None:
     job = a_clean_job(
-        tmp_path, KFP_TASK="classify", model="gemma4-31b-w4a16-vllm", image_dir=str(tmp_path / "mislaid")
+        tmp_path,
+        KFP_TASK="classify",
+        model="gemma4-31b-w4a16-vllm",
+        image_dir=str(tmp_path / "mislaid"),
+        DOC_EXTRACT_MODELS_DIR=str(tmp_path / "models"),
     )
 
     refused(started(job), "the folder of pages does not exist", "mislaid", "image_dir")
@@ -266,6 +274,7 @@ def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(
     assert logged("KFP_TASK") == "clean" and logged("output") == str(tmp_path / "out")
     assert logged("photo_split") == "false" and logged("CLEAR_PREV_OUTPUT") == "false"
     assert logged("document_types") == logged("max_images") == logged("model") == "<not set>"
+    assert logged("DOC_EXTRACT_MODELS_DIR") == "<not set>"
 
 
 @pytest.mark.parametrize(
@@ -313,9 +322,8 @@ def test_the_script_runs_git_and_python_nowhere_before_the_task() -> None:
     ]
 
     assert not any(" git " in f" {line} " for line in code)
-    assert [line for line in code if "python" in line and "log " not in line] == [
-        'python3 -m stages "$CONFIG_FILE"'
-    ]
+    assert [line for line in code if "python" in line and "log " not in line] == ["python3 -m stages"]
+    assert not any("run_config.yml" in line or "CONFIG_FILE" in line for line in code)
 
 
 # --- the script run to its end, with the clean task -----------------------------------------------------

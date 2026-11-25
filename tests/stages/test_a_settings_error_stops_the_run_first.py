@@ -20,7 +20,7 @@ import pytest
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
 from common import classification
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.pipeline_ops import check_prompts
 from common.prompt_catalog import PromptCatalog
 from common.stage_settings import resolve
@@ -211,12 +211,10 @@ def test_a_job_whose_rule_cannot_be_used_ends_with_its_reason_and_exit_code_one(
         "model": AN_ENGINE_ON_EACH_CARD,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
     }
-    monkeypatch.setattr(starter, "CONFIG_PATH", bench.config)
-    monkeypatch.setattr("common.settings.DEFAULT_CONFIG", bench.config)
     monkeypatch.setattr(starter.os, "environ", {**environ, "KFP_TASK": "classify"})
-    assert resolve("classify", environ, bench.config).model == AN_ENGINE_ON_EACH_CARD
+    assert resolve("classify", environ).model == AN_ENGINE_ON_EACH_CARD
 
     code = starter.main()
 

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from models.registry import IMAGE_TOKENS, get_model, list_models
 
@@ -32,13 +31,6 @@ def test_a_removed_model_is_refused_with_a_full_diagnostic(removed: str) -> None
     assert all(model in message for model in MODELS)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
     assert "internvl" not in message.replace(removed, "")
-
-
-def test_the_shipped_settings_name_a_registered_model() -> None:
-    raw = yaml.safe_load(RUN_CONFIG.read_text())
-
-    assert raw["bootstrap"]["model"]["type"] in MODELS
-    assert sorted(raw["bootstrap"]["model"]["default_paths"]) == MODELS
 
 
 # --- what a model's engine is started with is in its registration ---------------------------------------

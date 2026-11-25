@@ -20,7 +20,7 @@ from typing import Any
 
 import yaml
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 
 CONFIG = Path(__file__).parent.parent / "config" / "field_definitions.yaml"
 

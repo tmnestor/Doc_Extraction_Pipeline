@@ -5,8 +5,6 @@ angles, with a drop shadow, blur and noise. The true corners are therefore known
 is needed.
 """
 
-from pathlib import Path
-
 import cv2
 import numpy as np
 import pytest
@@ -22,7 +20,6 @@ from common.sheet_finder import (
     warp_upright,
 )
 
-RUN_CONFIG = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
 # The finder's measured values. Until 26 November 2026 they were read from the settings file.
 PARAMS = FinderParams()
 SHEET_W, SHEET_H = 352, 704

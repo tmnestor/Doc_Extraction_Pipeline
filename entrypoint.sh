@@ -29,6 +29,8 @@
 #                            Unset: the model is asked
 #   CLEAR_PREV_OUTPUT        true: delete the stage's earlier output first. Unset: false
 #   DOC_EXTRACT_LOG_DIR      the folder for the log. Needed by every task
+#   DOC_EXTRACT_MODELS_DIR   the folder that holds each model's folder of weights. Needed by
+#                            split, classify and extract
 #   DOC_EXTRACT_TRACE_FILE   keep what is sent to the model, in this file. Unset: not kept
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
 #   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take.
@@ -36,7 +38,7 @@
 #
 # By hand:
 #   KFP_TASK=classify model=gemma4-31b-w4a16-vllm image_dir=<folder> output=<folder> \
-#     DOC_EXTRACT_LOG_DIR=<folder> bash entrypoint.sh
+#     DOC_EXTRACT_LOG_DIR=<folder> DOC_EXTRACT_MODELS_DIR=<folder> bash entrypoint.sh
 #
 # =============================================================================
 
@@ -64,23 +66,10 @@ stop() {
 }
 IN_THE_JOB="in the environment of this job (the pipeline manifest, or the command that started it)."
 
-# ---- Variables under their old names are refused, not ignored ---- #
-# Until 21 November 2026 this script's own variables began with another prefix. A job that still sets one
-# would otherwise run with the setting silently dropped: its log, for one, written where nobody asked.
-OLD_PREFIX="L""MM_"
-OLD_NAMES="$(env | grep -oE "^${OLD_PREFIX}[A-Z_]+" | tr '\n' ' ' || true)"
-if [[ -n "$OLD_NAMES" ]]; then
-  stop "variable(s) set under a prefix this pipeline no longer reads: $OLD_NAMES" \
-    "the prefix ${OLD_PREFIX} was replaced by DOC_EXTRACT_; the old names are not read." \
-    "the variables $IN_THE_JOB" \
-    "DOC_EXTRACT_LOG_DIR, DOC_EXTRACT_CONDA_ENV, DOC_EXTRACT_GPU_MEMORY_UTILIZATION." \
-    "rename each variable listed above, keeping its value, and start the job again."
-fi
-
 # ---- A variable that is blank is not set ---- #
 JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images photo_split
-  document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_TRACE_FILE
-  DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+  document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_MODELS_DIR
+  DOC_EXTRACT_TRACE_FILE DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
 for NAME in $JOB_VARIABLES dataset run_config; do
   if [[ -z "${!NAME:-}" || "${!NAME}" == "None" ]]; then unset "$NAME"; fi
 done
@@ -105,7 +94,7 @@ fi
 
 # ---- The task, and what it needs ---- #
 case "${KFP_TASK:-}" in
-  split | classify | extract) NEEDED="model image_dir output" ;;
+  split | classify | extract) NEEDED="model image_dir output DOC_EXTRACT_MODELS_DIR" ;;
   clean) NEEDED="output" ;;
   evaluate) NEEDED="output ground_truth" ;;
   *)
@@ -199,10 +188,6 @@ if [[ "$HEAD_NOW" == "ref: "* ]]; then
   HEAD_NOW="$(cat ".git/${HEAD_NOW#ref: }" 2>/dev/null || true)"
 fi
 export DOC_EXTRACT_COMMIT="${HEAD_NOW:0:7}"
-
-# ---- The settings file ---- #
-# What is left of it: where each model's weights are. A run's choices are the variables above.
-CONFIG_FILE="./config/run_config.yml"
 
 # ---- CUDA Environment ---- #
 # Deterministic GPU indexing: ensures cuda:0 always maps to the same physical
@@ -380,4 +365,4 @@ fi
 log "KFP_TASK: $KFP_TASK"
 log "Commit:   ${DOC_EXTRACT_COMMIT:-<not a checkout>}"
 log ""
-python3 -m stages "$CONFIG_FILE"
+python3 -m stages

@@ -146,7 +146,7 @@ def test_the_time_of_a_failed_call_is_charged_to_the_items_tried_again(
 
 def test_a_setting_that_cannot_be_used_is_raised_and_the_requests_are_not_tried_again() -> None:
     """It would fail each request the same way, and record a run of failed pages for one mistake."""
-    from common.config_schema import ConfigError
+    from common.errors import ConfigError
 
     calls: list[list[str]] = []
 
@@ -161,7 +161,7 @@ def test_a_setting_that_cannot_be_used_is_raised_and_the_requests_are_not_tried_
 
 
 def test_a_setting_that_cannot_be_used_is_raised_from_a_request_tried_on_its_own() -> None:
-    from common.config_schema import ConfigError
+    from common.errors import ConfigError
 
     calls: list[list[str]] = []
 

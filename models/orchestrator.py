@@ -9,10 +9,9 @@ later, by the clean stage.
 from PIL import Image
 
 from common import classification
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.field_schema import get_field_schema
 from common.prompt_catalog import PromptCatalog
-from common.settings import Settings
 from models.backends.vllm_backend import VllmBackend
 
 # Completion budgets: the most tokens a reply may run to. The same for every model, so that a comparison
@@ -29,10 +28,9 @@ DETECTION_PROMPT = "detection"
 class DocumentOrchestrator:
     """Asks the model about pages, for the stages."""
 
-    def __init__(self, backend: VllmBackend, *, model_type_key: str, app_config: Settings) -> None:
+    def __init__(self, backend: VllmBackend, *, model_type_key: str) -> None:
         self._backend = backend
         self._model_type_key = model_type_key
-        self.app_config: Settings = app_config
         # The type of a page whose classification reply cannot be read.
         self._fallback_type = get_field_schema().fallback_type
 

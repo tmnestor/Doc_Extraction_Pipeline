@@ -26,7 +26,6 @@ from stages import extract as extract_stage
 NEVER = EngineWatch(10_000)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 MODEL = "gemma4-31b-w4a16-vllm"
 
 

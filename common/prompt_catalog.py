@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 
 _DETECTION_FILE = "document_type_detection.yaml"
 ANSWER_KINDS = ("columns", "yes_no", "number")

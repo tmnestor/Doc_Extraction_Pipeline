@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from stages import __main__ as starter
 
 FAMILY = [
@@ -81,7 +81,6 @@ def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
         "model": "gemma4-31b-w4a16-vllm",
         "image_dir": str(tmp_path / "pages"),
         "output": str(tmp_path / "out"),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("CLEAR_PREV_OUTPUT", raising=False)

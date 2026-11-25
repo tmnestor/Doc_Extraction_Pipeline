@@ -29,7 +29,6 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 
 import logging
 import shutil
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,9 +38,8 @@ from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.photo_split import PhotoSplitConfig
 from common.pipeline_ops import check_processor
 from common.prompt_catalog import PromptCatalog
-from common.settings import Settings
+from common.stage_settings import StageSettings
 from common.sheet_finder import FinderParams
-from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
@@ -276,13 +274,13 @@ class Checked:
     # several is cut. Off, every photograph is passed through and no model is asked.
     enabled: bool
     # The run's settings. None when the photo split is off: no model is asked, and none is looked for.
-    settings: Settings | None
+    settings: StageSettings | None
     # Every image of the folder, in the order of their names. The selection the later stages apply
     # (document types, a limit on the number of images) is theirs to apply, to what this stage writes.
     photographs: list[Path]
 
 
-def checked(enabled: bool, settings_of: Callable[[], Settings], image_dir: Path) -> Checked:
+def checked(settings: StageSettings, image_dir: Path) -> Checked:
     """Whether the photo split is on, the run's settings and the photographs, each read and checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
@@ -290,9 +288,8 @@ def checked(enabled: bool, settings_of: Callable[[], Settings], image_dir: Path)
     are ``common.photo_split.CONFIG`` and ``FINDER``.
 
     Args:
-        enabled: Whether the photo split is on: the job's ``photo_split``.
-        settings_of: Gives the run's settings. Called only when the photo split is on: with it off no
-            model is asked, and a model's folder that is not there must not stop the stage.
+        settings: The run's settings. Its ``photo_split`` says whether the photo split is on: with
+            it off no model is asked, and a model's folder that is not there does not stop the stage.
         image_dir: The folder of photographs.
 
     Raises:
@@ -302,11 +299,11 @@ def checked(enabled: bool, settings_of: Callable[[], Settings], image_dir: Path)
     if not photographs:
         raise no_pages_in(image_dir, "")
     logger.info("Found %d photographs in %s", len(photographs), image_dir)
-    if not enabled:
+    if not settings.photo_split:
         return Checked(False, None, photographs)
     # Read here, before any engine is started: it is asked for again where the model is asked.
     PromptCatalog().photo_split_prompt()
-    return Checked(True, settings_of(), photographs)
+    return Checked(True, settings, photographs)
 
 
 def check(task: StageSettings) -> Checked:
@@ -316,7 +313,7 @@ def check(task: StageSettings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     assert task.image_dir is not None
-    found = checked(task.photo_split, lambda: run_settings(task), task.image_dir)
+    found = checked(task, task.image_dir)
     if found.settings is not None:
         check_processor(found.settings)
     return found

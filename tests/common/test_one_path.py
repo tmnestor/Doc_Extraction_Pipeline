@@ -22,14 +22,12 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
 
-from model_inputs import InProcessContext, test_config  # noqa: E402
+from model_inputs import InProcessContext, models_folder, run_settings  # noqa: E402
 
 from common import extraction_batching, vllm_dp  # noqa: E402
-from common.settings import Settings  # noqa: E402
 from stages.classify import classify_pages  # noqa: E402
 from stages.extract import extract_pages  # noqa: E402
 
-test_config.__test__ = False  # type: ignore[attr-defined]
 
 KINDS = ("bank_statement", "invoice", "receipt")
 MEASUREMENTS = ("processing_time", "gpu_id")
@@ -74,10 +72,9 @@ class Bench:
     """A folder of invented pages, the settings to read them with, and the two arrangements to compare."""
 
     def __init__(self, folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        self.config_path = test_config(folder)
+        self.models = models_folder(folder)
         self.folder = folder / "pages"
         self.folder.mkdir()
-        self.overrides = {"model_type": "gemma4-31b-w4a16-vllm"}
         monkeypatch.setattr(extraction_batching, "PAGES_PER_CALL", 2)
         self.processor = StandIn()
         self.opened_with: list[Any] = []
@@ -113,13 +110,13 @@ class Bench:
         """What the stage's reading gives for these pages, without the times, which are measurements."""
         self.processor.calls.clear()
         if engines == 1:
-            app_config = Settings.load(dict(self.overrides), config_path=self.config_path)
+            app_config = run_settings("gemma4-31b-w4a16-vllm", self.models)
             if stage == "classify":
                 found = classify_pages(self.processor, pages, app_config)
             else:
                 found = extract_pages(self.processor, self.classified(pages), app_config)
         else:
-            app_config = Settings.load(dict(self.overrides), config_path=self.config_path)
+            app_config = run_settings("gemma4-31b-w4a16-vllm", self.models)
             if stage == "classify":
                 found = vllm_dp.run_dp(
                     num_gpus=engines,
@@ -161,7 +158,7 @@ def test_the_module_that_starts_engines_knows_nothing_about_documents_or_stages(
 def test_an_engine_on_a_card_is_started_with_the_settings_the_stage_hands_over(bench: Bench) -> None:
     """The stage's own engine settings, and one card: nothing is read again for a worker."""
     pages = bench.pages(2)
-    staged = Settings.load(dict(bench.overrides), config_path=bench.config_path)
+    staged = run_settings("gemma4-31b-w4a16-vllm", bench.models)
 
     vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=staged)
 
@@ -179,11 +176,10 @@ def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
     """
     import pickle
 
-    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path)
+    settings = run_settings("gemma4-31b-w4a16-vllm", bench.models)
     crossed = pickle.loads(pickle.dumps(settings))
 
-    assert crossed.model_type == settings.model_type
-    assert crossed.raw == settings.raw and crossed.model_path == settings.model_path
+    assert crossed == settings and crossed.model_path == settings.model_path
     for read in (classify_pages, extract_pages):
         assert pickle.loads(pickle.dumps(read)) is read
     pages = bench.pages(1)
@@ -201,7 +197,7 @@ def test_every_record_is_written_as_it_is_made_whichever_way_the_engines_are_arr
             self.records.append(record)
 
     pages = bench.pages(2)
-    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path)
+    settings = run_settings("gemma4-31b-w4a16-vllm", bench.models)
     names = [page.name for page in pages]
 
     for engines in (None, 2):
@@ -259,7 +255,7 @@ def test_each_engine_groups_its_pages_as_one_engine_would(bench: Bench, stage: s
 
 def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: Bench) -> None:
     pages = bench.pages(2)
-    app_config = Settings.load(dict(bench.overrides), config_path=bench.config_path)
+    app_config = run_settings("gemma4-31b-w4a16-vllm", bench.models)
 
     one = classify_pages(bench.processor, pages, app_config)
     two = vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=app_config)

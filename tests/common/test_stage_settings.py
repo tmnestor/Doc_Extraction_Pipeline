@@ -15,11 +15,10 @@ from typing import Any
 
 import pytest
 
-from common.stage_settings import TASKS, StageSettings, resolve, run_settings
+from common.stage_settings import TASKS, StageSettings, resolve
 from stages import __main__ as starter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 
 # What a sandbox command file sets for a stage.
 D = "/home/jovyan/nfs_share/tod_2026/evaluation_data"
@@ -40,7 +39,7 @@ def test_the_five_tasks() -> None:
 
 @pytest.mark.parametrize("task", ["split", "classify", "extract", "clean"])
 def test_the_usual_variables_give_the_task_its_folders(task: str) -> None:
-    settings = resolve(task, USUAL, RUN_CONFIG)
+    settings = resolve(task, USUAL)
 
     assert settings.task == task and settings.model == "gemma4-31b-w4a16-vllm"
     assert settings.image_dir == Path(f"{D}/snapshot_20261021/plain_20261021")
@@ -52,7 +51,7 @@ def test_the_usual_variables_give_the_task_its_folders(task: str) -> None:
 
 
 def test_a_job_that_makes_no_choice_reads_every_page_and_asks_the_model() -> None:
-    settings = resolve("classify", USUAL, RUN_CONFIG)
+    settings = resolve("classify", USUAL)
 
     assert settings.document_types is None and settings.max_images is None
     assert settings.photo_split is False and settings.clear_previous_output is False
@@ -73,7 +72,7 @@ def test_each_choice_of_a_run_is_read_from_its_variable() -> None:
         "ground_truth": "/data/pages/ground_truth.jsonl",
     }
 
-    settings = resolve("split", job, RUN_CONFIG)
+    settings = resolve("split", job)
 
     assert settings.document_types == ("receipt",) and settings.max_images == 12
     assert settings.photo_split is True and settings.clear_previous_output is True
@@ -94,43 +93,73 @@ def test_each_choice_of_a_run_is_read_from_its_variable() -> None:
 def test_document_types_written_loosely_select_the_types_named(
     written: str, selects: tuple[str, ...]
 ) -> None:
-    assert resolve("classify", {**USUAL, "document_types": written}, RUN_CONFIG).document_types == selects
+    assert resolve("classify", {**USUAL, "document_types": written}).document_types == selects
 
 
 def test_clean_and_evaluate_are_given_no_model_and_no_pages() -> None:
-    settings = resolve("clean", {"output": "/data/run"}, RUN_CONFIG)
+    settings = resolve("clean", {"output": "/data/run"})
 
-    assert settings.model is None and settings.image_dir is None
+    assert settings.model == "" and settings.image_dir is None and settings.models_dir is None
 
 
-def test_the_choices_reach_the_settings_the_engine_is_started_with(tmp_path: Path) -> None:
-    """The pages selected, and the file that what is sent to the model is kept in."""
-    import yaml
+def test_the_record_crosses_to_a_workers_process_and_is_equal_on_the_other_side() -> None:
+    """With an engine on each card, each worker is handed the settings its parent holds."""
+    import pickle
 
-    raw = yaml.safe_load(RUN_CONFIG.read_text())
-    (tmp_path / "config.json").write_text("{}")
-    raw["bootstrap"]["model"]["default_paths"] = dict.fromkeys(
-        raw["bootstrap"]["model"]["default_paths"], str(tmp_path)
-    )
-    config = tmp_path / "run_config.yml"
-    config.write_text(yaml.safe_dump(raw))
     job = {
         **USUAL,
         "document_types": "receipt,invoice",
         "max_images": "3",
-        "DOC_EXTRACT_TRACE_FILE": str(tmp_path / "sent.jsonl"),
+        "DOC_EXTRACT_TRACE_FILE": "/data/run/sent.jsonl",
         "DOC_EXTRACT_GPU_MEMORY_UTILIZATION": "0.85",
+        "DOC_EXTRACT_MODELS_DIR": "/models",
     }
+    settings = resolve("classify", job)
 
-    settings = run_settings(resolve("classify", job, config))
+    crossed = pickle.loads(pickle.dumps(settings))
 
-    assert settings.document_types == ("receipt", "invoice") and settings.max_images == 3
-    assert settings.trace_file == tmp_path / "sent.jsonl" and settings.gpu_memory_utilization == 0.85
+    assert crossed == settings and crossed is not settings
+    assert crossed.document_types == ("receipt", "invoice") and crossed.max_images == 3
+
+
+def test_a_models_weights_are_the_folder_of_its_registration_under_the_folder_the_job_names() -> None:
+    from models.registry import get_model
+
+    for model in ("gemma4-31b-w4a16-vllm", "gemma4-12b-unified-w4a16-vllm"):
+        settings = resolve("extract", {**USUAL, "model": model, "DOC_EXTRACT_MODELS_DIR": "/models"})
+
+        assert settings.model_path == Path("/models") / get_model(model).weights_folder
+    # A model's weights cannot be loaded under another's name: the two folders differ.
+    assert (
+        get_model("gemma4-31b-w4a16-vllm").weights_folder
+        != get_model("gemma4-12b-unified-w4a16-vllm").weights_folder
+    )
+
+
+def test_a_model_whose_weights_are_not_there_stops_its_task_at_the_check(tmp_path: Path) -> None:
+    from common.errors import ConfigError
+    from common.pipeline_ops import check_processor
+
+    settings = resolve("extract", {**USUAL, "DOC_EXTRACT_MODELS_DIR": str(tmp_path)})
+
+    with pytest.raises(ConfigError) as refused:
+        check_processor(settings)
+
+    message = str(refused.value)
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+    assert str(settings.model_path) in message and "DOC_EXTRACT_MODELS_DIR" in message
+    assert "config.json" in message
+
+
+def test_there_is_no_settings_file_and_nothing_that_reads_one() -> None:
+    assert not (REPO_ROOT / "config" / "run_config.yml").exists()
+    assert not (REPO_ROOT / "common" / "settings.py").exists()
+    assert not (REPO_ROOT / "common" / "config_schema.py").exists()
 
 
 def test_the_variable_that_cut_the_benchmark_short_is_no_longer_read() -> None:
     """How many pages are read is max_images, for every run."""
-    settings = resolve("classify", {**USUAL, "sroie_max_images": "forty"}, RUN_CONFIG)
+    settings = resolve("classify", {**USUAL, "sroie_max_images": "forty"})
 
     assert settings.max_images is None and not hasattr(settings, "sroie_max_images")
 
@@ -147,7 +176,7 @@ def settings_for(task: str, folder: Path, **changes: Any) -> StageSettings:
         "DOC_EXTRACT_LOG_DIR": str(folder / "logs"),
         **changes,
     }
-    return resolve(task, environ, RUN_CONFIG)
+    return resolve(task, environ)
 
 
 CHECKED = object()

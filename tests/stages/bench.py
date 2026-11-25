@@ -13,17 +13,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
-from model_inputs import InProcessContext, run_settings, split_checked, test_config  # noqa: E402
+from model_inputs import InProcessContext, models_folder, run_settings, split_checked  # noqa: E402
 
 from common import cards, engine_calls, extraction_batching, photo_split, vllm_dp  # noqa: E402
 from stages import classify, clean, evaluate, extract, split  # noqa: E402
-
-test_config.__test__ = False  # type: ignore[attr-defined]
 
 ONE_ENGINE = "gemma4-31b-w4a16-vllm"
 AN_ENGINE_ON_EACH_CARD = "gemma4-12b-unified-w4a16-vllm"
@@ -92,7 +89,8 @@ class Bench:
     def __init__(self, folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.root = folder
         self.monkeypatch = monkeypatch
-        shipped = yaml.safe_load(test_config(folder).read_text())
+        # The folder a job would name in DOC_EXTRACT_MODELS_DIR.
+        self.models = models_folder(folder)
         # Two pages to an engine call, and two cards, where the code has 64 and counts the machine's.
         self.pages_to_a_call(2)
         monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
@@ -108,8 +106,6 @@ class Bench:
                 rectify_pieces=False,
             ),
         )
-        self.config = folder / "two_to_a_call.yml"
-        self.config.write_text(yaml.safe_dump(shipped, sort_keys=False))
         self.pages = folder / "pages"
         self.pages.mkdir()
         self.names: list[str] = []
@@ -139,17 +135,17 @@ class Bench:
 
     def split(self, output: Path, model: str = ONE_ENGINE, *, photo_split: bool = True) -> Path:
         """Run the split stage on the bench's pages. Gives the folder the later stages read images from."""
-        return split.run(output, split_checked(model, self.config, self.pages, photo_split=photo_split))
+        return split.run(output, split_checked(model, self.models, self.pages, photo_split=photo_split))
 
     def classify(
         self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None, **choices: Any
     ) -> Path:
         """Run classify. ``choices`` are a job's: ``document_types``, ``max_images``."""
-        settings = run_settings(model, self.config, **choices)
+        settings = run_settings(model, self.models, **choices)
         return classify.run(output, classify.checked(pages or self.pages, settings))
 
     def extract(self, classifications: Path, output: Path, model: str = ONE_ENGINE) -> Path:
-        return extract.run(output, extract.checked(classifications, run_settings(model, self.config)))
+        return extract.run(output, extract.checked(classifications, run_settings(model, self.models)))
 
     def clean(self, raw_extractions: Path, output: Path) -> Path:
         return clean.run(clean.checked(raw_extractions), output)

@@ -35,7 +35,7 @@ def environ(bench: Bench, out: Path, **more: str) -> dict[str, str]:
         "model": ONE_ENGINE,
         "image_dir": str(bench.pages),
         "output": str(out),
-        "DOC_EXTRACT_LOG_DIR": str(out.parent / "logs"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         "ground_truth": str(out.parent / "ground_truth.jsonl"),
         **more,
     }
@@ -69,7 +69,7 @@ def test_a_task_that_notes_its_folder_starts_no_process(
     monkeypatch.setattr(subprocess, "Popen", refused)
     monkeypatch.setenv("DOC_EXTRACT_COMMIT", "0a1b2c3")
 
-    starter.run_task(resolve("classify", environ(bench, tmp_path / "out"), bench.config))
+    starter.run_task(resolve("classify", environ(bench, tmp_path / "out")))
 
     note = run_manifest.read(tmp_path / "out")["classify"]
     assert (note.commit, note.uncommitted_changes) == ("0a1b2c3", None)
@@ -147,11 +147,9 @@ def test_a_whole_run_of_the_five_tasks_writes_nothing_beside_the_code(
         for name in stage_settings.TASKS:
             if name == "split":
                 continue  # its images would become the pages: it is run on its own, below
-            starter.run_task(resolve(name, job, bench.config))
-        starter.run_task(
-            resolve("split", environ(bench, tmp_path / "photographs", model=model), bench.config)
-        )
-        starter.run_task(resolve("classify", {**job, "CLEAR_PREV_OUTPUT": "true"}, bench.config))
+            starter.run_task(resolve(name, job))
+        starter.run_task(resolve("split", environ(bench, tmp_path / "photographs", model=model)))
+        starter.run_task(resolve("classify", {**job, "CLEAR_PREV_OUTPUT": "true"}))
     finally:
         seen = _WATCHING.pop()
 

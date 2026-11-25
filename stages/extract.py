@@ -21,12 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from common import extraction_batching
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
 from common.field_schema import get_field_schema
 from common.pipeline_ops import check_processor
-from common.settings import Settings
-from common.stage_settings import StageSettings, run_settings
+from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
 from . import records as records_of
@@ -120,12 +119,12 @@ def run(output_path: Path, checked: "Checked") -> Path:
 class Checked:
     """What the stage is run with, read and checked."""
 
-    settings: Settings
+    settings: StageSettings
     # The pages' classification records, as the classify stage left them.
     classifications: list[dict[str, Any]]
 
 
-def checked(classifications_path: Path, settings: Settings) -> Checked:
+def checked(classifications_path: Path, settings: StageSettings) -> Checked:
     """The run's settings and the pages' classifications, with what reading the fields depends on checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
@@ -151,7 +150,7 @@ def check(task: StageSettings) -> Checked:
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    found = checked(task.classifications, run_settings(task))
+    found = checked(task.classifications, task)
     check_processor(found.settings)
     return found
 

@@ -224,7 +224,7 @@ def test_when_a_card_fails_what_every_card_had_read_is_kept(bench: Bench, tmp_pa
             "model_type": AN_ENGINE_ON_EACH_CARD,
         },
         config_path=bench.config,
-    ).for_stage("classify")
+    )
     pages = [bench.pages / name for name in bench.names]
     journal = Journal(output)
 

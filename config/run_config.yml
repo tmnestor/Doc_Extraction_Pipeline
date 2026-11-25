@@ -16,12 +16,6 @@ bootstrap:
     # null = the folder default_paths gives for the model in use. A path here is used only for the model
     # named in `type` above, so that one model's weights are never loaded under another's name.
     path: null
-    # false = the engine compiles CUDA graphs when it starts: a slower start and faster reading, which
-    # is the right trade for a run of more than a few pages. true skips the compiling.
-    enforce_eager: false
-    # none = the model's own chat template. Otherwise the path of a *.jinja file to use in its place: the
-    # last resort for a model whose template thinks by default and ignores enable_thinking.
-    chat_template: none
     # The folder of each model's weights.
     default_paths:
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
@@ -36,74 +30,11 @@ bootstrap:
     log_dir: null
 
 
-# The vLLM engine's settings for each model, and the trace of what is sent to it. There is no setting
-# for sampling: every request is decoded greedily (temperature 0), which is fixed where the request is
-# made (models/backends/vllm_backend.py) so that a difference between two runs is never the sampler's.
-# Completion budgets are pipeline.token_budgets, below.
+# The record of what is sent to the model. What a model's engine is started with (its context length,
+# how many requests it runs at once, its share of memory, its image tokens) is in its registration,
+# models/registry.py. There is no setting for sampling: every request is decoded greedily
+# (temperature 0), which is fixed where the request is made (models/backends/vllm_backend.py).
 inference:
-
-  vllm:
-    # What a model with no block of its own under `models` is given.
-    defaults:
-      gpu_memory_utilization: 0.90
-      max_model_len: 8192
-      max_num_seqs: 1
-      limit_mm_per_prompt: 1
-      enable_prefix_caching: true
-    # A block for each registered model, under its full name. Each key:
-    #   max_model_len            the longest request and reply together, in tokens
-    #   gpu_memory_utilization   the share of each card's memory the engine may take
-    #   limit_mm_per_prompt      images in a request. Always 1: a page is one image
-    #   max_num_seqs             requests the engine runs at once. A call under pipeline.batching may
-    #                            hold more: the engine queues the rest, and stays full while it does
-    #   enable_prefix_caching    reuse the engine's work on the part of a prompt shared with the last
-    #   mm_processor_kwargs      the image token budget asked of the model's processor. Gemma 4 takes
-    #                            70, 140, 280, 560 or 1120; 560 is the measured best for both models
-    #                            (280 loses small print, 1120 is far worse), so it is not to be raised
-    #   hf_overrides             the same budget as the model's own configuration names it. The two
-    #                            models name it differently, and it MUST equal max_soft_tokens: a
-    #                            test checks that they agree
-    #   stage_overrides          optional: settings one stage loads differently. Only classify takes
-    #                            them, and only for keys the model's own block states
-    models:
-      # One engine split across both cards (tp=2): its weights, 21.67 GiB, do not fit on one L4.
-      gemma4-31b-w4a16-vllm:
-        max_model_len: 8192
-        gpu_memory_utilization: 0.90
-        limit_mm_per_prompt: 1
-        # 16 is where the gain stops: the engine's cache holds about 16 bank statements at once.
-        max_num_seqs: 16
-        enable_prefix_caching: true
-        mm_processor_kwargs:
-          max_soft_tokens: 560
-        hf_overrides:
-          vision_soft_tokens_per_image: 560
-          vision_config:
-            default_output_length: 560
-        # Stated at 560, the same as extraction, so it changes nothing as shipped. At 280 the classify
-        # stage was faster and kept every type on clean pages; it has not been measured on photographs.
-        # The three values must move together.
-        stage_overrides:
-          classify:
-            mm_processor_kwargs:
-              max_soft_tokens: 560
-            hf_overrides:
-              vision_soft_tokens_per_image: 560
-              vision_config:
-                default_output_length: 560
-      # One whole engine on each card: its weights, 9.56 GiB, fit on one L4.
-      gemma4-12b-unified-w4a16-vllm:
-        max_model_len: 16384         # vLLM recipe recommends 16384-32768 for this model
-        gpu_memory_utilization: 0.90
-        limit_mm_per_prompt: 1
-        max_num_seqs: 10
-        enable_prefix_caching: true
-        mm_processor_kwargs:
-          max_soft_tokens: 560
-        # This model names the budget vision_config.num_soft_tokens. The 31B's names set nothing here.
-        hf_overrides:
-          vision_config:
-            num_soft_tokens: 560
   # A record of every prompt sent to the model and every reply, one JSON object a line, with the keys
   # image_name, pipeline, label, model, prompt, raw_response, prompt_tokens, completion_tokens.
   tracing:

@@ -1,8 +1,9 @@
 """The models the pipeline can run, by the name a task asks for.
 
 A model is one ``register_vllm_model(VllmSpec(...))`` call below. Its specification holds what is true of
-the model itself. How its engine is tuned (memory, context length, how many requests at once, the image
-token budget) is in ``config/run_config.yml`` under ``inference.vllm.models``.
+the model itself, and what its engine is started with on a card of 24 GB: the context length, how many
+requests it runs at once, its share of the card's memory and its number of image tokens. Until
+26 November 2026 those were a block for each model in the settings file.
 
 Nothing here imports the engine, so reading the registry costs nothing.
 """
@@ -28,15 +29,36 @@ class VllmSpec:
             for one card: starting an engine on each would run out of memory.
         default_image_first: Whether a request puts the image before the text. The model's chat template
             renders the two in the order given, so this is part of what the model is sent.
+        max_model_len: The longest request and reply together, in tokens.
+        max_num_seqs: How many requests the engine runs at once. An engine call may hold more: the
+            engine queues the rest, and stays full while it does.
+        gpu_memory_utilization: The share of each card's memory the engine may take. A job may set
+            another in ``DOC_EXTRACT_GPU_MEMORY_UTILIZATION``.
+        mm_processor_kwargs: The number of image tokens (``IMAGE_TOKENS``), as the model's processor is
+            asked for it.
+        hf_overrides: The same number as the model's own configuration names it. The two models name
+            it differently.
+        chat_template: The path of a ``*.jinja`` file to use in place of the model's own chat template,
+            or None for the model's own: the last resort for a model whose template thinks by default.
     """
 
     model_type: str
+    max_model_len: int
+    max_num_seqs: int
+    gpu_memory_utilization: float
+    mm_processor_kwargs: dict[str, Any]
+    hf_overrides: dict[str, Any]
     prompt_file: str = "extraction_prompts.yaml"
     description: str = ""
     chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
     supports_data_parallel: bool = True
     default_image_first: bool = False
+    chat_template: str | None = None
 
+
+# The image tokens a page is given. Gemma 4 takes 70, 140, 280, 560 or 1120: 560 is the measured best
+# for both models (280 loses small print, 1120 is far worse), so it is not to be raised.
+IMAGE_TOKENS = 560
 
 _REGISTRY: dict[str, VllmSpec] = {}
 
@@ -89,11 +111,18 @@ def supports_data_parallel(model_type: str) -> bool:
 # engine split across both cards (tp=2), over PCIe with no NVLink. Throughput
 # measured that way is less than the model would give on one adequate card.
 #
-# Engine tuning (soft-token budget, max_model_len, gpu_memory_utilization) lives in
-# run_config.yml under inference.vllm.models. Only capabilities are stated here.
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-31b-w4a16-vllm",
+        max_model_len=8192,
+        # 16 is where the gain stops: the engine's cache holds about 16 bank statements at once.
+        max_num_seqs=16,
+        gpu_memory_utilization=0.90,
+        mm_processor_kwargs={"max_soft_tokens": IMAGE_TOKENS},
+        hf_overrides={
+            "vision_soft_tokens_per_image": IMAGE_TOKENS,
+            "vision_config": {"default_output_length": IMAGE_TOKENS},
+        },
         prompt_file="extraction_prompts.yaml",
         description="Gemma 4 31B-it QAT W4A16 via vLLM (21.67 GiB, 2xL4 tp=2)",
         # Thinking off. This model's chat template takes a request without the argument as
@@ -130,6 +159,13 @@ register_vllm_model(
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-12b-unified-w4a16-vllm",
+        # What every run has used. The settings file shipped 16384 and 10, and each run changed them.
+        max_model_len=8192,
+        max_num_seqs=16,
+        gpu_memory_utilization=0.90,
+        mm_processor_kwargs={"max_soft_tokens": IMAGE_TOKENS},
+        # This model names the number vision_config.num_soft_tokens. The 31B's names set nothing here.
+        hf_overrides={"vision_config": {"num_soft_tokens": IMAGE_TOKENS}},
         prompt_file="extraction_prompts.yaml",
         description="Gemma 4 12B-it Unified QAT W4A16 via vLLM (9.56 GiB, 2xL4 DP=2/tp=1)",
         chat_template_kwargs={"enable_thinking": False},

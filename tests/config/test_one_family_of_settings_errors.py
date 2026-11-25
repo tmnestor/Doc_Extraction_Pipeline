@@ -15,7 +15,6 @@ from stages import __main__ as starter
 
 FAMILY = [
     ("common.extraction_batching", "BatchingConfigError"),
-    ("common.vllm_stage_overrides", "StageOverrideConfigError"),
     ("common.photo_split", "PhotoSplitConfigError"),
     ("common.sheet_finder_config", "FinderConfigError"),
     ("common.field_schema", "FieldSchemaError"),

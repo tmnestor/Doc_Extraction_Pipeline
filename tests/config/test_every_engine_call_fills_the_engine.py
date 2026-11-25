@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from common.settings import DEFAULT_CONFIG
+from models.registry import get_model, list_models
 
 SEVERAL = 3
 
@@ -24,18 +25,14 @@ def shipped() -> dict[str, Any]:
     return yaml.safe_load(DEFAULT_CONFIG.read_text())
 
 
-def most_at_once(raw: dict[str, Any]) -> int:
-    """The most requests any engine of the shipped file runs at once."""
-    engines = raw["inference"]["vllm"]
-    return max(
-        [engines["defaults"]["max_num_seqs"]]
-        + [own["max_num_seqs"] for own in engines["models"].values() if "max_num_seqs" in own]
-    )
+def most_at_once() -> int:
+    """The most requests any registered model's engine runs at once."""
+    return max(get_model(model).max_num_seqs for model in list_models())
 
 
 def test_every_size_of_call_is_several_times_what_an_engine_runs_at_once() -> None:
     raw = shipped()
-    least = SEVERAL * most_at_once(raw)
+    least = SEVERAL * most_at_once()
 
     too_small = {name: size for name, size in raw["pipeline"]["batching"].items() if size < least}
 

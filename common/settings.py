@@ -24,7 +24,6 @@ from typing import Any
 import yaml
 
 from common.config_schema import ConfigError, check_known_keys
-from common.vllm_stage_overrides import STAGES, apply_stage_overrides, validate_stage_overrides
 
 DEFAULT_CONFIG = Path(__file__).parent.parent / "config" / "run_config.yml"
 _SECONDARY_SORTS = ("none", "image_area_asc", "image_area_desc")
@@ -79,90 +78,15 @@ def _is_none(value: Any) -> bool:
     return value is None or str(value).strip().lower() in {"none", "null", ""}
 
 
-# What the engine is started with (models.model_loader.load_engine), for every model.
-_ENGINE_KEYS = (
-    "gpu_memory_utilization",
-    "max_model_len",
-    "max_num_seqs",
-    "limit_mm_per_prompt",
-    "enable_prefix_caching",
-)
 # What resources.infrastructure must set: each is read by name (Settings.get_infra).
 _INFRASTRUCTURE = ("dp_join_timeout",)
-
-
-def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
-    """The engine settings of each model: ``vllm.defaults`` with the model's own laid over them."""
-    section = raw.get("inference", {}).get("vllm", {})
-    defaults = section.get("defaults")
-    if not isinstance(defaults, dict):
-        raise ConfigError(
-            "What: the settings file has no inference.vllm.defaults block.\n"
-            f"Where: {path}, key inference.vllm.defaults.\n"
-            "Expected: a block such as\n"
-            "  inference:\n"
-            "    vllm:\n"
-            "      defaults:\n"
-            "        gpu_memory_utilization: 0.90\n"
-            "        max_model_len: 8192\n"
-            "        max_num_seqs: 1\n"
-            "        limit_mm_per_prompt: 1\n"
-            "        enable_prefix_caching: true\n"
-            f"How to fix: add that block to {path}."
-        )
-    missing = [key for key in _ENGINE_KEYS if key not in defaults]
-    if missing:
-        raise ConfigError(
-            f"What: inference.vllm.defaults does not set {', '.join(missing)}. The engine is started with "
-            f"every one of {', '.join(_ENGINE_KEYS)}, and a model's own block may leave any of them to the "
-            f"defaults.\n"
-            f"Where: {path} -> inference.vllm.defaults.{missing[0]}\n"
-            "Expected: each of them under defaults, e.g.\n"
-            "  inference:\n"
-            "    vllm:\n"
-            "      defaults:\n"
-            "        gpu_memory_utilization: 0.90\n"
-            "        max_model_len: 8192\n"
-            "        max_num_seqs: 1\n"
-            "        limit_mm_per_prompt: 1\n"
-            "        enable_prefix_caching: true\n"
-            f"How to fix: add {', '.join(missing)} under inference.vllm.defaults in {path}."
-        )
-    models = section.get("models", {})
-    _check_model_names(models, path)
-    validate_stage_overrides(models, config_path=str(path))
-    config: dict[str, dict] = {"__defaults__": dict(defaults)}
-    for model_name, own in models.items():
-        config[model_name] = {**defaults, **own}
-    return config
-
-
-def _check_model_names(vllm_models: dict, path: Path) -> None:
-    """Refuse a per-model block under a name no registered model has.
-
-    Such a block is never looked up: the model gets the defaults, and the block reads as if it were in
-    force.
-    """
-    from models.registry import list_models
-
-    registered = list_models()
-    unknown = sorted(set(vllm_models) - set(registered))
-    if unknown:
-        raise ConfigError(
-            f"What: inference.vllm.models has block(s) for no registered model: {', '.join(unknown)}. "
-            f"Such a block is never read, so its settings are not applied.\n"
-            f"Where: {path} -> inference.vllm.models.{unknown[0]}\n"
-            f"Expected: a block under a registered model's full name, one of: {', '.join(registered)}.\n"
-            f"How to fix: correct the name, or delete the block if the model should have the defaults "
-            f"above it."
-        )
 
 
 _TOKEN_BUDGETS = ("classify", "extract_base", "extract_per_field")
 
 
 class Settings:
-    """The run's settings. Nothing in it is changed after loading; ``for_stage`` gives a copy."""
+    """The run's settings. Nothing in it is changed after loading."""
 
     config_path: Path
     raw: dict[str, Any]
@@ -173,14 +97,12 @@ class Settings:
     # the model, when that is kept and no place is named for it.
     output_dir: Path | None
     # The share of each card's memory the job sets (DOC_EXTRACT_GPU_MEMORY_UTILIZATION), checked when
-    # the task was worked out. None: the model's own gpu_memory_utilization, of the settings file.
+    # the task was worked out. None: the model's own, in its registration.
     gpu_memory_utilization: float | None
     # Which pages of the folder are read.
     max_images: int | None
     document_types: list[str] | None
-    # How the engine is started.
-    enforce_eager: bool
-    chat_template: str | None
+    # How many cards the engine is started on.
     num_gpus: int
     data_parallel_size: int | None
     # Whether each page's type is printed as it is classified, and whether what is sent to the model is kept.
@@ -195,10 +117,8 @@ class Settings:
     extraction_skip_labels: list[str]
     classification_fallback_type: str
 
-    _vllm_config: dict[str, dict]
     _token_budgets: dict[str, int]
     _infrastructure: dict[str, int | float]
-    _stage: str | None
 
     @classmethod
     def load(
@@ -228,7 +148,7 @@ class Settings:
             raw = read_settings_file(path)
         given = {name: value for name, value in overrides.items() if value is not None}
         self = object.__new__(cls)
-        self.config_path, self.raw, self._stage = path, raw, None
+        self.config_path, self.raw = path, raw
 
         unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir", "gpu_memory_utilization"})
         if unknown:
@@ -248,8 +168,6 @@ class Settings:
             raw, f"{model}.type", path, "a registered model, e.g. type: gemma4-31b-w4a16-vllm"
         )
         self.model_path = cls._model_folder(raw, path, self.model_type)
-        self.enforce_eager = _need(raw, f"{model}.enforce_eager", path, "true or false")
-        self.chat_template = cls._chat_template(raw, path)
 
         gpus = "bootstrap.gpus"
         num_gpus = given.get("num_gpus")
@@ -273,7 +191,6 @@ class Settings:
         self.stop_after_failed_requests = cls._failed_requests_allowed(raw, path)
         self.trace_raw_prompts, self.trace_path = cls._tracing(raw, path)
 
-        self._vllm_config = _build_vllm_config(raw, path)
         self._token_budgets = cls._budgets(raw, path)
         self._infrastructure = cls._infrastructure_of(raw, path)
         self.classification_fallback_type = _need(
@@ -332,22 +249,6 @@ class Settings:
                 f"How to fix: give that key the model's folder."
             )
         return Path(listed)
-
-    @staticmethod
-    def _chat_template(raw: dict[str, Any], path: Path) -> str | None:
-        """A chat template to use in place of the model's own, or None for the model's own."""
-        value = _need(raw, "bootstrap.model.chat_template", path, "none, or the path of a *.jinja file")
-        if _is_none(value):
-            return None
-        template = Path(str(value)).expanduser()
-        if not template.is_file():
-            raise ConfigError(
-                f"What: 'bootstrap.model.chat_template' points to a file that does not exist: {value}\n"
-                f"Where: {path} -> bootstrap.model.chat_template\n"
-                "Expected: 'none' (use the model's template) or a path to an existing *.jinja file.\n"
-                f"How to fix: correct the path, or set 'chat_template: none' in {path}."
-            )
-        return str(template)
 
     @staticmethod
     def _tracing(raw: dict[str, Any], path: Path) -> tuple[bool, str | None]:
@@ -434,36 +335,11 @@ class Settings:
 
     # -- what the rest of the pipeline asks -------------------------------------------------------------
 
-    def for_stage(self, stage: str) -> "Settings":
-        """A copy whose engine settings are the ones ``stage`` loads its engine with.
-
-        A model may state settings one stage loads differently, in
-        ``inference.vllm.models.<model>.stage_overrides``. Everything else is shared with this object.
-
-        Raises:
-            ValueError: If ``stage`` is not a stage that takes overrides.
-        """
-        if stage not in STAGES:
-            msg = f"Unknown stage {stage!r} for vLLM stage overrides. Known stages: {', '.join(STAGES)}"
-            raise ValueError(msg)
-        staged = copy.copy(self)
-        staged._stage = stage
-        return staged
-
     def on_one_card(self) -> "Settings":
         """A copy for a process that sees one card only: the engine it starts is not split across cards."""
         one_card = copy.copy(self)
         one_card.num_gpus = 1
         return one_card
-
-    def get_vllm_config(self, model_type: str) -> dict[str, Any]:
-        """The engine settings of a model: its own block over ``inference.vllm.defaults``.
-
-        On a copy made by ``for_stage``, the model's overrides for that stage are applied.
-        """
-        defaults = self._vllm_config["__defaults__"]
-        own = self._vllm_config.get(model_type, {})
-        return apply_stage_overrides({**defaults, **own}, self._stage) if own else dict(defaults)
 
     def get_token_budget(self, name: str) -> int:
         """A completion budget from ``pipeline.token_budgets``."""

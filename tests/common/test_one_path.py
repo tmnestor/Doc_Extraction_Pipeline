@@ -114,7 +114,7 @@ class Bench:
         if engines == 1:
             app_config = Settings.load({**self.overrides, "num_gpus": 1}, config_path=self.config_path)
             if stage == "classify":
-                found = classify_pages(self.processor, pages, app_config.for_stage("classify"))
+                found = classify_pages(self.processor, pages, app_config)
             else:
                 found = extract_pages(self.processor, self.classified(pages), app_config)
         else:
@@ -124,7 +124,7 @@ class Bench:
                     num_gpus=engines,
                     items=pages,
                     read=classify_pages,
-                    settings=app_config.for_stage("classify"),
+                    settings=app_config,
                 )
             else:
                 found = vllm_dp.run_dp(
@@ -160,12 +160,12 @@ def test_the_module_that_starts_engines_knows_nothing_about_documents_or_stages(
 def test_an_engine_on_a_card_is_started_with_the_settings_the_stage_hands_over(bench: Bench) -> None:
     """The stage's own engine settings, and one card: nothing is read again for a worker."""
     pages = bench.pages(2)
-    staged = Settings.load(dict(bench.overrides), config_path=bench.config_path).for_stage("classify")
+    staged = Settings.load(dict(bench.overrides), config_path=bench.config_path)
 
     vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=staged)
 
     assert len(bench.opened_with) == 2
-    assert all(opened._stage == "classify" and opened.num_gpus == 1 for opened in bench.opened_with)
+    assert all(opened.num_gpus == 1 for opened in bench.opened_with)
     # The stage's own settings are not changed by making a card's copy.
     assert staged.num_gpus != 1 or staged is not bench.opened_with[0]
 
@@ -178,11 +178,10 @@ def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
     """
     import pickle
 
-    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path).for_stage("classify")
+    settings = Settings.load(dict(bench.overrides), config_path=bench.config_path)
     crossed = pickle.loads(pickle.dumps(settings.on_one_card()))
 
-    assert (crossed.model_type, crossed.num_gpus, crossed._stage) == (settings.model_type, 1, "classify")
-    assert crossed.get_vllm_config(crossed.model_type) == settings.get_vllm_config(settings.model_type)
+    assert (crossed.model_type, crossed.num_gpus) == (settings.model_type, 1)
     assert crossed.raw == settings.raw and crossed.model_path == settings.model_path
     for read in (classify_pages, extract_pages):
         assert pickle.loads(pickle.dumps(read)) is read
@@ -261,10 +260,8 @@ def test_every_record_names_the_time_it_took_and_a_worker_names_its_card(bench: 
     pages = bench.pages(2)
     app_config = Settings.load({**bench.overrides, "num_gpus": 1}, config_path=bench.config_path)
 
-    one = classify_pages(bench.processor, pages, app_config.for_stage("classify"))
-    two = vllm_dp.run_dp(
-        num_gpus=2, items=pages, read=classify_pages, settings=app_config.for_stage("classify")
-    )
+    one = classify_pages(bench.processor, pages, app_config)
+    two = vllm_dp.run_dp(num_gpus=2, items=pages, read=classify_pages, settings=app_config)
 
     assert all(record["processing_time"] >= 0.0 and "gpu_id" not in record for record in one)
     assert [record["gpu_id"] for record in two] == [0, 1, 0, 1, 0, 1]

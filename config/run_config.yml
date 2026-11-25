@@ -142,6 +142,19 @@ pipeline:
     max_new_tokens: 256        # the longest reply: four short fields
     batch_size: 8              # receipts to an engine call; the ceiling is the model's max_num_seqs
 
+  # Sets of pages that are all of one document type, known beforehand. A job reads one by naming it
+  # (dataset=sroie). classify then gives every page that type and asks no model, and the stages after
+  # it read the pages as they read any others, by the type's prompt and its fields in the schema file.
+  # To add a dataset: a block here, its type in config/field_definitions.yaml and a prompt of that
+  # name. With none, write  datasets: {}
+  datasets:
+    # The 347 receipts of the public SROIE test split.
+    sroie:
+      document_type: SROIE_RECEIPT
+      # Where its pages are. The job's image_dir stands in its place when set; null leaves the job to
+      # name the folder.
+      image_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test/img
+
   classification:
     fallback_type: UNIVERSAL     # the type of a page whose classification reply cannot be read
 

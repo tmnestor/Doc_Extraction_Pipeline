@@ -375,7 +375,12 @@ def test_classify_is_given_its_folders_and_says_how_long_it_took(
         starter.run_task(settings)
 
     assert stage.args == (settings.image_dir, settings.classifications)
-    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm", "config_path": RUN_CONFIG}
+    # No dataset is named, so no type is given: the model is asked.
+    assert stage.kwargs == {
+        "model_type": "gemma4-31b-w4a16-vllm",
+        "config_path": RUN_CONFIG,
+        "given_type": None,
+    }
     assert any("Classification complete (" in record.getMessage() for record in caplog.records)
     # The runner keeps no time of its own: a stage notes what it spent (tests/common/test_stage_timing.py).
     assert not (settings.output / ".inference_elapsed").exists()
@@ -482,3 +487,127 @@ def test_settings_that_cannot_be_worked_out_stop_the_run_with_the_message(monkey
 
     assert starter.main() == 1
     assert_diagnostic(capsys.readouterr().out, "KFP_TASK", *TASKS)
+
+
+# --- a dataset whose pages are all of one type ------------------------------------------------------------
+
+
+def with_datasets(tmp_path: Path, datasets: Any) -> Path:
+    def change(raw: dict[str, Any]) -> None:
+        if datasets is None:
+            del raw["pipeline"]["datasets"]
+        else:
+            raw["pipeline"]["datasets"] = datasets
+
+    return config_with(tmp_path, change)
+
+
+def test_the_shipped_file_has_the_sroie_receipts_as_a_dataset() -> None:
+    assert shipped("pipeline.datasets") == {
+        "sroie": {
+            "document_type": "SROIE_RECEIPT",
+            "image_dir": "/home/jovyan/nfs_share/tod_2026/data/sroie/test/img",
+        }
+    }
+
+
+def test_a_job_that_names_a_dataset_is_given_its_type_and_its_folder_of_pages() -> None:
+    environ = {k: v for k, v in USUAL.items() if k != "image_dir"} | {"dataset": "sroie"}
+
+    settings = resolve("classify", environ, RUN_CONFIG)
+
+    assert settings.dataset == "sroie" and settings.given_type == "SROIE_RECEIPT"
+    assert settings.image_dir == Path("/home/jovyan/nfs_share/tod_2026/data/sroie/test/img")
+
+
+def test_the_job_s_own_folder_of_pages_stands_in_place_of_the_dataset_s() -> None:
+    settings = resolve("classify", USUAL | {"dataset": "sroie"}, RUN_CONFIG)
+
+    assert settings.given_type == "SROIE_RECEIPT" and settings.image_dir == Path(USUAL["image_dir"])
+
+
+def test_a_dataset_with_no_folder_of_its_own_leaves_the_job_to_name_one(tmp_path: Path) -> None:
+    config = with_datasets(tmp_path, {"kept": {"document_type": "receipt", "image_dir": None}})
+
+    assert resolve("classify", USUAL | {"dataset": "kept"}, config).given_type == "receipt"
+    with pytest.raises(ConfigError) as refused:
+        resolve(
+            "classify", {k: v for k, v in USUAL.items() if k != "image_dir"} | {"dataset": "kept"}, config
+        )
+    assert_diagnostic(str(refused.value), "image_dir")
+
+
+@pytest.mark.parametrize("unset", [None, "", "None"])
+def test_a_job_that_names_no_dataset_is_as_it_always_was(unset: str | None) -> None:
+    environ = USUAL if unset is None else USUAL | {"dataset": unset}
+
+    settings = resolve("classify", environ, RUN_CONFIG)
+
+    assert settings.dataset is None and settings.given_type is None
+    assert settings.image_dir == Path(USUAL["image_dir"])
+
+
+def test_a_dataset_that_is_not_in_the_file_is_refused_with_those_that_are() -> None:
+    with pytest.raises(ConfigError) as refused:
+        resolve("classify", USUAL | {"dataset": "wildreceipt"}, RUN_CONFIG)
+
+    assert_diagnostic(str(refused.value), "wildreceipt", "sroie", "pipeline.datasets", str(RUN_CONFIG))
+
+
+def test_a_dataset_of_a_type_the_schema_does_not_have_is_refused_with_the_types_there_are(
+    tmp_path: Path,
+) -> None:
+    config = with_datasets(tmp_path, {"odd": {"document_type": "PERMIT", "image_dir": None}})
+
+    with pytest.raises(ConfigError) as refused:
+        resolve("clean", USUAL, config)
+
+    assert_diagnostic(str(refused.value), "PERMIT", "pipeline.datasets.odd.document_type", "sroie_receipt")
+
+
+@pytest.mark.parametrize(
+    ("block", "said"),
+    [
+        ({"document_type": "receipt"}, "image_dir"),
+        ({"image_dir": None}, "document_type"),
+        ({"document_type": "receipt", "image_dir": 7}, "image_dir"),
+        ("receipt", "pipeline.datasets.odd"),
+    ],
+)
+def test_a_dataset_that_is_not_its_two_keys_is_refused(tmp_path: Path, block: Any, said: str) -> None:
+    """Checked for every dataset whatever the job names, so that a fault is found before it is needed."""
+    config = with_datasets(tmp_path, {"odd": block})
+
+    with pytest.raises(ConfigError) as refused:
+        resolve("clean", USUAL, config)
+
+    assert_diagnostic(str(refused.value), said, "pipeline.datasets.odd")
+
+
+def test_a_dataset_with_a_key_the_pipeline_does_not_know_is_refused(tmp_path: Path) -> None:
+    config = with_datasets(
+        tmp_path, {"odd": {"document_type": "receipt", "image_dir": None, "scoring": "strict"}}
+    )
+
+    with pytest.raises(ConfigError) as refused:
+        resolve("clean", USUAL, config)
+
+    assert_diagnostic(str(refused.value), "pipeline.datasets.odd.scoring")
+
+
+def test_a_settings_file_with_no_datasets_block_is_refused_and_one_with_none_in_it_is_not(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ConfigError) as refused:
+        resolve("clean", USUAL, with_datasets(tmp_path, None))
+    assert_diagnostic(str(refused.value), "pipeline.datasets", "datasets: {}")
+
+    assert resolve("clean", USUAL, with_datasets(tmp_path, {})).given_type is None
+
+
+def test_classify_is_handed_the_type_its_dataset_gives(tmp_path: Path, stage: Called) -> None:
+    settings = settings_for("classify", tmp_path, dataset="sroie")
+
+    starter.run_task(settings)
+
+    assert stage.kwargs["given_type"] == "SROIE_RECEIPT"

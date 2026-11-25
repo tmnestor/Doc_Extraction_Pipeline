@@ -22,7 +22,7 @@ from common.stage_settings import StageSettings
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import start_afresh
+from .io import in_the_order, read_completed_images, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,12 @@ def run(
     *,
     model_type: str | None = None,
     config_path: Path | None = None,
+    given_type: str | None = None,
 ) -> Path:
     """Detect document types for all images, write classifications.jsonl.
+
+    When the pages are of a dataset that says what they are (``pipeline.datasets``), each is given that
+    type and no model is asked: no engine is started.
 
     A run carries on from what an earlier one left (``stages.carry_on``): pages already classified are
     not asked about again, a page an earlier run could not classify is, and the file is left in the
@@ -45,6 +49,7 @@ def run(
         output_path: Path to write classifications.jsonl.
         model_type: A registered model.
         config_path: Optional path to run_config.yml.
+        given_type: The document type the pages' dataset gives them, or None to ask the model.
 
     Returns:
         Path to the written classifications.jsonl.
@@ -73,6 +78,9 @@ def run(
         raise FileNotFoundError(msg)
 
     logger.info("Found %d images in %s", len(images), image_dir)
+    if given_type is not None:
+        _give_the_type(images, output_path, given_type)
+        return output_path
 
     def taken_out(records: list[dict[str, Any]]) -> None:
         logger.info("%d page(s) an earlier run could not classify will be asked about again", len(records))
@@ -113,6 +121,27 @@ def run(
         )
 
     return output_path
+
+
+def _give_the_type(images: list[Path], output_path: Path, given_type: str) -> None:
+    """Give each page the type its dataset says its pages are. No model is asked.
+
+    The stage carries on as ever: a page the output holds keeps its record, and the file is left in
+    the pages' order. The record is the one a page the model was asked about has, with nothing for a
+    reply, so that every stage after this reads it as it reads any other.
+    """
+    from common.classification import BY_THE_DATASET
+
+    held = read_completed_images(output_path)
+    told = [
+        records_of.given_its_type(str(page), given_type, BY_THE_DATASET)
+        for page in images
+        if page.name not in held
+    ]
+    in_the_order(output_path, [page.name for page in images], adding=told)
+    logger.info(
+        "%d page(s) given the type %s by the dataset: the model is not asked", len(told), given_type
+    )
 
 
 def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
@@ -290,5 +319,11 @@ def start(task: StageSettings) -> str:
     assert task.image_dir is not None
     start_afresh(task.clear_previous_output, task.classifications)
     started = time.time()
-    run(task.image_dir, task.classifications, model_type=task.model, config_path=task.config_path)
+    run(
+        task.image_dir,
+        task.classifications,
+        model_type=task.model,
+        config_path=task.config_path,
+        given_type=task.given_type,
+    )
     return f"Classification complete ({int(time.time() - started)}s)."

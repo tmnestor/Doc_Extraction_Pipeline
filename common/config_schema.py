@@ -46,6 +46,9 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         # `classify`, `default`, and a size for any document type by its name.
         "pipeline.batching.*",
         "pipeline.classification.fallback_type",
+        # A dataset by any name, each with its two keys.
+        "pipeline.datasets.*.document_type",
+        "pipeline.datasets.*.image_dir",
         "pipeline.extraction.order",
         "pipeline.extraction.secondary_sort",
         "pipeline.extraction.skip_labels",
@@ -150,7 +153,19 @@ def leaf_paths(raw: dict[str, Any], prefix: str = "") -> list[str]:
 def is_known(path: str) -> bool:
     """Whether a leaf's dotted path matches a declared key."""
     parts = path.split(".")
-    return any(_matches(parts, known.split(".")) for known in KNOWN_KEYS)
+    return any(
+        _matches(parts, known.split(".")) or _is_a_block_of(parts, known.split(".")) for known in KNOWN_KEYS
+    )
+
+
+def _is_a_block_of(parts: list[str], known: list[str]) -> bool:
+    """Whether a path is a block that a declared key lies under.
+
+    An empty mapping is a leaf, so a block written with nothing in it (``datasets: {}``) is a path that
+    stops short of every declared key. It is known as the block it is: what must be in it is for
+    whatever reads the block to say.
+    """
+    return len(parts) < len(known) and all(k in ("*", p) for k, p in zip(known, parts, strict=False))
 
 
 def _matches(parts: list[str], known: list[str]) -> bool:

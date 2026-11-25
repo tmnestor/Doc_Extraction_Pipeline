@@ -35,6 +35,8 @@ _GROUND_TRUTH = ("ground_truth", "pipeline.information_extraction.input.ground_t
 _OUTPUT = ("output", "pipeline.information_extraction.output.dir")
 _LOG_DIR = ("DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir")
 _SROIE_OUTPUT = "pipeline.sroie.output_dir"
+_DATASETS = "pipeline.datasets"
+_DATASET_KEYS = ("document_type", "image_dir")
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,9 @@ class StageSettings:
     sroie_max_images: int | None
     # The settings file these were worked out from. A stage that reads more of it reads this one.
     config_path: Path
+    # The dataset the job names, if it names one, and the document type that dataset gives its pages.
+    dataset: str | None = None
+    given_type: str | None = None
 
     # Every file a stage writes is under the output folder, so that one stage finds what another wrote.
 
@@ -106,6 +111,65 @@ def _value(
             f"How to fix: set {variable} in the job's environment, or give {key} a value in that file."
         )
     return value
+
+
+def _datasets(raw: Mapping[str, Any], config_path: Path) -> dict[str, tuple[str, str | None]]:
+    """Every dataset of the settings file: its document type, and its folder of pages if it names one.
+
+    All of them are checked, whichever the job names: a fault in one is found before it is needed.
+
+    Raises:
+        ConfigError: If the block is absent, a dataset is not its two keys, or its type is not a
+            document type of the schema file.
+    """
+    from common.field_schema import get_field_schema
+
+    where = config_path.resolve()
+    example = (
+        "  pipeline:\n    datasets:\n      receipts_of_a_shop:\n"
+        "        document_type: RECEIPT\n        image_dir: null"
+    )
+    block = value_at(raw, _DATASETS, None)
+    if not isinstance(block, Mapping):
+        raise ConfigError(
+            f"What: the settings file has no '{_DATASETS}' block.\n"
+            f"Where: {where} -> {_DATASETS}\n"
+            f"Expected: the datasets whose pages are all of one type, e.g.\n{example}\n"
+            f"  or, with none, datasets: {{}}\n"
+            f"How to fix: add the block to {where}. Write 'datasets: {{}}' if there is no such dataset."
+        )
+    types = get_field_schema().document_types
+    found: dict[str, tuple[str, str | None]] = {}
+    for name, entry in block.items():
+        key = f"{_DATASETS}.{name}"
+        if not isinstance(entry, Mapping) or set(entry) != set(_DATASET_KEYS):
+            has = sorted(entry) if isinstance(entry, Mapping) else repr(entry)
+            raise ConfigError(
+                f"What: the dataset '{name}' is not its two keys, {' and '.join(_DATASET_KEYS)}: it has {has}.\n"
+                f"Where: {where} -> {key}\n"
+                f"Expected: both keys and no other, e.g.\n{example}\n"
+                f"How to fix: give '{name}' a document_type, and an image_dir that is a folder or null."
+            )
+        kind, folder = entry["document_type"], entry["image_dir"]
+        if not isinstance(kind, str) or kind.lower() not in types:
+            raise ConfigError(
+                f"What: the dataset '{name}' gives its pages the type {kind!r}, which is not a document type.\n"
+                f"Where: {where} -> {key}.document_type\n"
+                f"Expected: a document type of config/field_definitions.yaml, in either case: "
+                f"{', '.join(sorted(types))}.\n"
+                f"How to fix: name one of those, or add the type's block to the schema file and a prompt "
+                f"of the same name to the prompt file."
+            )
+        if folder is not None and not isinstance(folder, str):
+            raise ConfigError(
+                f"What: the dataset '{name}' has an image_dir that is neither a folder nor null: {folder!r}.\n"
+                f"Where: {where} -> {key}.image_dir\n"
+                f"Expected: the folder that holds its pages, e.g. image_dir: /data/receipts, or null to "
+                f"leave the job to name it.\n"
+                f"How to fix: write the folder as text, or null."
+            )
+        found[str(name)] = (kind, folder or None)
+    return found
 
 
 def _refuse_old_names(environ: Mapping[str, str]) -> None:
@@ -166,9 +230,28 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         )
 
     model = value(_MODEL, True, "a registered model, e.g. model=gemma4-31b-w4a16-vllm")
-    image_dir = value(
-        _IMAGE_DIR, task in _READS_IMAGES, "the folder of pages to read, e.g. image_dir=/data/pages"
-    )
+
+    # A dataset the job names gives its pages their type, and their folder unless the job names one.
+    datasets = _datasets(raw, config_path)
+    dataset = _set(environ, "dataset")
+    given_type: str | None = None
+    of_the_dataset: str | None = None
+    if dataset is not None:
+        if dataset not in datasets:
+            raise ConfigError(
+                f"What: the job names the dataset {dataset!r}, which the settings file does not have.\n"
+                f"Where: the environment variable dataset, and the block {_DATASETS} in "
+                f"{config_path.resolve()}.\n"
+                f"Expected: one of {', '.join(sorted(datasets)) or '(the file has none)'}, or no dataset "
+                f"at all for pages whose types the model is to be asked.\n"
+                f"How to fix: correct the name, add the dataset to {_DATASETS}, or leave dataset unset."
+            )
+        given_type, of_the_dataset = datasets[dataset]
+    image_dir = _set(environ, _IMAGE_DIR[0]) or of_the_dataset
+    if image_dir is None:
+        image_dir = value(
+            _IMAGE_DIR, task in _READS_IMAGES, "the folder of pages to read, e.g. image_dir=/data/pages"
+        )
     if task == "sroie":
         # The benchmark writes to its own folder, named in its own block of the settings file. It is
         # asked for no other: until 25 November 2026 it was asked for the pipeline's output folder,
@@ -210,6 +293,8 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         clear_previous_output=_start_afresh(environ),
         sroie_max_images=_whole_number(environ, "sroie_max_images"),
         config_path=config_path,
+        dataset=dataset,
+        given_type=given_type,
     )
 
 

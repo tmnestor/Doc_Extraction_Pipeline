@@ -92,6 +92,8 @@ def test_every_way_a_type_is_reached_has_a_name() -> None:
         "fallback_no_answers",
         "fallback_no_rule",
         "fallback_not_asked",
+        # A page of a dataset that says what its pages are: the model is not asked.
+        "dataset",
     )
 
 

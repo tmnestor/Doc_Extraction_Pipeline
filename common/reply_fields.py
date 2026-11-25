@@ -228,8 +228,11 @@ def _first_pass(lines: list[str], expected_fields: list[str]) -> dict[str, str]:
         if not line.strip() or ":" not in line:
             i += 1
             continue
-        # Markdown goes first: a bullet's star, emphasis round a word, then any star left.
-        line = re.sub(r"^\s*\*+\s*", "", line)
+        # Markdown goes first: the mark of a list, emphasis round a word, then any star left. The mark
+        # is a star, however many, or a dash or a dot
+        # with a space after it, as a model writes the lines of a list. Until 25 November 2026 a dash was
+        # left, the name looked for was then "- NAME", and every field of such a reply was not found.
+        line = re.sub(r"^\s*(?:\*+\s*|[-•–]\s+)", "", line)
         line = re.sub(r"\*+([^*]+)\*+", r"\1", line).replace("**", "").replace("*", "")
         name, _, value = _plain_name_line(line).partition(":")
         name = spellings.get(name, name)

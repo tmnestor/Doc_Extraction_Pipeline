@@ -19,6 +19,8 @@ import pytest
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
 from common.engine_calls import StageStopped
 from common.settings import Settings
+from common.stage_settings import resolve
+from common.stage_timing import read_stage_timings
 from stages import split
 from stages.io import Journal, read_jsonl
 
@@ -250,3 +252,36 @@ def test_with_an_engine_on_each_card_the_stage_stops_when_the_engine_stops_answe
     # The photographs answered about before the stop were not asked about again.
     asked_again = sum(int(call[0].split()[0]) for call in bench.processor.calls)
     assert asked_again == len(bench.names) - sum(1 for record in kept if not record.get("error"))
+
+
+# --- the stage's time -----------------------------------------------------------------------------------
+
+
+def test_a_run_of_split_given_the_runs_folder_notes_a_row_of_its_time(bench: Bench, tmp_path: Path) -> None:
+    split.run(
+        bench.pages,
+        tmp_path / "out" / "split",
+        model_type=ONE_ENGINE,
+        config_path=bench.config,
+        timing=tmp_path / "out",
+    )
+
+    (row,) = read_stage_timings(tmp_path / "out")
+    assert (row.stage, row.images, row.execution_mode) == ("split", 6, "single-engine")
+
+
+def test_split_started_as_a_task_notes_its_row_in_the_runs_output_folder(
+    bench: Bench, tmp_path: Path
+) -> None:
+    environ = {
+        "model": AN_ENGINE_ON_EACH_CARD,
+        "image_dir": str(bench.pages),
+        "output": str(tmp_path / "out"),
+        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+    }
+
+    split.start(resolve("split", environ, bench.config))
+
+    (row,) = read_stage_timings(tmp_path / "out")
+    assert (row.stage, row.images, row.execution_mode) == ("split", 6, "data-parallel (2 GPUs)")
+    assert not (tmp_path / "out" / "split" / ".stage_timing.jsonl").exists()

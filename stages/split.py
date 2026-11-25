@@ -423,5 +423,12 @@ def start(task: StageSettings) -> str:
     """
     assert task.image_dir is not None
     task.split_dir.mkdir(parents=True, exist_ok=True)
-    images = run(task.image_dir, task.split_dir, model_type=task.model, config_path=task.config_path)
+    images = run(
+        task.image_dir,
+        task.split_dir,
+        model_type=task.model,
+        config_path=task.config_path,
+        # The row of the stage's time goes with the other stages', in the run's output folder.
+        timing=task.output,
+    )
     return f"Split complete. Later stages read their images from: {images}"

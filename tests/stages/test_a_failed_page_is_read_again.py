@@ -23,10 +23,10 @@ from typing import Any
 
 import pytest
 
-from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench
 from bench import split_checked
 from common.engine_calls import StageStopped
-from common.stage_timing import StageTiming, read_stage_timings, write_stage_timing
+from common.stage_timing import read_stage_timings
 from stages import __main__ as starter
 from stages import split
 from stages.io import read_jsonl, take_out
@@ -224,37 +224,6 @@ def test_a_page_given_another_type_since_it_was_read_is_read_again(bench: Bench,
     assert set(records) == set(bench.names)
     assert records[retyped]["document_type"] == "RECEIPT" and records[retyped]["prompt_used"] == "receipt"
     assert list(records) == in_reading_order(bench)
-
-
-def test_pages_set_apart_are_written_first_whether_the_run_went_straight_or_carried_on(
-    bench: Bench, tmp_path: Path
-) -> None:
-    bench.with_settings(lambda s: s["pipeline"]["extraction"].update(skip_labels=["RECEIPT"]))
-    out = tmp_path / "out"
-    classifications, output = classified(bench, out), out / "raw_extractions.jsonl"
-    straight = bench.extract(classifications, tmp_path / "straight" / "raw_extractions.jsonl")
-
-    bench.processor.stop_at_call = len(bench.processor.calls) + 2
-    with pytest.raises(Stopped):
-        bench.extract(classifications, output)
-    bench.processor.stop_at_call = None
-    bench.extract(classifications, output)
-
-    names = list(records_by_name(output))
-    assert names == list(records_by_name(straight))
-    assert [r["image_name"] for r in read_jsonl(output) if r.get("skipped")] == names[:2]
-
-
-def test_a_first_run_with_pages_set_apart_writes_its_row_of_time_anew(bench: Bench, tmp_path: Path) -> None:
-    """The records of the pages set apart must not make a first run look like one that carried on."""
-    bench.with_settings(lambda s: s["pipeline"]["extraction"].update(skip_labels=["RECEIPT"]))
-    out = tmp_path / "out"
-    write_stage_timing(out, StageTiming("extract", 999.0, 999.0, "an older run", 99))
-
-    bench.extract(classified(bench, out), out / "raw_extractions.jsonl")
-
-    (row,) = [t for t in read_stage_timings(out) if t.stage == "extract"]
-    assert row.images == 4 and row.execution_mode == "single-engine"
 
 
 # --- an engine that has stopped answering ---------------------------------------------------------------

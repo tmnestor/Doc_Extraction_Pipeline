@@ -31,7 +31,7 @@ from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import in_the_order, read_completed_images, read_input, start_afresh
+from .io import read_input, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -53,16 +53,14 @@ def run(output_path: Path, checked: "Checked") -> Path:
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    from common.extraction_sort import filter_skip_labels, sort_for_extraction
+    from common.extraction_sort import sort_for_extraction
 
     app_cfg, classifications = checked.settings, checked.classifications
 
-    # Pages of a type the settings say not to read are set apart. The rest are put one document type
-    # after another, so that the engine reuses its work on a type's prompt.
-    to_read, set_apart = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
-    in_order = sort_for_extraction(to_read, list(get_field_schema().read_in_this_order))
-    # The order of the output: the pages set apart, as they were classified, then the pages read.
-    order = [page["image_name"] for page in set_apart] + [page["image_name"] for page in in_order]
+    # The pages are put one document type after another, so that the engine reuses its work on a
+    # type's prompt. That is the order of the output too.
+    in_order = sort_for_extraction(classifications, list(get_field_schema().read_in_this_order))
+    order = [page["image_name"] for page in in_order]
 
     # Two kinds of page are read again: a page an earlier run could not read, and a page that has been
     # given another document type since it was read, whose record is of the wrong fields.
@@ -98,15 +96,6 @@ def run(output_path: Path, checked: "Checked") -> Path:
             timing=output_path.parent,
         ),
     )
-
-    # Each page set apart has a record too, so that the stages after this one see one record a page.
-    # They are added after the reading and not before it: a first run with such pages is then not
-    # taken for one that carried on. The order above still puts them first.
-    held = read_completed_images(output_path)
-    left_unread = [records_of.left_unread(page) for page in set_apart if page["image_name"] not in held]
-    if left_unread:
-        logger.info("Skipping %d records with skip labels", len(left_unread))
-        in_the_order(output_path, order, adding=left_unread)
 
     if carried.arrangement is None:
         return output_path
@@ -178,10 +167,7 @@ def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> No
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     schema = get_field_schema()
-    not_read = {label.lower() for label in app_config.extraction_skip_labels}
-    given = {
-        str(c["document_type"]) for c in classifications if str(c["document_type"]).lower() not in not_read
-    }
+    given = {str(c["document_type"]) for c in classifications}
     unknown = sorted(kind for kind in given if schema.document_type(kind) is None)
     if unknown:
         raise ConfigError(
@@ -190,8 +176,7 @@ def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> No
             f"Where: config/field_definitions.yaml, under document_types.\n"
             f"Expected: one of {', '.join(schema.document_types)}.\n"
             f"How to fix: give each type a block with its fields and a prompt of the same name in the "
-            f"model's prompt file, or name it under pipeline.extraction.skip_labels in "
-            f"{app_config.config_path} if its pages are not to be read."
+            f"model's prompt file."
         )
 
 

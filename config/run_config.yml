@@ -1,86 +1,15 @@
-# The pipeline's settings.
+# What is left of the pipeline's settings file: where each model's weights are.
 #
-# Everything a run is set to do that is not one of the job's variables (README, "What a job may set") is
-# here. Nothing is defaulted in Python: a key the code needs and does not find stops the run, and so does
-# a key the code does not know.
-#
-# This file says what is set and what each setting does. How each value was arrived at (the measurements,
-# the values tried and rejected) is in the evaluation repository's decisions notes, and in this file's own
-# history before 24 November 2026.
+# A run's choices are the job's variables, listed at the top of entrypoint.sh and checked there. The
+# values the code was tuned to are constants beside the code that uses them, and what an engine is
+# started with is in the model's registration (models/registry.py). What describes the documents is in
+# config/field_definitions.yaml and prompts/.
 
-# What is needed before any work begins: the model and the log.
 bootstrap:
   model:
-    # The model a task loads when the job names none. One of the names registered in models/registry.py.
+    # The model a task loads when it is handed none. One of the names registered in models/registry.py.
     type: gemma4-31b-w4a16-vllm
     # The folder of each model's weights.
     default_paths:
       gemma4-31b-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-31B-it-qat-w4a16-ct
       gemma4-12b-unified-w4a16-vllm: /home/jovyan/nfs_share/models/gemma-4-12B-it-qat-w4a16-ct
-  logging:
-    # Where the entry script writes its log when the job does not set DOC_EXTRACT_LOG_DIR. Null as
-    # shipped: a job that sets neither is stopped and told what to set, where a folder named here would
-    # be one machine's, and a run that forgot its own would write into it.
-    log_dir: null
-
-
-# The record of what is sent to the model. What a model's engine is started with (its context length,
-# how many requests it runs at once, its share of memory, its image tokens) is in its registration,
-# models/registry.py. There is no setting for sampling: every request is decoded greedily
-# (temperature 0), which is fixed where the request is made (models/backends/vllm_backend.py).
-inference:
-  # A record of every prompt sent to the model and every reply, one JSON object a line, with the keys
-  # image_name, pipeline, label, model, prompt, raw_response, prompt_tokens, completion_tokens.
-  tracing:
-    raw_prompts: false   # true = keep the record
-    path: none           # none = <output folder>/raw_prompt_trace.jsonl; or a path
-
-# What each task does.
-pipeline:
-  # The folders of split, classify, extract, clean and evaluate, when the job does not set them
-  # (image_dir, ground_truth, output). All three are null as shipped: a task that needs one and is given
-  # none is stopped and told what to set. A folder named here would be one machine's, and a run that
-  # forgot to name its own would read it, or write into it, without a word.
-  information_extraction:
-    input:
-      # The folder of pages. Absolute, and not beginning with ~: nothing expands it.
-      dir: null
-      # The answer key, a JSON lines file, for evaluate. It MUST be the key of the folder of pages above:
-      # file names repeat from one set to another, so the wrong key still gives plausible scores.
-      ground_truth: null
-      # Applied by the classify stage when it lists the folder. Both are null as shipped: a value left
-      # from a short trial would make a later run read fewer pages than intended.
-      max_images: null       # null = every page; N = the first N
-      document_types: null   # null = every page; a list keeps the pages whose file name holds one
-    output:
-      # Where the tasks write. A folder belongs to one run: a task carries on from what it holds, and
-      # refuses to carry on from another model's, folder of pages' or commit's (run_manifest.json).
-      dir: null
-
-  # The SROIE benchmark (KFP_TASK=sroie): 347 public receipts, four fields each. It has its own data,
-  # prompt, scorer and output folder, and reads only this block.
-  # Sets of pages that are all of one document type, known beforehand. A job reads one by naming it
-  # (dataset=sroie). classify then gives every page that type and asks no model, and the stages after
-  # it read the pages as they read any others, by the type's prompt and its fields in the schema file.
-  # To add a dataset: a block here, its type in config/field_definitions.yaml and a prompt of that
-  # name. With none, write  datasets: {}
-  datasets:
-    # The 347 receipts of the public SROIE test split.
-    sroie:
-      document_type: SROIE_RECEIPT
-      # Where its pages are. The job's image_dir stands in its place when set; null leaves the job to
-      # name the folder.
-      image_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test/img
-
-  # The split stage (KFP_TASK=split), which runs before classify on photographs. It asks the model where
-  # each receipt is, cuts a photograph of several into one image for each, and straightens an image
-  # whose rows of print drift far enough to mislead a reader. The later tasks then read
-  # <output>/split/images. Its rules and their measured values are in common/photo_split.py and
-  # common/sheet_finder.py, and its question to the model in prompts/photo_split.yaml.
-  photo_split:
-    # false = every photograph is copied through unchanged and the model is not loaded.
-    enabled: false
-
-  extraction:
-    # Types that are not read at all. A page of one is written as a skipped record.
-    skip_labels: []

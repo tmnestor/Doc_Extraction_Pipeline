@@ -56,7 +56,7 @@ def run(image_dir: Path, output_dir: Path) -> Path:
     def never() -> Any:
         raise AssertionError("with the photo split off the run's settings are not asked for")
 
-    return run_the_stage(output_dir, checked(RAW, RUN_CONFIG, never, image_dir))
+    return run_the_stage(output_dir, checked(False, never, image_dir))
 
 
 def reply_for(*boxes: list[int]) -> str:
@@ -221,8 +221,7 @@ def test_a_photograph_of_one_is_copied_through_byte_for_byte(tmp_path: Path) -> 
 
 
 def test_the_stage_as_shipped_copies_every_photograph_through_without_a_model(tmp_path: Path) -> None:
-    """Shipped with enabled false: the stage changes nothing, and never loads the model."""
-    assert RAW["pipeline"]["photo_split"]["enabled"] is False
+    """A job that does not set photo_split: the stage changes nothing, and never loads the model."""
     data = tmp_path / "data"
     data.mkdir()
     sources = [photograph(data / f"CASE00{n}_bank_statement.png") for n in (1, 2)]

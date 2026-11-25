@@ -1,17 +1,23 @@
 """What is decided at launch is decided in ``entrypoint.sh``, in bash, and is tried here by running it.
 
-Every job starts with that script, and it is where a reader looks first. So the three things that are
-settled before a task is worked out are settled there, in a few lines each:
+Every job starts with that script, and it is where a reader looks first. So what is settled before a
+task is worked out is settled there, in a few lines each:
 
-- which settings file is read: the shipped one, or the job's own, named in ``run_config``;
-- that nothing is written beside the code: a folder the job names for its output or its log is
-  refused if it is inside the code's folder;
+- a job's variables: that the task has those it needs, and that each value can be used. A variable that
+  is unset, empty or the word ``None`` is not set: a pipeline manifest passes a blank parameter as the
+  text "None";
+- that a variable the pipeline no longer reads is refused by name, and not dropped in silence;
+- that nothing is written beside the code: a folder the job names for its output, its log or its
+  record of what was sent to the model is refused if it is inside the code's folder;
 - which commit of the code this is, read from the checkout's own files, since git is not run once a
   job has started.
 
-The first two tests stop before the conda environment is looked for, and run anywhere. The rest run the
-script to its end with the ``clean`` task, which needs no model, and are skipped where the conda
-environment they name is not installed.
+Until 26 November 2026 a run's choices were keys of a settings file, each read and checked in Python.
+
+A start that is refused stops before anything is written. A start that gets past the checks writes its
+log and then stops for want of the conda environment, unless the test names one: those tests run the
+script to its end with the ``clean`` task, which needs no model, and are skipped where the environment
+they name is not installed.
 
 Every value written into a file here is invented.
 """
@@ -23,13 +29,24 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-SHIPPED = REPO / "config" / "run_config.yml"
 FOUR_PARTS = ("What:", "Where:", "Expected:", "Fix:")
 A_CONDA_ENV = Path("/opt/homebrew/Caskroom/miniforge/base/envs/du")
-JOB_VARIABLES = ("model", "image_dir", "output", "ground_truth", "dataset", "run_config", "KFP_TASK")
+JOB_VARIABLES = (
+    "KFP_TASK",
+    "model",
+    "image_dir",
+    "output",
+    "ground_truth",
+    "document_types",
+    "max_images",
+    "photo_split",
+    "document_type",
+    "dataset",
+    "run_config",
+    "CLEAR_PREV_OUTPUT",
+)
 
 
 def started(
@@ -51,13 +68,20 @@ def started(
     )
 
 
-def a_file_of_its_own(folder: Path) -> Path:
-    """A copy of the shipped settings file where a job can write, with its own log folder named."""
-    raw = yaml.safe_load(SHIPPED.read_text())
-    raw["bootstrap"]["logging"]["log_dir"] = str(folder / "logs_named_in_the_file")
-    path = folder / "run_config.yml"
-    path.write_text(yaml.safe_dump(raw, sort_keys=False))
-    return path
+def a_clean_job(folder: Path, **more: str) -> dict[str, str]:
+    """The variables of a job that cleans: an output folder and a log folder, where a job may write."""
+    return {
+        "KFP_TASK": "clean",
+        "output": str(folder / "out"),
+        "DOC_EXTRACT_LOG_DIR": str(folder / "logs"),
+        **more,
+    }
+
+
+def refused(result: subprocess.CompletedProcess[str], *said: str) -> None:
+    assert result.returncode == 1, result.stdout[-1500:]
+    assert "FATAL:" in result.stdout and all(part in result.stdout for part in FOUR_PARTS)
+    assert all(word in result.stdout for word in said), result.stdout[-1500:]
 
 
 def a_reply_to_clean(output: Path) -> None:
@@ -80,41 +104,208 @@ needs_the_environment = pytest.mark.skipif(
 )
 
 
-# --- before the conda environment is looked for ---------------------------------------------------------
+# --- the task, and what it needs ------------------------------------------------------------------------
 
 
-def test_a_settings_file_that_is_not_there_stops_the_job(tmp_path: Path) -> None:
-    result = started({"KFP_TASK": "clean", "run_config": str(tmp_path / "mislaid.yml")})
+@pytest.mark.parametrize("task", ["", "None", "run_info_extract", "sroie"])
+def test_a_task_that_is_not_one_of_the_five_is_refused(tmp_path: Path, task: str) -> None:
+    result = started(a_clean_job(tmp_path, KFP_TASK=task))
 
-    assert result.returncode == 1
-    assert "FATAL: the settings file does not exist" in result.stdout and "mislaid.yml" in result.stdout
-    assert all(part in result.stdout for part in FOUR_PARTS) and "run_config" in result.stdout
+    refused(result, "KFP_TASK", "split, classify, extract, clean or evaluate")
+    assert not (tmp_path / "logs").exists()
 
 
-@pytest.mark.parametrize("share", ["lots", "0", "1.5", "-0.2"])
-def test_a_share_of_memory_that_is_no_share_stops_the_job(share: str) -> None:
-    result = started({"KFP_TASK": "clean", "DOC_EXTRACT_GPU_MEMORY_UTILIZATION": share})
+@pytest.mark.parametrize(
+    ("task", "left_out"),
+    [
+        ("split", "model"),
+        ("classify", "image_dir"),
+        ("extract", "output"),
+        ("clean", "output"),
+        ("evaluate", "ground_truth"),
+        ("clean", "DOC_EXTRACT_LOG_DIR"),
+    ],
+)
+@pytest.mark.parametrize("blank", [None, "", "None"])
+def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
+    tmp_path: Path, task: str, left_out: str, blank: str | None
+) -> None:
+    (tmp_path / "pages").mkdir()
+    job = {
+        "KFP_TASK": task,
+        "model": "gemma4-31b-w4a16-vllm",
+        "image_dir": str(tmp_path / "pages"),
+        "output": str(tmp_path / "out"),
+        "ground_truth": str(tmp_path / "ground_truth.jsonl"),
+        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+    }
+    if blank is None:
+        del job[left_out]
+    else:
+        job[left_out] = blank
 
-    assert result.returncode == 1
-    assert (
-        "FATAL: DOC_EXTRACT_GPU_MEMORY_UTILIZATION is not a share" in result.stdout
-        and share in result.stdout
+    result = started(job)
+
+    refused(result, f"the task {task} needs {left_out}")
+    assert not (tmp_path / "logs").exists()
+
+
+def test_clean_needs_no_model_no_pages_and_no_answer_key(tmp_path: Path) -> None:
+    result = started(a_clean_job(tmp_path))
+
+    assert "FATAL: the task" not in result.stdout
+    assert (tmp_path / "logs").is_dir()
+
+
+def test_a_folder_of_pages_that_is_not_there_is_refused(tmp_path: Path) -> None:
+    job = a_clean_job(
+        tmp_path, KFP_TASK="classify", model="gemma4-31b-w4a16-vllm", image_dir=str(tmp_path / "mislaid")
     )
-    assert all(part in result.stdout for part in FOUR_PARTS)
+
+    refused(started(job), "the folder of pages does not exist", "mislaid", "image_dir")
 
 
-@pytest.mark.parametrize("unset", ["", "None", "0.85", "1"])
-def test_a_share_that_is_one_or_is_not_set_gets_past_that_check(unset: str) -> None:
-    """It then stops for want of the conda environment, which is named nowhere here."""
-    result = started(
-        {"KFP_TASK": "clean", "DOC_EXTRACT_GPU_MEMORY_UTILIZATION": unset, "run_config": "None"}
-    )
+@pytest.mark.parametrize("key", ["ground_truth.csv", "ground_truth.json", "ground_truth"])
+def test_an_answer_key_that_is_not_json_lines_is_refused_for_evaluate(tmp_path: Path, key: str) -> None:
+    job = a_clean_job(tmp_path, KFP_TASK="evaluate", ground_truth=str(tmp_path / key))
 
-    assert "is not a share" not in result.stdout and "settings file does not exist" not in result.stdout
-    assert "bootstrap interpreter not found" in result.stdout
+    refused(started(job), "is not a JSON lines file", key, "ground_truth.jsonl")
 
 
-def test_the_script_runs_git_nowhere() -> None:
+def test_the_format_of_the_answer_key_is_checked_for_evaluate_alone(tmp_path: Path) -> None:
+    result = started(a_clean_job(tmp_path, ground_truth=str(tmp_path / "ground_truth.csv")))
+
+    assert "JSON lines" not in result.stdout and (tmp_path / "logs").is_dir()
+
+
+# --- a run's choices ------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("max_images", "0"),
+        ("max_images", "-3"),
+        ("max_images", "twelve"),
+        ("max_images", "2.5"),
+        ("document_types", ","),
+        ("document_types", " , ,"),
+        ("photo_split", "yes"),
+        ("photo_split", "1"),
+        ("CLEAR_PREV_OUTPUT", "yes"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "lots"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "0"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "1.5"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "-0.2"),
+    ],
+)
+def test_a_value_that_cannot_be_used_is_refused_before_anything_is_written(
+    tmp_path: Path, variable: str, value: str
+) -> None:
+    result = started(a_clean_job(tmp_path, **{variable: value}))
+
+    refused(result, f"FATAL: {variable} ", value)
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("max_images", "12"),
+        ("document_types", "RECEIPT, invoice,"),
+        ("photo_split", "true"),
+        ("photo_split", "False"),
+        ("CLEAR_PREV_OUTPUT", "True"),
+        ("document_type", "RECEIPT"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "0.85"),
+        ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "1"),
+    ],
+)
+def test_a_value_that_can_be_used_is_logged_as_the_job_set_it(
+    tmp_path: Path, variable: str, value: str
+) -> None:
+    result = started(a_clean_job(tmp_path, **{variable: value}))
+
+    assert f"FATAL: {variable} " not in result.stdout
+    logged = [line for line in result.stdout.splitlines() if f" {variable} " in f"{line} "]
+    assert any(line.rstrip().lower().endswith(value.lower()) for line in logged), result.stdout[-1500:]
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "max_images",
+        "document_types",
+        "photo_split",
+        "document_type",
+        "ground_truth",
+        "CLEAR_PREV_OUTPUT",
+        "DOC_EXTRACT_TRACE_FILE",
+        "DOC_EXTRACT_GPU_MEMORY_UTILIZATION",
+    ],
+)
+@pytest.mark.parametrize("blank", ["", "None"])
+def test_a_variable_that_is_empty_or_the_word_none_is_not_set(
+    tmp_path: Path, variable: str, blank: str
+) -> None:
+    result = started(a_clean_job(tmp_path, **{variable: blank}))
+
+    assert f"FATAL: {variable} " not in result.stdout and "would write beside the code" not in result.stdout
+    assert (tmp_path / "logs").is_dir()
+
+
+def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(tmp_path: Path) -> None:
+    result = started(a_clean_job(tmp_path))
+
+    lines = result.stdout.splitlines()
+
+    def logged(name: str) -> str:
+        (line,) = [line for line in lines if f" {name} " in f"{line} " and "FATAL" not in line]
+        return line.split(name, 1)[1].strip()
+
+    assert logged("KFP_TASK") == "clean" and logged("output") == str(tmp_path / "out")
+    assert logged("photo_split") == "false" and logged("CLEAR_PREV_OUTPUT") == "false"
+    assert logged("document_types") == logged("max_images") == logged("model") == "<not set>"
+
+
+@pytest.mark.parametrize(
+    ("gone", "value", "use_instead"),
+    [
+        ("dataset", "sroie", "document_type"),
+        ("run_config", "/data/run_20261126/run_config.yml", "the variables listed at the top"),
+    ],
+)
+def test_a_variable_the_pipeline_no_longer_reads_is_refused_by_name(
+    tmp_path: Path, gone: str, value: str, use_instead: str
+) -> None:
+    result = started(a_clean_job(tmp_path, **{gone: value}))
+
+    refused(result, f"FATAL: {gone} ", "no longer read", use_instead)
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize("gone", ["dataset", "run_config"])
+def test_one_of_those_left_blank_by_a_manifest_is_not_refused(tmp_path: Path, gone: str) -> None:
+    result = started(a_clean_job(tmp_path, **{gone: "None"}))
+
+    assert "no longer read" not in result.stdout and (tmp_path / "logs").is_dir()
+
+
+# --- nothing beside the code, and no git ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("which", ["output", "DOC_EXTRACT_LOG_DIR", "DOC_EXTRACT_TRACE_FILE"])
+def test_a_place_named_beside_the_code_stops_the_job_before_it_is_made(tmp_path: Path, which: str) -> None:
+    beside = REPO / "written_by_a_job"
+
+    result = started(a_clean_job(tmp_path, **{which: str(beside)}))
+
+    refused(result, "FATAL: the job would write beside the code", str(beside))
+    assert not beside.exists() and not (tmp_path / "logs").exists()
+
+
+def test_the_script_runs_git_and_python_nowhere_before_the_task() -> None:
+    """git is not run once a job has started, and no Python decides anything before the task's own."""
     code = [
         line
         for line in (REPO / "entrypoint.sh").read_text().splitlines()
@@ -122,32 +313,26 @@ def test_the_script_runs_git_nowhere() -> None:
     ]
 
     assert not any(" git " in f" {line} " for line in code)
+    assert [line for line in code if "python" in line and "log " not in line] == [
+        'python3 -m stages "$CONFIG_FILE"'
+    ]
 
 
-# --- the script run to its end, with the clean task ----------------------------------------------------
+# --- the script run to its end, with the clean task -----------------------------------------------------
 
 
 @needs_the_environment
-def test_a_job_that_names_its_own_settings_file_is_run_with_it_and_the_code_is_not_touched(
-    tmp_path: Path,
-) -> None:
-    named = a_file_of_its_own(tmp_path)
+def test_a_job_is_run_from_its_variables_alone_and_the_code_is_not_touched(tmp_path: Path) -> None:
     a_reply_to_clean(tmp_path / "out")
     before = subprocess.run(
         ["git", "status", "--short"], cwd=REPO, capture_output=True, text=True, check=True
     )
 
-    result = started(
-        {"KFP_TASK": "clean", "run_config": str(named), "output": str(tmp_path / "out")}, A_CONDA_ENV
-    )
+    result = started(a_clean_job(tmp_path, max_images="None", document_type=""), A_CONDA_ENV)
 
     assert result.returncode == 0, result.stdout[-2000:]
-    # The log folder is the one the named file gives, and the task was worked out from that file.
-    logs = tmp_path / "logs_named_in_the_file"
-    assert f"Settings: {named}" in result.stdout and f"settings file:         {named}" in result.stdout
-    (log,) = logs.glob("entrypoint_*.log")
-    # The settings the start was run with are kept beside its log.
-    assert (logs / f"{log.stem}_run_config.yml").read_text() == named.read_text()
+    (log,) = (tmp_path / "logs").glob("entrypoint_*.log")
+    assert "Exited with code 0" in log.read_text()
     assert len((tmp_path / "out" / "cleaned_extractions.jsonl").read_text().splitlines()) == 1
     # The commit is the checkout's, read without git: the test asks git, to check the reading.
     commit = subprocess.run(
@@ -158,23 +343,3 @@ def test_a_job_that_names_its_own_settings_file_is_run_with_it_and_the_code_is_n
         ["git", "status", "--short"], cwd=REPO, capture_output=True, text=True, check=True
     )
     assert after.stdout == before.stdout
-
-
-@needs_the_environment
-@pytest.mark.parametrize("which", ["output", "DOC_EXTRACT_LOG_DIR"])
-def test_a_folder_named_beside_the_code_stops_the_job_before_it_is_made(tmp_path: Path, which: str) -> None:
-    named = a_file_of_its_own(tmp_path)
-    beside = REPO / "written_by_a_job"
-    job = {
-        "KFP_TASK": "clean",
-        "run_config": str(named),
-        "output": str(tmp_path / "out"),
-        which: str(beside),
-    }
-
-    result = started(job, A_CONDA_ENV)
-
-    assert result.returncode == 1
-    assert "FATAL: the job would write beside the code" in result.stdout and str(beside) in result.stdout
-    assert all(part in result.stdout for part in FOUR_PARTS)
-    assert not beside.exists() and not (tmp_path / "logs_named_in_the_file").exists()

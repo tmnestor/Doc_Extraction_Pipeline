@@ -45,9 +45,6 @@ class Headline:
     failed: int
     # Pages with no answer in the key.
     unanswered: int
-    # Pages the extract stage was set not to read (pipeline.extraction.skip_labels). They have no
-    # fields, and are in no score: a page that was not read did not score nothing.
-    not_read: int
     # Over the scored pages: the mean of their mean F1, and the mean of their median F1.
     mean_f1: float
     median_f1: float
@@ -56,16 +53,13 @@ class Headline:
     mean_f1_counting_failures: float
 
 
-def headline(
-    eval_results: list[dict[str, Any]], *, failed: int, unanswered: int, not_read: int
-) -> Headline:
+def headline(eval_results: list[dict[str, Any]], *, failed: int, unanswered: int) -> Headline:
     """The headline scores of a run's evaluation records.
 
     Args:
         eval_results: The records the stage writes, one a page.
         failed: How many of them are pages whose extraction failed.
         unanswered: How many of them are pages with no answer in the key.
-        not_read: How many of them are pages the extract stage was set not to read.
     """
     scored = [r for r in eval_results if "median_f1" in r and not records_of.failed(r)]
     total_mean = 0.0
@@ -78,7 +72,6 @@ def headline(
         scored=len(scored),
         failed=failed,
         unanswered=unanswered,
-        not_read=not_read,
         mean_f1=total_mean / len(scored) if scored else 0.0,
         median_f1=total_median / len(scored) if scored else 0.0,
         mean_f1_counting_failures=total_mean / (len(scored) + failed) if scored or failed else 0.0,
@@ -107,17 +100,9 @@ def run(checked: "Checked", output_dir: Path) -> Path:
     eval_results: list[dict[str, Any]] = []
     failed: list[str] = []
     unanswered: list[str] = []
-    not_read: list[str] = []
 
     for record in map(records_of.as_cleaned, records):
         image_name = record["image_name"]
-
-        if records_of.not_read(record):
-            # The extract stage was set not to read this page. It is recorded as not read and is in
-            # no score: until 25 November 2026 it was scored against its answer as all wrong.
-            not_read.append(image_name)
-            eval_results.append(records_of.scored_but_unread(record))
-            continue
 
         if records_of.failed(record):
             failed.append(image_name)
@@ -151,7 +136,7 @@ def run(checked: "Checked", output_dir: Path) -> Path:
     logger.info("Wrote %d evaluation results to %s", count, output_path)
 
     # Summary statistics
-    scores = headline(eval_results, failed=len(failed), unanswered=len(unanswered), not_read=len(not_read))
+    scores = headline(eval_results, failed=len(failed), unanswered=len(unanswered))
     if scores.scored:
         logger.info(
             "Summary: %d of %d images scored, avg F1 (median)=%.3f, avg F1 (mean)=%.3f",
@@ -179,13 +164,6 @@ def run(checked: "Checked", output_dir: Path) -> Path:
             ground_truth,
             _some(unanswered),
         )
-    if not_read:
-        logger.info(
-            "%d page(s) were not read, by pipeline.extraction.skip_labels, and are not scored: %s.",
-            len(not_read),
-            _some(not_read),
-        )
-
     # Rich Execution Summary table (equivalent to pre-staged-pipeline output)
     _print_summary_table(eval_results, records, output_dir, scores)
 
@@ -199,8 +177,6 @@ def score_rows(scores: Headline) -> list[tuple[str, str]]:
         rows.append(("Failed Extraction", f"{scores.failed} (in no score below)"))
     if scores.unanswered:
         rows.append(("No Answer In Key", f"{scores.unanswered} (not scored)"))
-    if scores.not_read:
-        rows.append(("Not Read (skip_labels)", f"{scores.not_read} (not scored)"))
     if scores.scored:
         rows.append(("Avg F1 (mean)", f"{scores.mean_f1:.3f}"))
         rows.append(("Avg F1 (median)", f"{scores.median_f1:.3f}"))
@@ -262,13 +238,11 @@ def _print_summary_table(
 
     num = len(eval_results)
     total_processing = sum(r.get("processing_time", 0.0) for r in cleaned_records)
-    # Each stage's row of time is judged by what that stage dealt with: classify every page, extract
-    # the pages that were read, which a page left unread is not among.
     time = run_time(
         read_stage_timings(output_dir.parent),
         per_image_total=total_processing,
         pages=num,
-        read=num - scores.not_read,
+        read=num,
     )
 
     doc_types: dict[str, int] = {}
@@ -287,7 +261,7 @@ def _print_summary_table(
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
     table.add_row("Images Processed", str(num))
-    for metric, value in time_rows(time, num - scores.not_read):
+    for metric, value in time_rows(time, num):
         table.add_row(metric, value)
     for metric, value in score_rows(scores):
         table.add_row(metric, value)

@@ -28,8 +28,8 @@ from stages.io import read_jsonl
 TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [0, 520, 1000, 1000], "label": "receipt"}]'
 
 
-def run(bench: Bench, output: Path, model: str) -> Path:
-    return split.run(output, split_checked(model, bench.config, bench.pages))
+def run(bench: Bench, output: Path, model: str, *, photo_split: bool = True) -> Path:
+    return split.run(output, split_checked(model, bench.config, bench.pages, photo_split=photo_split))
 
 
 def names_in(path: Path) -> list[str]:
@@ -202,9 +202,8 @@ def test_photo_split_switched_off_after_a_stopped_run_keeps_what_that_run_had_do
     with pytest.raises(Stopped):
         run(bench, output, ONE_ENGINE)
     bench.processor.stop_at_call = None
-    bench.with_settings(lambda settings: settings["pipeline"]["photo_split"].update(enabled=False))
 
-    run(bench, output, ONE_ENGINE)
+    run(bench, output, ONE_ENGINE, photo_split=False)
 
     records = read_jsonl(output / "splits.jsonl")
     assert [record["image_name"] for record in records] == bench.names
@@ -312,7 +311,7 @@ def test_split_started_as_a_task_notes_its_row_in_the_runs_output_folder(
         "model": AN_ENGINE_ON_EACH_CARD,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+        "photo_split": "true",
     }
 
     task = resolve("split", environ, bench.config)

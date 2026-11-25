@@ -30,25 +30,12 @@ def test_every_variable_a_job_may_set_is_in_the_table() -> None:
     header = (
         (REPO / "entrypoint.sh")
         .read_text()
-        .split("# The variables a job may set:")[1]
+        .split("# The variables a job may set.")[1]
         .split("# By hand")[0]
     )
     in_script = re.findall(r"^#   (\w+)", header, flags=re.MULTILINE)
-    assert len(in_script) == 11, in_script
+    assert len(in_script) == 14, in_script
     assert listed == in_script
-
-
-def test_the_settings_keys_in_the_table_are_the_ones_the_code_reads() -> None:
-    sources = (
-        stage_settings._MODEL,
-        stage_settings._IMAGE_DIR,
-        stage_settings._OUTPUT,
-        stage_settings._GROUND_TRUTH,
-        stage_settings._LOG_DIR,
-    )
-    for variable, key in sources:
-        row = next(line for line in README.splitlines() if line.startswith(f"| `{variable}` |"))
-        assert f"`{key}`" in row, (variable, key)
 
 
 # Words the flowchart grammar keeps for itself. A node named by one of them stops the whole diagram

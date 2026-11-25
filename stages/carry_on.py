@@ -55,8 +55,8 @@ class Work:
     # started, and there is no time on the cards to note. Until 26 November 2026 each such stage
     # wrote its own carrying on, and one of them kept the record of a page an earlier run had failed.
     tell: Callable[[Any], dict[str, Any]] | None = None
-    # Every name the output may hold, in order, when that is more than the items' names: extract's
-    # output holds a record for each page it was set not to read. None: the items' names.
+    # Every name the output may hold, in order, when that is not the items' names in the order given.
+    # None: the items' names.
     order: list[str] | None = None
     # Says of a record in the output whether its item is to be read again.
     read_again: Callable[[dict[str, Any]], bool] = records.failed

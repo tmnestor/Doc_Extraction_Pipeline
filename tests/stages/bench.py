@@ -137,18 +137,16 @@ class Bench:
         """Have a stage stop when this many requests in a row have failed."""
         self.monkeypatch.setattr(engine_calls, "STOP_AFTER_FAILED_REQUESTS", failures)
 
-    def with_settings(self, change: Any) -> None:
-        """Write the settings file again, with ``change`` applied to its contents."""
-        settings = yaml.safe_load(self.config.read_text())
-        change(settings)
-        self.config.write_text(yaml.safe_dump(settings, sort_keys=False))
-
-    def split(self, output: Path, model: str = ONE_ENGINE) -> Path:
+    def split(self, output: Path, model: str = ONE_ENGINE, *, photo_split: bool = True) -> Path:
         """Run the split stage on the bench's pages. Gives the folder the later stages read images from."""
-        return split.run(output, split_checked(model, self.config, self.pages))
+        return split.run(output, split_checked(model, self.config, self.pages, photo_split=photo_split))
 
-    def classify(self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None) -> Path:
-        return classify.run(output, classify.checked(pages or self.pages, run_settings(model, self.config)))
+    def classify(
+        self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None, **choices: Any
+    ) -> Path:
+        """Run classify. ``choices`` are a job's: ``document_types``, ``max_images``."""
+        settings = run_settings(model, self.config, **choices)
+        return classify.run(output, classify.checked(pages or self.pages, settings))
 
     def extract(self, classifications: Path, output: Path, model: str = ONE_ENGINE) -> Path:
         return extract.run(output, extract.checked(classifications, run_settings(model, self.config)))

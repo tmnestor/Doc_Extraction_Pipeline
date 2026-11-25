@@ -4,10 +4,8 @@ This is what ``entrypoint.sh`` starts, for every task:
 
     KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> python -m stages
 
-The settings come from ``common.stage_settings.resolve``: the environment first, the settings file second.
-The settings file is the one ``entrypoint.sh`` hands over as the first argument: the job's own if it names
-one in ``run_config``, and otherwise the shipped one beside the code.
-Here they are handed to the stage's own ``run``. Three things are done around a stage, the same for every
+The settings are the job's variables, which ``entrypoint.sh`` has checked, read into one record
+(``common.stage_settings.resolve``). Here they are handed to the stage's own ``run``. Three things are done around a stage, the same for every
 stage. A run carries on from where an earlier one stopped unless ``CLEAR_PREV_OUTPUT=true`` asks for the
 stage's own earlier output to be deleted first: pages arrive over time, and a second run should read only
 the new ones. A stage that carries on checks first that the earlier output is its own run's: the same
@@ -24,7 +22,8 @@ from typing import Any
 
 from common import run_manifest
 from common.engine_calls import StageStopped
-from common.stage_settings import ConfigError, StageSettings, check_folder_of_pages, resolve
+from common.config_schema import ConfigError
+from common.stage_settings import StageSettings, resolve
 
 
 logger = logging.getLogger("stages")
@@ -60,7 +59,7 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
         for line in run_manifest.describe(settings.output):
             logger.info("  made by %s", line)
         return
-    assert settings.image_dir is not None
+    assert settings.image_dir is not None and settings.model is not None
     settings.output.mkdir(parents=True, exist_ok=True)
     run_manifest.check_and_note(
         settings.output,
@@ -84,9 +83,6 @@ def run_task(settings: StageSettings) -> None:
     logger.info("=================================================================")
     logger.info("    %s", stage.BANNER)
     logger.info("=================================================================")
-    for name in ("model", "image_dir", "output", "ground_truth", "clear_previous_output"):
-        logger.info("  %-22s %s", name + ":", getattr(settings, name))
-    logger.info("  %-22s %s", "settings file:", settings.config_path)
 
     # In this order. The task is checked whole before anything is written: the note of what made the
     # folder is one thing written, and a stage started afresh deletes its earlier output. Until
@@ -103,11 +99,8 @@ def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        # The settings file entrypoint.sh hands over: the job's own if it names one, else the shipped one.
         config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONFIG_PATH
-        settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, config_path)
-        check_folder_of_pages(settings, config_path)
-        run_task(settings)
+        run_task(resolve(os.environ["KFP_TASK"], os.environ, config_path))
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
         return 1

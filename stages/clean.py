@@ -52,14 +52,7 @@ def run(raw_records: list[dict[str, Any]], output_path: Path) -> Path:
         image_name = record["image_name"]
         doc_type = record["document_type"]
 
-        # A page the extract stage was set not to read (pipeline.extraction.skip_labels) has no reply.
-        # It is passed on as not read. Until 25 November 2026 its empty reply was parsed like any
-        # other, every field came out as not found, and the evaluate stage scored the page as all wrong.
-        if records_of.not_read(record):
-            cleaned_records.append(records_of.cleaned_but_unread(record))
-            continue
-
-        # A page the extract stage could not read has no reply either: its error is passed on.
+        # A page the extract stage could not read has no reply: its error is passed on.
         if records_of.failed(record):
             logger.warning("Skipping %s: extraction error: %s", image_name, record["error"])
             cleaned_records.append(records_of.cleaned_but_failed(record))
@@ -100,13 +93,6 @@ def run(raw_records: list[dict[str, Any]], output_path: Path) -> Path:
         total_fields,
         error_count,
     )
-    not_read = sum(1 for r in cleaned_records if records_of.not_read(r))
-    if not_read:
-        logger.info(
-            "%d page(s) were not read, by pipeline.extraction.skip_labels, and are passed on as not read",
-            not_read,
-        )
-
     return output_path
 
 

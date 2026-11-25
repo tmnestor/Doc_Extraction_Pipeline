@@ -21,33 +21,3 @@ def sort_for_extraction(records: list[dict[str, Any]], type_order: list[str]) ->
     return sorted(
         records, key=lambda record: place.get(record.get("document_type", "").lower(), len(place))
     )
-
-
-def filter_skip_labels(
-    records: list[dict[str, Any]],
-    skip_labels: list[str],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Partition records into (to_extract, skipped) based on skip labels.
-
-    Args:
-        records: Classification dicts with ``document_type`` key.
-        skip_labels: Labels that should bypass extraction.
-
-    Returns:
-        Tuple of (records to process, records to skip).
-    """
-    if not skip_labels:
-        return records, []
-
-    skip_set = {label.lower() for label in skip_labels}
-    to_extract: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-
-    for rec in records:
-        doc_type = rec.get("document_type", "")
-        if doc_type.lower() in skip_set:
-            skipped.append(rec)
-        else:
-            to_extract.append(rec)
-
-    return to_extract, skipped

@@ -160,16 +160,10 @@ def test_a_folder_with_no_page_in_it_ends_with_its_reason_and_no_traceback(
 def test_a_folder_with_no_page_of_the_types_selected_says_which_setting_selects(
     bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    bench.with_settings(
-        lambda settings: settings["pipeline"]["information_extraction"]["input"].update(
-            document_types=["payslip"]
-        )
-    )
-
-    assert started(bench, monkeypatch, "classify", tmp_path / "out") == 1
+    assert started(bench, monkeypatch, "classify", tmp_path / "out", document_types="payslip") == 1
 
     printed = capsys.readouterr().out
-    assert "payslip" in printed and "pipeline.information_extraction.input.document_types" in printed
+    assert "payslip" in printed and "the variable document_types" in printed
 
 
 # --- the answer key ----------------------------------------------------------------------------------------

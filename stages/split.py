@@ -17,7 +17,7 @@ Writes into the output directory:
                     each was turned to level its print, whether it was rectified, how far its rows of
                     print drift (in text heights), and the model's reply.
 
-With `pipeline.photo_split.enabled: false` every photograph is copied through and the model is not loaded.
+Unless the job sets `photo_split=true`, every photograph is copied through and the model is not loaded.
 
 Every image in the directory is examined: the selection the later stages apply (document types, a limit on the
 number of images) is applied by them, to what this stage writes.
@@ -35,12 +35,11 @@ from pathlib import Path
 from typing import Any
 
 from common import photo_split
-from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.photo_split import PhotoSplitConfig
 from common.pipeline_ops import check_processor
 from common.prompt_catalog import PromptCatalog
-from common.settings import Settings, read_settings_file, value_at
+from common.settings import Settings
 from common.sheet_finder import FinderParams
 from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
@@ -283,9 +282,7 @@ class Checked:
     photographs: list[Path]
 
 
-def checked(
-    raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Settings], image_dir: Path
-) -> Checked:
+def checked(enabled: bool, settings_of: Callable[[], Settings], image_dir: Path) -> Checked:
     """Whether the photo split is on, the run's settings and the photographs, each read and checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
@@ -293,8 +290,7 @@ def checked(
     are ``common.photo_split.CONFIG`` and ``FINDER``.
 
     Args:
-        raw: What the settings file holds.
-        config_path: That file, named in each error.
+        enabled: Whether the photo split is on: the job's ``photo_split``.
         settings_of: Gives the run's settings. Called only when the photo split is on: with it off no
             model is asked, and a model's folder that is not there must not stop the stage.
         image_dir: The folder of photographs.
@@ -302,15 +298,6 @@ def checked(
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    enabled = value_at(raw, "pipeline.photo_split.enabled", None)
-    if not isinstance(enabled, bool):
-        raise ConfigError(
-            f"What: pipeline.photo_split.enabled is {enabled!r}, not true or false.\n"
-            f"Where: {config_path} -> pipeline.photo_split.enabled\n"
-            f"Expected: true, to ask the model where each receipt is and cut a photograph of several; "
-            f"or false, to pass every photograph through.\n"
-            f"How to fix: set enabled to true or false."
-        )
     photographs = list(discover_images(image_dir))
     if not photographs:
         raise no_pages_in(image_dir, "")
@@ -328,9 +315,8 @@ def check(task: StageSettings) -> Checked:
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    raw = task.raw if task.raw is not None else read_settings_file(task.config_path)
     assert task.image_dir is not None
-    found = checked(raw, task.config_path, lambda: run_settings(task), task.image_dir)
+    found = checked(task.photo_split, lambda: run_settings(task), task.image_dir)
     if found.settings is not None:
         check_processor(found.settings)
     return found

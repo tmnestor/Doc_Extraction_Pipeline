@@ -224,40 +224,31 @@ class InProcessContext:
     Process = InProcess
 
 
-def run_settings(model: str, config: Path) -> Any:
-    """The run's settings for a model, from a settings file: what a task's own would be."""
+def run_settings(model: str, config: Path, **choices: Any) -> Any:
+    """The run's settings for a model, with the choices a job's variables would give it."""
     from common.settings import Settings
 
-    return Settings.load({"model_type": model}, config_path=config)
+    return Settings.load({"model_type": model, **choices}, config_path=config)
 
 
-def split_checked(model: str, config: Path, photographs: Path) -> Any:
-    """What the split stage's check gives for a model, a settings file and a folder of photographs."""
-    from common.settings import read_settings_file
+def split_checked(model: str, config: Path, photographs: Path, *, photo_split: bool = True) -> Any:
+    """What the split stage's check gives for a model and a folder of photographs.
+
+    The photo split is on, as a job sets it with ``photo_split=true``, unless the test says otherwise.
+    """
     from stages import split
 
-    return split.checked(
-        read_settings_file(config), config, lambda: run_settings(model, config), photographs
-    )
+    return split.checked(photo_split, lambda: run_settings(model, config), photographs)
 
 
 def test_config(folder: Path) -> Path:
-    """The shipped settings, changed only where a run away from the sandbox must differ.
-
-    The model's folder, the log folder, the input folder and the SROIE folders are pointed at a temporary
-    place. Every document type is read
-    and the photo split is switched on, as the evaluation runs do by editing the same two settings.
-    """
+    """The shipped settings file, with each model's folder of weights pointed at a temporary place."""
     raw = yaml.safe_load(RUN_CONFIG.read_text())
     model_folder = folder / "model"
     model_folder.mkdir()
     (model_folder / "config.json").write_text("{}")
     paths = raw["bootstrap"]["model"]["default_paths"]
     raw["bootstrap"]["model"]["default_paths"] = dict.fromkeys(paths, str(model_folder))
-    raw["bootstrap"]["logging"]["log_dir"] = str(folder / "logs")
-    raw["pipeline"]["information_extraction"]["input"]["document_types"] = None
-    raw["pipeline"]["information_extraction"]["input"]["dir"] = str(folder / "pages")
-    raw["pipeline"]["photo_split"]["enabled"] = True
     path = folder / "run_config.yml"
     path.write_text(yaml.safe_dump(raw, sort_keys=False))
     return path
@@ -316,8 +307,8 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         extract.run(output / "raw_extractions.jsonl", extract.checked(classifications, settings))
         recorder.stage = "split"
         split.run(output / "split", split_checked(model, config, pages))
-        # A dataset whose pages are all of one type: given their type by classify, which asks no
-        # model, and read by extract by the prompt of that type.
+        # A set of pages that are all of one type (document_type=SROIE_RECEIPT): given their type by
+        # classify, which asks no model, and read by extract by the prompt of that type.
         receipts = folder / "receipts"
         recorder.stage = "dataset_sroie_classify"
         given = classify.run(

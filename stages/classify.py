@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 def run(output_path: Path, checked: "Checked", *, given_type: str | None = None) -> Path:
     """Detect document types for all images, write classifications.jsonl.
 
-    When the pages are of a dataset that says what they are (``pipeline.datasets``), each is given that
-    type and no model is asked: no engine is started.
+    When the job says what type every page is (``document_type``), each is given that type and no
+    model is asked: no engine is started.
 
     A run carries on from what an earlier one left (``stages.carry_on``): pages already classified are
     not asked about again, a page an earlier run could not classify is, and the file is left in the
@@ -44,7 +44,7 @@ def run(output_path: Path, checked: "Checked", *, given_type: str | None = None)
         output_path: Path to write classifications.jsonl.
         checked: The run's settings as the stage loads its engine with them, and the pages to
             classify: what ``checked`` gave.
-        given_type: The document type the pages' dataset gives them, or None to ask the model.
+        given_type: The document type the job gives every page, or None to ask the model.
 
     Returns:
         Path to the written classifications.jsonl.
@@ -187,8 +187,8 @@ def checked(image_dir: Path, settings: Settings) -> Checked:
     )
     if not images:
         selected = (
-            f" of the types the settings select ({', '.join(settings.document_types)}, under "
-            f"pipeline.information_extraction.input.document_types in {settings.config_path})"
+            f" of the types the job selects ({', '.join(settings.document_types)}, in the variable "
+            f"document_types)"
             if settings.document_types
             else ""
         )
@@ -204,6 +204,15 @@ def check(task: StageSettings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     assert task.image_dir is not None
+    schema = get_field_schema()
+    if task.given_type is not None and schema.document_type(task.given_type) is None:
+        raise ConfigError(
+            f"What: the job gives every page the type {task.given_type!r}, which is not a document type.\n"
+            f"Where: the variable document_type in the environment of this job.\n"
+            f"Expected: a document type of config/field_definitions.yaml, in either case: "
+            f"{', '.join(sorted(schema.document_types))}.\n"
+            f"How to fix: name one of those, or leave document_type unset for the model to be asked."
+        )
     found = checked(task.image_dir, run_settings(task))
     check_processor(found.settings)
     return found

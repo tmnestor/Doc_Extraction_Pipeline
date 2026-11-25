@@ -213,7 +213,7 @@ What the record of a failed page holds:
 | Task | The record | What the later tasks do with it |
 |---|---|---|
 | `split` | `error`, and the reason "the model could not be asked". The photograph is passed through as it is | `classify` reads the photograph whole |
-| `classify` | `error`, the fallback type (`pipeline.classification.fallback_type`), and `type_from: fallback_not_asked` | `extract` reads the page as that type |
+| `classify` | `error`, the fallback type (`fallback_type` in `config/field_definitions.yaml`), and `type_from: fallback_not_asked` | `extract` reads the page as that type |
 | `extract` | `error`, an empty reply, and `prompt_used: error` | `clean` passes the error on with no fields. `evaluate` counts the page under "Failed Extraction" and leaves it out of the mean, and gives the mean again with each failed page as 0 |
 
 A task that ends with failed pages says how many in its last lines, and exits with code 0.
@@ -576,11 +576,10 @@ model. There may be nine questions at most.
 
 A type with no rule is still a type: a page can be read as it, but no page will be classified as it.
 
-### 5. An optional setting
+### 5. Optionally, its place in the reading order
 
-In `config/run_config.yml`. It is not needed for the type to work.
-
-- `pipeline.extraction.order`: the order the types are read in. A type that is not listed is read last.
+`read_in_this_order`, at the top of `config/field_definitions.yaml`, is the order the types are read in.
+A type that is not listed is read last. It is not needed for the type to work.
 
 ### 6. Its answers
 

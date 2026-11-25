@@ -96,10 +96,8 @@ class Settings:
     # Whether what is sent to the model is kept, and where.
     trace_raw_prompts: bool
     trace_path: str | None
-    # The order pages are read in, and the labels that are not read.
-    extraction_order: list[str]
+    # The document types whose pages are not read.
     extraction_skip_labels: list[str]
-    classification_fallback_type: str
 
     @classmethod
     def load(
@@ -151,15 +149,6 @@ class Settings:
 
         self.trace_raw_prompts, self.trace_path = cls._tracing(raw, path)
 
-        self.classification_fallback_type = _need(
-            raw,
-            "pipeline.classification.fallback_type",
-            path,
-            "a document type, e.g. fallback_type: UNIVERSAL",
-        )
-        self.extraction_order = cls._list_of_text(
-            raw, path, "pipeline.extraction.order", "order:\n  - bank_statement\n  - invoice\n  - receipt"
-        )
         self.extraction_skip_labels = cls._list_of_text(
             raw, path, "pipeline.extraction.skip_labels", "skip_labels: []", empty_if_null=True
         )

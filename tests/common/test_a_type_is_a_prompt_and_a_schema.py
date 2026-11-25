@@ -208,3 +208,55 @@ def test_no_python_names_a_document_type():
             if quoted.search(code):
                 found.append(f"{name}:{number}: {line.strip()}")
     assert found == []
+
+
+# --- what else describes the documents: the fallback type, and the order the types are read in ----------
+# Until 26 November 2026 these two were keys of the settings file, though each names document types of
+# this one. No run ever set either.
+
+
+def test_the_fallback_type_and_the_reading_order_are_in_the_schema_file() -> None:
+    schema = FieldSchema.from_yaml()
+
+    assert schema.fallback_type == "UNIVERSAL"
+    assert schema.read_in_this_order == ("bank_statement", "invoice", "receipt")
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "said"),
+    [
+        ("fallback_type", "LEDGER", "LEDGER"),
+        ("fallback_type", None, "fallback_type"),
+        ("fallback_type", ["UNIVERSAL"], "fallback_type"),
+        ("read_in_this_order", ["invoice", "ledger"], "ledger"),
+        ("read_in_this_order", "invoice", "read_in_this_order"),
+        ("read_in_this_order", None, "read_in_this_order"),
+    ],
+)
+def test_a_fallback_type_or_an_order_that_names_no_document_type_is_refused(
+    tmp_path: Path, key: str, value: object, said: str
+) -> None:
+    raw = yaml.safe_load((REPO / "config" / "field_definitions.yaml").read_text())
+    if value is None:
+        del raw[key]
+    else:
+        raw[key] = value
+    path = tmp_path / "field_definitions.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+
+    with pytest.raises(field_schema.FieldSchemaError) as refused:
+        FieldSchema.from_yaml(path)
+
+    message = str(refused.value)
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+    assert said in message and key in message and str(path.absolute()) in message
+
+
+def test_the_reading_order_may_name_no_type_at_all(tmp_path: Path) -> None:
+    """Every type is then read in the order its pages were classified in."""
+    raw = yaml.safe_load((REPO / "config" / "field_definitions.yaml").read_text())
+    raw["read_in_this_order"] = []
+    path = tmp_path / "field_definitions.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+
+    assert FieldSchema.from_yaml(path).read_in_this_order == ()

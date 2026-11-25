@@ -113,8 +113,9 @@ def read_types(limit: int | None = None) -> list[dict[str, Any]]:
     """What the pipeline reads from every case."""
     from common import classification
 
-    settings = yaml.safe_load((REPO / "config" / "run_config.yml").read_text())
-    fallback_type = settings["pipeline"]["classification"]["fallback_type"]
+    fallback_type = yaml.safe_load((REPO / "config" / "field_definitions.yaml").read_text())[
+        "fallback_type"
+    ]
     return [
         {
             "case": name,

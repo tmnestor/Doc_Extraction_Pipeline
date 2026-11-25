@@ -17,6 +17,7 @@ from common.classification import BY_THE_DATASET
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common import extraction_batching
+from common.field_schema import get_field_schema
 from common.pipeline_ops import check_processor
 from common.settings import Settings
 from common.stage_settings import StageSettings, run_settings
@@ -211,7 +212,8 @@ def check(task: StageSettings) -> Checked:
 def check_settings(app_config: Any) -> None:
     """Everything classifying reads that can be wrong, checked before any engine is started.
 
-    The classification file (its questions, its column roles and its rules), and the fallback type.
+    The classification file (its questions, its column roles and its rules), and the schema file, which
+    holds the fallback type.
     Until 25 November 2026 the classification file was first read when the first reply was turned into
     a type, inside the engine call. A mistake in a rule was then taken for a failed call, and every
     page was given the fallback type.
@@ -220,19 +222,10 @@ def check_settings(app_config: Any) -> None:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     from common import classification
-    from common.field_schema import get_field_schema
 
+    # The schema file is read with it: its fallback type is checked to be a document type there.
+    get_field_schema()
     classification.check()
-    fallback = app_config.classification_fallback_type
-    types = get_field_schema().document_types
-    if not isinstance(fallback, str) or fallback.lower() not in types:
-        raise ConfigError(
-            f"What: the fallback type {fallback!r} is not a document type, so a page given it could not "
-            f"be read by the extract stage.\n"
-            f"Where: {app_config.config_path} -> pipeline.classification.fallback_type\n"
-            f"Expected: a document type of the schema file, in either case: {', '.join(sorted(types))}.\n"
-            f"How to fix: set fallback_type to one of those, e.g. fallback_type: UNIVERSAL"
-        )
 
 
 def classify_pages(

@@ -23,6 +23,7 @@ from typing import Any
 from common import extraction_batching
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
+from common.field_schema import get_field_schema
 from common.pipeline_ops import check_processor
 from common.settings import Settings
 from common.stage_settings import StageSettings, run_settings
@@ -59,7 +60,7 @@ def run(output_path: Path, checked: "Checked") -> Path:
     # Pages of a type the settings say not to read are set apart. The rest are put one document type
     # after another, so that the engine reuses its work on a type's prompt.
     to_read, set_apart = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
-    in_order = sort_for_extraction(to_read, app_cfg.extraction_order)
+    in_order = sort_for_extraction(to_read, list(get_field_schema().read_in_this_order))
     # The order of the output: the pages set apart, as they were classified, then the pages read.
     order = [page["image_name"] for page in set_apart] + [page["image_name"] for page in in_order]
 
@@ -176,8 +177,6 @@ def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> No
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    from common.field_schema import get_field_schema
-
     schema = get_field_schema()
     not_read = {label.lower() for label in app_config.extraction_skip_labels}
     given = {

@@ -5,7 +5,8 @@
 
 A document type is a block in that file and a prompt of the same name. Nothing in Python names a type:
 what differs from one type to another (its fields, the other names it goes by, a fixed completion budget,
-a table whose rows are lined up before scoring) is asked of the schema.
+a table whose rows are lined up before scoring) is asked of the schema. So are the type a page is given
+when its classification cannot be read, and the order the types are read in.
 
 A field is an entry in the same file: how a value of it is tidied when a reply is cleaned, whether it
 is a list, and how it is compared with the answer when it is scored. Nothing in Python names a field
@@ -121,6 +122,10 @@ class FieldSchema:
     fields: dict[str, Field] = field(repr=False)
     # Every name a document type goes by, in lower case, to the type's own name.
     aliases: dict[str, str] = field(repr=False)
+    # The type of a page whose classification reply cannot be read, as the file writes it.
+    fallback_type: str
+    # The document types in the order the extract stage reads them; a type not named is read last.
+    read_in_this_order: tuple[str, ...]
     _thresholds: dict[str, float] = field(repr=False)
     _path: Path = field(repr=False)
 
@@ -218,10 +223,24 @@ class FieldSchema:
                 aliases[str(other).lower()] = name
 
         fields = cls._fields(raw.get("fields"), document_types, refuse)
+        # Two keys that name document types: each must name only types of this file.
+        fallback, order = raw.get("fallback_type"), raw.get("read_in_this_order")
+        for key, named in (("fallback_type", [fallback]), ("read_in_this_order", order)):
+            if not isinstance(named, list) or any(
+                str(kind).lower() not in document_types for kind in named
+            ):
+                raise refuse(
+                    f"{key} is {raw.get(key)!r}, which does not name document types of this file.",
+                    key,
+                    f"document types of this file, in either case: {', '.join(sorted(document_types))}.",
+                    f"name only those in {key}, e.g. fallback_type: UNIVERSAL, read_in_this_order: [invoice].",
+                )
         return cls(
             document_types=document_types,
             fields=fields,
             aliases=aliases,
+            fallback_type=fallback,
+            read_in_this_order=tuple(order),
             _thresholds=cls._thresholds_of(raw.get("evaluation"), refuse),
             _path=path,
         )

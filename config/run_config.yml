@@ -72,9 +72,6 @@ pipeline:
       # name the folder.
       image_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test/img
 
-  classification:
-    fallback_type: UNIVERSAL     # the type of a page whose classification reply cannot be read
-
   # The split stage (KFP_TASK=split), which runs before classify on photographs. It asks the model where
   # each receipt is, cuts a photograph of several into one image for each, and straightens an image
   # whose rows of print drift far enough to mislead a reader. The later tasks then read
@@ -84,12 +81,6 @@ pipeline:
     # false = every photograph is copied through unchanged and the model is not loaded.
     enabled: false
 
-  # The order the extract stage reads the document types in, so that pages of one type follow one
-  # another and the engine can reuse its work on their prompt. A type not listed is read last.
   extraction:
-    order:
-      - bank_statement
-      - invoice
-      - receipt
     # Types that are not read at all. A page of one is written as a skipped record.
     skip_labels: []

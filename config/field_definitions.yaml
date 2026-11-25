@@ -16,6 +16,17 @@
 #                      `rows_absent_where_not_found_in` are dropped, and the rows are put in the date
 #                      order of the column `rows_in_date_order_of`. Either key may be left out
 
+# The type of a page whose classification reply cannot be read. One of the document types below.
+fallback_type: UNIVERSAL
+
+# The order the extract stage reads the document types in, so that pages of one type follow one another
+# and the engine can reuse its work on their prompt. A type not listed is read last, in the order its
+# pages were classified in.
+read_in_this_order:
+  - bank_statement
+  - invoice
+  - receipt
+
 document_types:
   invoice:
     also_called:

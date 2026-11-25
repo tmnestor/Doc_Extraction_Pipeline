@@ -34,10 +34,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
+from common import photo_split
+from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
+from common.photo_split import PhotoSplitConfig
 from common.pipeline_ops import check_processor
-from common.settings import Settings, read_settings_file
+from common.prompt_catalog import PromptCatalog
+from common.settings import Settings, read_settings_file, value_at
+from common.sheet_finder import FinderParams
 from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
@@ -93,7 +97,11 @@ def _record(
 
 
 def apply_reply(
-    photograph: Path, reply: str, images_dir: Path, config: Any, finder: Any | None = None
+    photograph: Path,
+    reply: str,
+    images_dir: Path,
+    config: PhotoSplitConfig,
+    finder: FinderParams | None = None,
 ) -> dict[str, Any]:
     """Act on the model's reply about one photograph: copy it through, turn it, or cut it up.
 
@@ -101,8 +109,8 @@ def apply_reply(
         photograph: The photograph's path.
         reply: The model's reply to the photo split prompt.
         images_dir: Where the resulting image or images are written.
-        config: The photo split settings (`common.photo_split.PhotoSplitConfig`).
-        finder: The settings for finding print and its direction (`common.sheet_finder.FinderParams`).
+        config: The photo split's rules.
+        finder: The values for finding print and its direction.
             Needed when `config.straighten` is true; None leaves every image as it lies.
 
     Returns:
@@ -224,14 +232,13 @@ def ask_about_photographs(
         For each photograph, in the order given: image_name, image_path, raw_response, error and
         processing_time.
     """
-    from common.photo_split import photo_split_config_from
-
-    config = photo_split_config_from(app_config.raw, config_path=app_config.config_path)
+    config = photo_split.CONFIG
+    prompt = PromptCatalog().photo_split_prompt()
     watch = EngineWatch(app_config.stop_after_failed_requests)
 
     def ask(batch: list[Path]) -> list[str]:
         images = [processor.load_document_image(str(photograph)) for photograph in batch]
-        return processor.ask(images, [config.prompt] * len(images), config.max_tokens)
+        return processor.ask(images, [prompt] * len(images), config.max_tokens)
 
     asked: list[dict[str, Any]] = []
     calls = in_engine_calls(groups_of(photographs, config.batch_size), ask, watch=watch, what="photographs")
@@ -266,11 +273,9 @@ def _remove_the_images_of(records: list[dict[str, Any]], images_dir: Path) -> No
 class Checked:
     """What the stage is run with, read and checked."""
 
-    # The photo split settings (``common.photo_split.PhotoSplitConfig``).
-    split_config: Any
-    # The settings for finding print and its direction (``common.sheet_finder.FinderParams``). None
-    # when no image is to be straightened, or the photo split is off.
-    finder: Any | None
+    # Whether the photo split is on: the model is asked where the receipts are, and a photograph of
+    # several is cut. Off, every photograph is passed through and no model is asked.
+    enabled: bool
     # The run's settings. None when the photo split is off: no model is asked, and none is looked for.
     settings: Settings | None
     # Every image of the folder, in the order of their names. The selection the later stages apply
@@ -281,11 +286,11 @@ class Checked:
 def checked(
     raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Settings], image_dir: Path
 ) -> Checked:
-    """The photo split settings, the sheet finder's, the run's settings and the photographs, each read
-    and checked.
+    """Whether the photo split is on, the run's settings and the photographs, each read and checked.
 
-    The one place the stage works its settings out. What it gives is what ``run`` is handed: nothing
-    is read or worked out a second time.
+    The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
+    nothing is read or worked out a second time. The rules of the split itself are not settings: they
+    are ``common.photo_split.CONFIG`` and ``FINDER``.
 
     Args:
         raw: What the settings file holds.
@@ -297,23 +302,24 @@ def checked(
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    from common.photo_split import photo_split_config_from
-
-    split_config = photo_split_config_from(raw, config_path=config_path)
+    enabled = value_at(raw, "pipeline.photo_split.enabled", None)
+    if not isinstance(enabled, bool):
+        raise ConfigError(
+            f"What: pipeline.photo_split.enabled is {enabled!r}, not true or false.\n"
+            f"Where: {config_path} -> pipeline.photo_split.enabled\n"
+            f"Expected: true, to ask the model where each receipt is and cut a photograph of several; "
+            f"or false, to pass every photograph through.\n"
+            f"How to fix: set enabled to true or false."
+        )
     photographs = list(discover_images(image_dir))
     if not photographs:
         raise no_pages_in(image_dir, "")
     logger.info("Found %d photographs in %s", len(photographs), image_dir)
-    if not split_config.enabled:
-        return Checked(split_config, None, None, photographs)
-    settings = settings_of()
-    finder = None
-    if split_config.straighten:
-        from common.sheet_finder_config import finder_params_from
-
-        finder_section = raw.get("pipeline", {}).get("photo_split", {}).get("finder")
-        finder = finder_params_from(finder_section, config_path=config_path)
-    return Checked(split_config, finder, settings, photographs)
+    if not enabled:
+        return Checked(False, None, photographs)
+    # Read here, before any engine is started: it is asked for again where the model is asked.
+    PromptCatalog().photo_split_prompt()
+    return Checked(True, settings_of(), photographs)
 
 
 def check(task: StageSettings) -> Checked:
@@ -341,15 +347,15 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
 
     Args:
         output_dir: Directory to write images/ and splits.jsonl into.
-        checked: The photo split settings, the finder's and the run's, and the photographs: what
+        checked: Whether the photo split is on, the run's settings and the photographs: what
             ``checked`` gave.
         timing: The run's output folder, to note a row of the stage's time in. None: no row.
 
     Returns:
         The directory the later stages read their images from.
     """
-    split_config, finder, app_cfg = checked.split_config, checked.finder, checked.settings
-    photographs = checked.photographs
+    split_config, app_cfg, photographs = photo_split.CONFIG, checked.settings, checked.photographs
+    finder = photo_split.FINDER if split_config.straighten else None
 
     images_dir = output_dir / IMAGES_DIR
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -362,7 +368,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
             "%d photograph(s) an earlier run could not ask about will be asked about again", len(records)
         )
 
-    if not split_config.enabled:
+    if not checked.enabled:
         # Every photograph is copied through, and no engine is started. The stage carries on the one
         # way all the same: what a run with the photo split on had done before it stopped is kept as
         # that run left it, and a photograph such a run could not ask about is passed through.

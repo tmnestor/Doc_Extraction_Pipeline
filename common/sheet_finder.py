@@ -46,7 +46,7 @@ shadow whose edge is as sharp as the paper's (hard, direct light) is taken for t
 print is needed to say which way up a sheet is (without it the shorter edges are taken as top and bottom). Rows
 read the same upside down, so of the two ways the rows allow, the one nearer upright in the photograph is taken.
 
-Every operating choice is a field of `FinderParams`, read from YAML by the caller; none has a default here.
+Every operating choice is a field of `FinderParams`, with the value it was measured at.
 """
 
 from dataclasses import dataclass
@@ -68,7 +68,12 @@ _PAPER_OPEN_PX = 5
 
 @dataclass(frozen=True)
 class FinderParams:
-    """Every operating choice of the finder. All come from YAML; none has a default here.
+    """Every operating choice of the finder, each with the value it was measured at.
+
+    Until 26 November 2026 these were 43 keys of the settings file, all required. No run ever changed
+    one, and none had held another value since it was added: they are tuned values, changed with the
+    code and not by a job. A test or a measurement that wants another value makes its own record with
+    ``dataclasses.replace``.
 
     Attributes:
         work_long_edge: Long edge, in pixels, of the copy the sheets are separated on. A larger photograph is
@@ -126,49 +131,49 @@ class FinderParams:
             at least this well (shared area over the area either covers).
     """
 
-    work_long_edge: int
-    desk_ring_frac: float
-    mask_min_distance: float
-    mask_noise_multiple: float
-    shadow_min_factor: float
-    shadow_reach_heights: float
-    shadow_reach_frac: float
-    blur_sigma_px: float
-    step_span_px: int
-    step_min: float
-    step_min_area_px: int
-    edge_gap_close_px: int
-    edge_seal_px: int
-    min_region_frac: float
-    outline_tolerance_px: float
-    min_outline_edge_frac: float
-    text_agree_deg: float
-    refine_outside_first_frac: float
-    refine_inside_first_frac: float
-    refine_outside_final_frac: float
-    refine_inside_final_frac: float
-    edge_tolerance_px: float
-    min_edge_support: float
-    mark_block_px: int
-    mark_darker_by: float
-    mark_max_heights: float
-    text_join_heights: float
-    text_min_row_heights: float
-    text_max_row_thickness_heights: float
-    text_min_rows: int
-    ransac_seed: int
-    drift_row_percentile: float
-    paper_work_long_edge: int
-    paper_rounds: int
-    paper_join_heights: float
-    paper_border_frac: float
-    paper_min_border_difference: float
-    paper_region_grow_frac: float
-    paper_block_in_box_min: float
-    paper_block_min_share: float
-    paper_extension_min_fit: float
-    paper_refine_outside_frac: float
-    paper_refine_inside_frac: float
+    work_long_edge: int = 1600
+    desk_ring_frac: float = 0.03
+    mask_min_distance: float = 14.0
+    mask_noise_multiple: float = 5.0
+    shadow_min_factor: float = 0.5
+    shadow_reach_heights: float = 4.5
+    shadow_reach_frac: float = 0.03
+    blur_sigma_px: float = 1.0
+    step_span_px: int = 3
+    step_min: float = 9.0
+    step_min_area_px: int = 12
+    edge_gap_close_px: int = 4
+    edge_seal_px: int = 1
+    min_region_frac: float = 0.01
+    outline_tolerance_px: float = 2.0
+    min_outline_edge_frac: float = 0.25
+    text_agree_deg: float = 10.0
+    refine_outside_first_frac: float = 0.02
+    refine_inside_first_frac: float = 0.06
+    refine_outside_final_frac: float = 0.01
+    refine_inside_final_frac: float = 0.02
+    edge_tolerance_px: float = 2.0
+    min_edge_support: float = 0.35
+    mark_block_px: int = 31
+    mark_darker_by: float = 14.0
+    mark_max_heights: float = 5.0
+    text_join_heights: float = 1.5
+    text_min_row_heights: float = 4.0
+    text_max_row_thickness_heights: float = 2.5
+    text_min_rows: int = 5
+    ransac_seed: int = 0
+    drift_row_percentile: float = 60.0
+    paper_work_long_edge: int = 800
+    paper_rounds: int = 5
+    paper_join_heights: float = 3.0
+    paper_border_frac: float = 0.01
+    paper_min_border_difference: float = 3.0
+    paper_region_grow_frac: float = 0.35
+    paper_block_in_box_min: float = 0.5
+    paper_block_min_share: float = 0.02
+    paper_extension_min_fit: float = 0.97
+    paper_refine_outside_frac: float = 0.02
+    paper_refine_inside_frac: float = 0.01
 
 
 @dataclass(frozen=True)

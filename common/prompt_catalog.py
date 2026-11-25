@@ -182,6 +182,10 @@ class PromptCatalog:
             )
         return opening + "\n\n" + "\n\n".join(parts) + "\n"
 
+    def photo_split_prompt(self) -> str:
+        """The question the split task puts to the model about each photograph."""
+        return self._load_yaml(self._dir / "photo_split.yaml")["prompt"].strip()
+
     def _refuse(self, what: str, key: str, expected: str, fix: str) -> ConfigError:
         """A fault in the classification file, with what is wrong, where, what is expected and the fix."""
         path = (self._dir / _DETECTION_FILE).absolute()

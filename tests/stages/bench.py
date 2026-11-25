@@ -5,6 +5,7 @@ to fail. The pages are blank images made here, and every reply is invented.
 """
 
 import contextlib
+import dataclasses
 import json
 import sys
 from collections.abc import Iterator
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
 from model_inputs import InProcessContext, run_settings, split_checked, test_config  # noqa: E402
 
-from common import vllm_dp  # noqa: E402
+from common import photo_split, vllm_dp  # noqa: E402
 from stages import classify, clean, evaluate, extract, split  # noqa: E402
 
 test_config.__test__ = False  # type: ignore[attr-defined]
@@ -92,10 +93,17 @@ class Bench:
         self.root = folder
         shipped = yaml.safe_load(test_config(folder).read_text())
         shipped["pipeline"]["batching"] = {"classify": 2, "default": 2}
-        shipped["pipeline"]["photo_split"]["batch_size"] = 2
-        shipped["pipeline"]["photo_split"]["straighten"] = False
-        shipped["pipeline"]["photo_split"]["rectify_pages"] = False
-        shipped["pipeline"]["photo_split"]["rectify_pieces"] = False
+        monkeypatch.setattr(
+            photo_split,
+            "CONFIG",
+            dataclasses.replace(
+                photo_split.CONFIG,
+                batch_size=2,
+                straighten=False,
+                rectify_pages=False,
+                rectify_pieces=False,
+            ),
+        )
         self.config = folder / "two_to_a_call.yml"
         self.config.write_text(yaml.safe_dump(shipped, sort_keys=False))
         self.pages = folder / "pages"

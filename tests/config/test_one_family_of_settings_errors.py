@@ -15,8 +15,6 @@ from stages import __main__ as starter
 
 FAMILY = [
     ("common.extraction_batching", "BatchingConfigError"),
-    ("common.photo_split", "PhotoSplitConfigError"),
-    ("common.sheet_finder_config", "FinderConfigError"),
     ("common.field_schema", "FieldSchemaError"),
 ]
 
@@ -71,12 +69,10 @@ def test_a_prompt_file_error_is_a_settings_error(tmp_path: Path) -> None:
 def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from common.photo_split import PhotoSplitConfigError
+    from common.field_schema import FieldSchemaError
 
     def refuses(*args: object, **kwargs: object) -> None:
-        raise PhotoSplitConfigError(
-            "What: margin_frac is 7.\nWhere: here\nExpected: a share\nHow to fix: so"
-        )
+        raise FieldSchemaError("What: margin_frac is 7.\nWhere: here\nExpected: a share\nHow to fix: so")
 
     monkeypatch.setattr("stages.split.run", refuses)
     monkeypatch.setattr("stages.split.check", lambda task: None)

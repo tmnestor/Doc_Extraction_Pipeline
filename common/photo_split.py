@@ -37,20 +37,17 @@ one with its corners within 0.1% of the page's diagonal, and 5 left to turning (
 The reply's form is the one the model gives for detection prompts: a JSON list of objects, each with
 `"box_2d": [ymin, xmin, ymax, xmax]` on a scale of 0 to 1000 across the photograph's height and width.
 
-Every operating choice is in `pipeline.photo_split` of the run config. Every key is required.
+Every operating choice is a field of `PhotoSplitConfig`, with the value it was measured at.
 """
 
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
 
 import cv2
 import numpy as np
 from PIL import Image
 
-from common.config_schema import ConfigError
 from common.sheet_finder import (
     FinderParams,
     find_sheet_by_paper,
@@ -61,71 +58,19 @@ from common.sheet_finder import (
     warp_upright,
 )
 
-SECTION = "pipeline.photo_split"
-
 # The scale the model's box coordinates are on, whatever the photograph's size.
 BOX_SCALE = 1000.0
-
-_EXAMPLE = """\
-pipeline:
-  photo_split:
-    enabled: false
-    prompt: |
-      Detect every paper receipt in this photograph. ...
-    max_tokens: 400
-    batch_size: 16
-    margin_frac: 0.03
-    min_box_frac: 0.01
-    max_overlap_frac: 0.10
-    max_receipts: 12
-    straighten: true
-    straighten_min_deg: 1.0
-    straighten_max_deg: 15.0
-    straighten_min_drift_heights: 2.0
-    straighten_fill_rgb: [255, 255, 255]
-    rectify_pages: true
-    rectify_pieces: true
-    rectify_min_area_frac: 0.30
-    rectify_min_edges: 4
-    rectify_min_print_frac: 0.98
-    rectify_paper_model: true
-    rectify_paper_min_fit: 0.97"""
-
-_KEYS: dict[str, type] = {
-    "enabled": bool,
-    "prompt": str,
-    "max_tokens": int,
-    "batch_size": int,
-    "margin_frac": float,
-    "min_box_frac": float,
-    "max_overlap_frac": float,
-    "max_receipts": int,
-    "straighten": bool,
-    "straighten_min_deg": float,
-    "straighten_max_deg": float,
-    "straighten_min_drift_heights": float,
-    "rectify_pages": bool,
-    "rectify_pieces": bool,
-    "rectify_min_area_frac": float,
-    "rectify_min_edges": int,
-    "rectify_min_print_frac": float,
-    "rectify_paper_model": bool,
-    "rectify_paper_min_fit": float,
-}
-
-
-class PhotoSplitConfigError(ConfigError):
-    """The photo split settings are missing or malformed."""
 
 
 @dataclass(frozen=True)
 class PhotoSplitConfig:
-    """The `pipeline.photo_split` settings the stage reads.
+    """The photo split's rules, each with the value it was measured at.
+
+    Until 26 November 2026 these were keys of the settings file, all required. No run ever changed one:
+    they are tuned values, changed with the code and not by a job. Whether the photo split is on at all
+    is the job's choice, and is not here; the question put to the model is in `prompts/photo_split.yaml`.
 
     Attributes:
-        enabled: Whether photographs are examined at all. When false every photograph is passed through and the
-            model is not loaded.
-        prompt: The question put to the model about each photograph.
         max_tokens: Longest reply allowed.
         batch_size: Photographs sent to the engine in one call.
         margin_frac: How much larger than its box each cut image is, on every side, as a share of the box's own
@@ -153,26 +98,24 @@ class PhotoSplitConfig:
         rectify_paper_min_fit: The paper method's sheet must agree with its quadrilateral at least this well.
     """
 
-    enabled: bool
-    prompt: str
-    max_tokens: int
-    batch_size: int
-    margin_frac: float
-    min_box_frac: float
-    max_overlap_frac: float
-    max_receipts: int
-    straighten: bool
-    straighten_min_deg: float
-    straighten_max_deg: float
-    straighten_min_drift_heights: float
-    straighten_fill_rgb: tuple[int, int, int]
-    rectify_pages: bool
-    rectify_pieces: bool
-    rectify_min_area_frac: float
-    rectify_min_edges: int
-    rectify_min_print_frac: float
-    rectify_paper_model: bool
-    rectify_paper_min_fit: float
+    max_tokens: int = 400
+    batch_size: int = 16
+    margin_frac: float = 0.1
+    min_box_frac: float = 0.01
+    max_overlap_frac: float = 0.1
+    max_receipts: int = 12
+    straighten: bool = True
+    straighten_min_deg: float = 1.0
+    straighten_max_deg: float = 15.0
+    straighten_min_drift_heights: float = 2.0
+    straighten_fill_rgb: tuple[int, int, int] = (255, 255, 255)
+    rectify_pages: bool = True
+    rectify_pieces: bool = True
+    rectify_min_area_frac: float = 0.3
+    rectify_min_edges: int = 4
+    rectify_min_print_frac: float = 0.98
+    rectify_paper_model: bool = True
+    rectify_paper_min_fit: float = 0.97
 
 
 @dataclass(frozen=True)
@@ -204,166 +147,9 @@ class Decision:
     boxes: tuple[Box, ...]
 
 
-def _fail(what: str, *, key: str, config_path: Path, fix: str) -> PhotoSplitConfigError:
-    where = f"{config_path.resolve()} -> {SECTION}{'.' + key if key else ''}"
-    return PhotoSplitConfigError(
-        f"What: {what}\n"
-        f"  Where: {where}\n"
-        f"  Expected: every one of {', '.join(_KEYS)}, e.g.\n{_EXAMPLE}\n"
-        f"  How to fix: {fix}"
-    )
-
-
-def photo_split_config_from(raw_config: dict[str, Any], *, config_path: Path) -> PhotoSplitConfig:
-    """Read the photo split settings from a parsed run config.
-
-    Args:
-        raw_config: The whole parsed run config.
-        config_path: The file it came from, named in each error.
-
-    Returns:
-        The settings.
-
-    Raises:
-        PhotoSplitConfigError: The section or a key is missing, or a value is of the wrong type or out of range.
-    """
-    section: Any = raw_config
-    for part in SECTION.split("."):
-        section = section.get(part) if isinstance(section, dict) else None
-    if not isinstance(section, dict):
-        raise _fail(
-            f"the {SECTION} section is missing or is not a mapping",
-            key="",
-            config_path=config_path,
-            fix=f"add the {SECTION} block to {config_path.name}, as shipped in the repository's run_config.yml",
-        )
-    values: dict[str, Any] = {}
-    for name, kind in _KEYS.items():
-        if name not in section:
-            raise _fail(
-                f"missing key {name}",
-                key=name,
-                config_path=config_path,
-                fix=f"add `{name}:` under {SECTION} in {config_path.name}",
-            )
-        value = section[name]
-        whole = isinstance(value, int) and not isinstance(value, bool)
-        right_type = (
-            isinstance(value, bool)
-            if kind is bool
-            else whole
-            if kind is int
-            else (whole or isinstance(value, float))
-            if kind is float
-            else isinstance(value, str)
-        )
-        if not right_type:
-            raise _fail(
-                f"{name} is {value!r}, which is not {'true or false' if kind is bool else kind.__name__}",
-                key=name,
-                config_path=config_path,
-                fix=f"set `{name}` under {SECTION} in {config_path.name} as in the example",
-            )
-        values[name] = float(value) if kind is float else value.strip() if kind is str else value
-    if not values["prompt"].strip():
-        raise _fail(
-            "prompt is empty",
-            key="prompt",
-            config_path=config_path,
-            fix=f"give the question to put to the model as `prompt` under {SECTION} in {config_path.name}",
-        )
-    for name in ("max_tokens", "batch_size"):
-        if values[name] < 1:
-            raise _fail(
-                f"{name} is {values[name]}, which is below 1",
-                key=name,
-                config_path=config_path,
-                fix=f"set `{name}` under {SECTION} in {config_path.name} to 1 or more",
-            )
-    if values["max_receipts"] < 2:
-        raise _fail(
-            f"max_receipts is {values['max_receipts']}, which is below 2: no photograph could be split",
-            key="max_receipts",
-            config_path=config_path,
-            fix=f"set `max_receipts` under {SECTION} in {config_path.name} to 2 or more",
-        )
-    for name, least, most in (
-        ("margin_frac", 0.0, 0.5),
-        ("min_box_frac", 0.0, 0.5),
-        ("max_overlap_frac", 0.0, 1.0),
-    ):
-        if not least <= values[name] <= most:
-            raise _fail(
-                f"{name} is {values[name]}, which is outside {least} to {most}",
-                key=name,
-                config_path=config_path,
-                fix=f"set `{name}` under {SECTION} in {config_path.name} to a share between {least} and {most}",
-            )
-    if not 0.0 <= values["straighten_min_deg"] < values["straighten_max_deg"] <= 90.0:
-        raise _fail(
-            f"straighten_min_deg is {values['straighten_min_deg']} and straighten_max_deg is "
-            f"{values['straighten_max_deg']}: they must run from 0 up to at most 90, smallest first",
-            key="straighten_min_deg",
-            config_path=config_path,
-            fix=f"set the two under {SECTION} in {config_path.name}, for example 1.0 and 40.0",
-        )
-    if values["straighten_min_drift_heights"] < 0.0:
-        raise _fail(
-            f"straighten_min_drift_heights is {values['straighten_min_drift_heights']}, which is below 0",
-            key="straighten_min_drift_heights",
-            config_path=config_path,
-            fix=f"set `straighten_min_drift_heights` under {SECTION} in {config_path.name} to 0 or more, e.g. 1.0",
-        )
-    if not 0.0 < values["rectify_min_print_frac"] <= 1.0:
-        raise _fail(
-            f"rectify_min_print_frac is {values['rectify_min_print_frac']}, which is not above 0 and at most 1",
-            key="rectify_min_print_frac",
-            config_path=config_path,
-            fix=f"set `rectify_min_print_frac` under {SECTION} in {config_path.name} to a share such as 0.98",
-        )
-    if not 0.0 < values["rectify_paper_min_fit"] <= 1.0:
-        raise _fail(
-            f"rectify_paper_min_fit is {values['rectify_paper_min_fit']}, which is not above 0 and at most 1",
-            key="rectify_paper_min_fit",
-            config_path=config_path,
-            fix=f"set `rectify_paper_min_fit` under {SECTION} in {config_path.name} to a share such as 0.97",
-        )
-    if not 0.0 < values["rectify_min_area_frac"] <= 1.0:
-        raise _fail(
-            f"rectify_min_area_frac is {values['rectify_min_area_frac']}, which is not above 0 and at most 1",
-            key="rectify_min_area_frac",
-            config_path=config_path,
-            fix=f"set `rectify_min_area_frac` under {SECTION} in {config_path.name} to a share such as 0.30",
-        )
-    if not 1 <= values["rectify_min_edges"] <= 4:
-        raise _fail(
-            f"rectify_min_edges is {values['rectify_min_edges']}, which is not from 1 to 4",
-            key="rectify_min_edges",
-            config_path=config_path,
-            fix=f"set `rectify_min_edges` under {SECTION} in {config_path.name} to a whole number from 1 to 4",
-        )
-    for key in ("rectify_pages", "rectify_pieces"):
-        if values[key] and not values["straighten"]:
-            raise _fail(
-                f"{key} is true but straighten is false: rectification falls back on turning",
-                key=key,
-                config_path=config_path,
-                fix=f"set `straighten: true` under {SECTION} in {config_path.name}, or `{key}: false`",
-            )
-    fill = section.get("straighten_fill_rgb")
-    is_colour = (
-        isinstance(fill, list)
-        and len(fill) == 3
-        and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in fill)
-    )
-    if not is_colour or not isinstance(fill, list):
-        raise _fail(
-            f"straighten_fill_rgb is {fill!r}, which is not three whole numbers from 0 to 255",
-            key="straighten_fill_rgb",
-            config_path=config_path,
-            fix=f"set `straighten_fill_rgb` under {SECTION} in {config_path.name} to a red, green, blue triple",
-        )
-    return PhotoSplitConfig(**values, straighten_fill_rgb=(fill[0], fill[1], fill[2]))
+# What the split stage goes by. A test puts another record in their place.
+CONFIG = PhotoSplitConfig()
+FINDER = FinderParams()
 
 
 def parse_boxes(reply: str) -> list[Box] | None:

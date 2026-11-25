@@ -5,6 +5,7 @@ to fail. The pages are blank images made here, and every reply is invented.
 """
 
 import contextlib
+import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 from model_inputs import InProcessContext, test_config  # noqa: E402
 
 from common import vllm_dp  # noqa: E402
-from stages import classify, extract  # noqa: E402
+from stages import classify, clean, evaluate, extract, split  # noqa: E402
 
 test_config.__test__ = False  # type: ignore[attr-defined]
 
@@ -123,8 +124,25 @@ class Bench:
         change(settings)
         self.config.write_text(yaml.safe_dump(settings, sort_keys=False))
 
-    def classify(self, output: Path, model: str = ONE_ENGINE) -> Path:
-        return classify.run(self.pages, output, model_type=model, config_path=self.config)
+    def split(self, output: Path, model: str = ONE_ENGINE) -> Path:
+        """Run the split stage on the bench's pages. Gives the folder the later stages read images from."""
+        return split.run(self.pages, output, model_type=model, config_path=self.config)
+
+    def classify(self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None) -> Path:
+        return classify.run(pages or self.pages, output, model_type=model, config_path=self.config)
 
     def extract(self, classifications: Path, output: Path, model: str = ONE_ENGINE) -> Path:
         return extract.run(classifications, self.pages, output, model_type=model, config_path=self.config)
+
+    def clean(self, raw_extractions: Path, output: Path) -> Path:
+        return clean.run(raw_extractions, output)
+
+    def evaluate(self, cleaned_extractions: Path, key: Path, output_dir: Path) -> Path:
+        return evaluate.run(cleaned_extractions, key, output_dir)
+
+    def answer_key(self, path: Path) -> Path:
+        """Write an answer key for the bench's pages. Every value is invented."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        answers = [{"filename": name, "TOTAL_AMOUNT": "$31.07"} for name in self.names]
+        path.write_text("".join(json.dumps(answer) + "\n" for answer in answers))
+        return path

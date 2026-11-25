@@ -5,7 +5,8 @@ This is what ``entrypoint.sh`` starts, for every task:
     KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> python -m stages
 
 The settings come from ``common.stage_settings.resolve``: the environment first, the settings file second.
-The settings file is the one the job names in ``run_config``, and otherwise the shipped one beside the code.
+The settings file is the one ``entrypoint.sh`` hands over as the first argument: the job's own if it names
+one in ``run_config``, and otherwise the shipped one beside the code.
 Here they are handed to the stage's own ``run``. Three things are done around a stage, the same for every
 stage. A run carries on from where an earlier one stopped unless ``CLEAR_PREV_OUTPUT=true`` asks for the
 stage's own earlier output to be deleted first: pages arrive over time, and a second run should read only
@@ -23,13 +24,7 @@ from typing import Any
 
 from common import run_manifest
 from common.engine_calls import StageStopped
-from common.stage_settings import (
-    ConfigError,
-    StageSettings,
-    check_folder_of_pages,
-    resolve,
-    settings_file,
-)
+from common.stage_settings import ConfigError, StageSettings, check_folder_of_pages, resolve
 
 
 logger = logging.getLogger("stages")
@@ -72,8 +67,6 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
         settings.task,
         model=settings.model,
         image_dir=settings.image_dir,
-        settings_file=settings.config_path,
-        repository=REPOSITORY,
         # The split stage has no earlier output deleted for it, so it always checks.
         starting_afresh=settings.clear_previous_output and settings.task != "split",
     )
@@ -110,8 +103,8 @@ def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        # The job's own settings file if it names one, else the shipped one.
-        config_path = settings_file(os.environ, CONFIG_PATH)
+        # The settings file entrypoint.sh hands over: the job's own if it names one, else the shipped one.
+        config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONFIG_PATH
         settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, config_path)
         check_folder_of_pages(settings, config_path)
         run_task(settings)

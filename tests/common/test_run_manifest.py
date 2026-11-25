@@ -32,9 +32,9 @@ FOUR_PARTS = ("What:", "Where:", "Expected:", "How to fix:")
 
 @pytest.fixture
 def commit(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Stands in for git: the commit and the state of the tree are what the test says."""
-    code: dict[str, Any] = {"commit": "0a1b2c3", "changed": False}
-    monkeypatch.setattr(run_manifest, "code_version", lambda repository: (code["commit"], code["changed"]))
+    """Stands in for the commit the entry script read at launch: it is what the test says."""
+    code: dict[str, Any] = {"commit": "0a1b2c3"}
+    monkeypatch.setattr(run_manifest, "code_version", lambda: code["commit"])
     return code
 
 
@@ -42,7 +42,6 @@ def note(output: Path, stage: str = "classify", **given: Any) -> run_manifest.St
     with_these: dict[str, Any] = {
         "model": A_MODEL,
         "image_dir": "/pages/set_one",
-        "repository": REPO_ROOT,
         "starting_afresh": False,
         **given,
     }
@@ -59,12 +58,10 @@ def test_a_stage_notes_what_it_was_run_with(tmp_path: Path, commit: dict[str, An
                 "model": A_MODEL,
                 "image_dir": "/pages/set_one",
                 "commit": "0a1b2c3",
-                "uncommitted_changes": False,
+                # Not told any more: it cannot be without running git, which a task does not do.
+                "uncommitted_changes": None,
                 "started": "2031-02-09T10:15:00",
                 "last_run": "2031-02-09T10:15:00",
-                # No settings file was given to note here: tests/common/test_a_job_names_its_settings_file.py.
-                "settings_file": None,
-                "settings_sha256": None,
             }
         }
     }
@@ -130,11 +127,11 @@ def test_a_commit_that_cannot_be_told_is_no_evidence_of_another_run(
     assert note(tmp_path).commit == run_manifest.UNKNOWN
 
 
-def test_uncommitted_changes_are_noted_and_not_compared(tmp_path: Path, commit: dict[str, Any]) -> None:
-    note(tmp_path)
-    commit["changed"] = True
-
-    assert note(tmp_path).uncommitted_changes is True
+def test_whether_files_differed_from_the_commit_is_no_longer_told(
+    tmp_path: Path, commit: dict[str, Any]
+) -> None:
+    """It cannot be told without running git, which a task does not do. An old note's word is still read."""
+    assert note(tmp_path).uncommitted_changes is None
 
 
 def test_a_stage_starting_afresh_checks_nothing_and_notes_itself_anew(
@@ -199,12 +196,16 @@ def test_a_folder_with_no_notes_has_none(tmp_path: Path) -> None:
     assert run_manifest.describe(tmp_path) == []
 
 
-def test_the_commit_of_this_repository_is_found_and_of_no_repository_is_unknown(tmp_path: Path) -> None:
-    found, changed = run_manifest.code_version(REPO_ROOT)
-    assert found != run_manifest.UNKNOWN and 7 <= len(found) <= 12
-    assert isinstance(changed, bool)
+def test_the_commit_is_the_one_the_entry_script_read_at_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOC_EXTRACT_COMMIT", "0a1b2c3")
+    assert run_manifest.code_version() == "0a1b2c3"
 
-    assert run_manifest.code_version(tmp_path) == (run_manifest.UNKNOWN, None)
+    for not_told in ("", None):
+        if not_told is None:
+            monkeypatch.delenv("DOC_EXTRACT_COMMIT")
+        else:
+            monkeypatch.setenv("DOC_EXTRACT_COMMIT", not_told)
+        assert run_manifest.code_version() == run_manifest.UNKNOWN
 
 
 # --- through the task runner ------------------------------------------------------------------------

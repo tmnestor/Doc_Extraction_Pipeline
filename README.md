@@ -369,6 +369,30 @@ variables. It is not run with the setting silently dropped.
 
 The number of cards is not a variable. It comes from `bootstrap.gpus` in the settings file.
 
+## Where a task writes
+
+Under a pipeline the code's folder is in the job's pod. That storage is not kept, and a job that writes
+there is stopped part way. A job is launched from a commit: git writes the code's folder then, and is
+not used once the pipeline has started. After that nothing is written beside the code:
+
+- **Every file a task writes is under a folder the job names**: `output`, `DOC_EXTRACT_LOG_DIR`, and
+  `inference.tracing.path` when what is sent to the model is kept. `entrypoint.sh` stops a job whose
+  `output` or log folder is the code's folder, or inside it, before either is made.
+- **A setting is changed in a file of the job's own** (`run_config`, below), never in the shipped file.
+- **Python writes no compiled copies of the code** (`PYTHONDONTWRITEBYTECODE`, set by `entrypoint.sh`).
+- **No task runs git.** `entrypoint.sh` reads the commit from the files the checkout left (`.git/HEAD`
+  and the reference it names), and each task notes it in `run_manifest.json`. Whether files differed
+  from that commit cannot be told that way, and is noted as unknown.
+
+All three are a few lines of bash at the top of `entrypoint.sh`, which every job starts with.
+
+`tests/scripts/test_the_launch_is_decided_in_the_entry_script.py` runs the script, and
+`tests/common/test_nothing_is_written_beside_the_code.py` watches a whole run of the five tasks for any
+file beside the code that is opened for writing, made, moved or removed.
+
+What the engine and its libraries write for themselves (their caches, under the home folder and the
+temporary folder) is not the pipeline's and is not covered by this.
+
 ## The settings file
 
 `config/run_config.yml` holds every setting that is not one of the variables above: the engine's limits for
@@ -396,9 +420,8 @@ KFP_TASK=classify run_config=/data/run_20261126/run_config.yml model=gemma4-31b-
 - **The file named is the whole of the settings.** Nothing is merged from the shipped file. It is read and
   checked exactly as the shipped file is, so a key it leaves out is missing and a key the code does not know
   is refused. What a run was set to do can be read from that one file.
-- **Every task of a run names the same file.** Each task that uses the cards notes the file it read, and
-  the SHA-256 of its contents, in `run_manifest.json`. A task that carries on with other settings than it
-  began with is allowed, and says so.
+- **Every task of a run names the same file.** Each start keeps a copy of the settings it was run with
+  beside its log, under the log's own name: `entrypoint_<time>_run_config.yml`.
 - **The log folder comes from the same file**, when the job does not set `DOC_EXTRACT_LOG_DIR`.
 
 The document types, their fields and the prompts are not settings of a run: they are part of the code, in

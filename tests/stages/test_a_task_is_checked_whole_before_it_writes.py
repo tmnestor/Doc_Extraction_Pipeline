@@ -7,10 +7,10 @@ afresh deleted its earlier output, before the stage had read its own settings. S
   with another model was refused as "output from another run";
 - a task started afresh that could not start had already deleted the output it was to replace.
 
-And three settings were first met after that: a key the engine is started with (a ``KeyError`` as the
-engine loaded), ``resources.infrastructure.dp_join_timeout`` (only with an engine on each card), and the
-share of a card's memory a job may set (a ``ValueError`` as the engine loaded). A tracing block left out
-was taken for "off".
+And two settings were first met after that: a key the engine is started with (a ``KeyError`` as the
+engine loaded), and ``resources.infrastructure.dp_join_timeout`` (only with an engine on each card). A
+tracing block left out was taken for "off". The share of a card's memory a job may set was read by
+``float()`` as the engine loaded: ``entrypoint.sh`` now checks it at launch.
 
 The pages are blank images made by the bench, and every reply is invented.
 """
@@ -232,29 +232,6 @@ def test_a_tracing_block_left_out_is_not_taken_for_off(bench: Bench) -> None:
 
     message = str(refused.value)
     assert all(part in message for part in PARTS) and "inference.tracing" in message
-
-
-# --- the share of a card's memory a job may set ---------------------------------------------------------
-
-
-@pytest.mark.parametrize("given", ["a lot", "0", "1.5", "-0.2"])
-def test_a_share_of_memory_that_is_no_share_stops_the_task_when_it_is_worked_out(
-    bench: Bench, tmp_path: Path, given: str
-) -> None:
-    with pytest.raises(ConfigError) as refused:
-        task(bench, "classify", tmp_path / "out", DOC_EXTRACT_GPU_MEMORY_UTILIZATION=given)
-
-    message = str(refused.value)
-    assert all(part in message for part in PARTS)
-    assert "DOC_EXTRACT_GPU_MEMORY_UTILIZATION" in message and repr(given) in message
-    assert not (tmp_path / "out").exists()
-
-
-@pytest.mark.parametrize("given", ["0.85", "1", "None", ""])
-def test_a_share_of_memory_that_is_one_or_is_not_set_is_accepted(
-    bench: Bench, tmp_path: Path, given: str
-) -> None:
-    task(bench, "classify", tmp_path / "out", DOC_EXTRACT_GPU_MEMORY_UTILIZATION=given)
 
 
 # --- the settings file is read once to work a task out --------------------------------------------------

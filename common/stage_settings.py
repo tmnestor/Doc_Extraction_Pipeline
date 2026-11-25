@@ -8,8 +8,8 @@ should look like and how to mend it.
 A variable that is unset, empty, or the word ``None`` counts as not set: a pipeline manifest passes a blank
 parameter as the text "None".
 
-The settings file is the shipped one, ``config/run_config.yml``, unless the job names its own in the
-variable ``run_config`` (``settings_file``).
+The settings file is the one ``entrypoint.sh`` hands over: the shipped ``config/run_config.yml``, or the
+job's own if it names one in ``run_config``. Which it is is decided there, in bash.
 
 Run as a module it prints the log folder, which the entry script needs before it starts anything else:
 
@@ -190,72 +190,16 @@ def _refuse_old_names(environ: Mapping[str, str]) -> None:
 
 
 _MEMORY_SHARE = "DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
-# The variable by which a job names its own settings file.
-SETTINGS_FILE = "run_config"
-
-
-def settings_file(environ: Mapping[str, str], shipped: Path) -> Path:
-    """The settings file a task is worked out from: the one the job names, else the shipped one.
-
-    The shipped file is in the code's own folder, and a job cannot write there: under a pipeline the
-    code is read-only, and storage a job can write to is mounted beside it. Until 26 November 2026
-    that file was the only one read, so any setting that is not one of the job's variables could be
-    changed only by editing the code's folder. A job now names a settings file of its own, anywhere it
-    can read, in the variable ``run_config``.
-
-    The file named is the whole of the settings and stands in the shipped file's place. Nothing is
-    merged from the shipped file: it is read and checked exactly as the shipped file is, so a key it
-    leaves out is missing, and what a run was set to do can be read from that one file.
-
-    Args:
-        environ: The job's environment.
-        shipped: The settings file in the code's folder, read when the job names none.
-
-    Raises:
-        ConfigError: If the job names a file that is not there.
-    """
-    named = _set(environ, SETTINGS_FILE)
-    if named is None:
-        return shipped
-    path = Path(named)
-    if not path.is_file():
-        raise ConfigError(
-            f"What: the settings file the job names does not exist, or is not a file: {named}\n"
-            f"Where: the environment variable {SETTINGS_FILE}.\n"
-            f"Expected: a whole settings file the job can read, with every key the shipped file has, "
-            f"e.g. {SETTINGS_FILE}=/data/run_20261126/run_config.yml. Unset, the shipped file is read: "
-            f"{shipped}\n"
-            f"How to fix: copy the shipped file to storage the job can read, change what the run needs "
-            f"changed, and name the copy in {SETTINGS_FILE}; or leave {SETTINGS_FILE} unset."
-        )
-    return path
 
 
 def _memory_share(environ: Mapping[str, str]) -> float | None:
     """The share of each card's memory the job sets, or None if it sets none.
 
-    Read and checked here, with every other variable of the job, and handed to the engine loader with
-    the run's settings: one that cannot be used stops the run before anything is written.
-
-    Raises:
-        ConfigError: If the variable is set and is not a number above 0 and at most 1.
+    entrypoint.sh has checked that it is a share. It is read here, with the job's other variables,
+    and handed to the engine loader with the run's settings.
     """
     given = _set(environ, _MEMORY_SHARE)
-    if given is None:
-        return None
-    try:
-        usable = 0.0 < float(given) <= 1.0
-    except ValueError:
-        usable = False
-    if not usable:
-        raise ConfigError(
-            f"What: {_MEMORY_SHARE} is {given!r}, not a share of a card's memory.\n"
-            f"Where: the environment variable {_MEMORY_SHARE}.\n"
-            f"Expected: a number above 0 and at most 1, e.g. {_MEMORY_SHARE}=0.90. Unset, the share is "
-            f"the model's gpu_memory_utilization in the settings file.\n"
-            f"How to fix: set {_MEMORY_SHARE} to such a number, or leave it unset."
-        )
-    return float(given)
+    return None if given is None else float(given)
 
 
 def run_settings(task: StageSettings) -> Settings:
@@ -423,16 +367,12 @@ def _start_afresh(environ: Mapping[str, str]) -> bool:
 
 
 def main() -> int:
-    """Print the log folder, or the reason it cannot be worked out.
-
-    The file given is the shipped settings file. The job's own, if it names one, is read in its place
-    here, as it is when the task is worked out: the entry script decides neither.
-    """
+    """Print the log folder, or the reason it cannot be worked out."""
     if len(sys.argv) != 2:
-        print("usage: python -m common.stage_settings <the shipped settings file>")
+        print("usage: python -m common.stage_settings <settings file>")
         return 2
     try:
-        print(log_dir(os.environ, settings_file(os.environ, Path(sys.argv[1]))))
+        print(log_dir(os.environ, Path(sys.argv[1])))
     except ConfigError as err:
         print(f"FATAL: the log folder cannot be worked out.\n{err}")
         return 1

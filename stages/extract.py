@@ -26,15 +26,8 @@ from common.vllm_dp import RecordSink
 from common.stage_settings import StageSettings
 
 from . import records as records_of
-from .io import (
-    Journal,
-    StreamingJsonlWriter,
-    append_jsonl,
-    read_completed_images,
-    read_jsonl,
-    start_afresh,
-    take_out,
-)
+from .carry_on import Work, carry_on
+from .io import append_jsonl, in_the_order, read_completed_images, read_jsonl, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +45,9 @@ def run(
     Writes the **raw model response string** per image, not parsed/cleaned
     data.  The clean stage handles parsing.
 
-    Supports resumption: if output_path exists with partial results, skips
-    already-processed images and appends new results.
+    A run carries on from what an earlier one left (``stages.carry_on``): pages already read are not
+    read again, a page an earlier run could not read is, and so is a page given another document type
+    since. The file is left in the order pages are read in, however the run went.
 
     Args:
         classifications_path: Path to classifications.jsonl from Stage 1.
@@ -83,21 +77,17 @@ def run(
     app_cfg = Settings.load(cli_args, config_path=config_path)
     check_settings(app_cfg, classifications)
 
-    # What an earlier run had read before it stopped is added to the output first, in the order the
-    # stage reads pages in, and is then carried on from like any other earlier output.
-    journal = Journal(output_path)
-    in_order = sort_for_extraction(
-        classifications, app_cfg.extraction_order, secondary_sort=app_cfg.secondary_sort
+    # Pages of a type the settings say not to read are set apart. The rest are put one document type
+    # after another, so that the engine reuses its work on a type's prompt.
+    to_read, set_apart = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
+    in_order = sort_for_extraction(to_read, app_cfg.extraction_order, secondary_sort=app_cfg.secondary_sort)
+    logger.info(
+        "Sorted %d records by extraction_order (secondary=%s)", len(in_order), app_cfg.secondary_sort
     )
-    recovered = journal.recover([c["image_name"] for c in in_order])
-    if recovered:
-        logger.info("Recovered %d page(s) an earlier run had read before it stopped", len(recovered))
-        from common.stage_timing import note_recovered
+    # The order of the output: the pages set apart, as they were classified, then the pages read.
+    order = [page["image_name"] for page in set_apart] + [page["image_name"] for page in in_order]
 
-        note_recovered(output_path.parent, stage="extract", records=recovered)
-
-    # Two kinds of page are read again, and their records taken out of the output so that they are not
-    # among the pages already done: a page an earlier run could not read, and a page that has been
+    # Two kinds of page are read again: a page an earlier run could not read, and a page that has been
     # given another document type since it was read, whose record is of the wrong fields.
     now_typed = {c["image_name"]: c["document_type"] for c in classifications}
 
@@ -105,91 +95,51 @@ def run(
         name = record.get("image_name")
         return name in now_typed and record.get("document_type") != now_typed[name]
 
-    read_again = take_out(output_path, lambda record: records_of.failed(record) or retyped(record))
-    if read_again:
+    def taken_out(records: list[dict[str, Any]]) -> None:
+        could_not = sum(1 for record in records if records_of.failed(record))
         logger.info(
             "%d page(s) will be read again: %d an earlier run could not read, %d given another "
             "document type since",
-            len(read_again),
-            sum(1 for record in read_again if records_of.failed(record)),
-            sum(1 for record in read_again if not records_of.failed(record)),
+            len(records),
+            could_not,
+            len(records) - could_not,
         )
-
-    # Check for resumption
-    completed = read_completed_images(output_path)
-    if completed:
-        original_count = len(classifications)
-        classifications = [c for c in classifications if c["image_name"] not in completed]
-        logger.info(
-            "Resuming: %d already done, %d remaining (of %d total)",
-            len(completed),
-            len(classifications),
-            original_count,
-        )
-
-    if not classifications:
-        logger.info("All images already processed -- nothing to do")
-        return output_path
-
-    # Pages of a type the settings say not to read are set aside, and recorded as not read.
-    classifications, skipped = filter_skip_labels(classifications, app_cfg.extraction_skip_labels)
-    if skipped:
-        logger.info("Skipping %d records with skip labels", len(skipped))
-        # Write skipped records to output so downstream sees one record per input
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with StreamingJsonlWriter(output_path) as writer:
-            for rec in skipped:
-                writer.write(records_of.left_unread(rec))
-
-    if not classifications:
-        logger.info("All remaining images skipped -- nothing to extract")
-        return output_path
-
-    # One document type after another, so that the engine reuses its work on a type's prompt.
-    classifications = sort_for_extraction(
-        classifications,
-        app_cfg.extraction_order,
-        secondary_sort=app_cfg.secondary_sort,
-    )
-    logger.info(
-        "Sorted %d records by extraction_order (secondary=%s)",
-        len(classifications),
-        app_cfg.secondary_sort,
-    )
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by extract_pages; only where the engine is started differs.
-    from common.stage_timing import inference_seconds_from_records, note_stage_timing
-    from common.vllm_dp import read_on_the_cards
+    carried = carry_on(
+        app_cfg,
+        Work(
+            stage="extract",
+            output=output_path,
+            items=in_order,
+            name_of=lambda page: page["image_name"],
+            read=extract_pages,
+            order=order,
+            read_again=lambda record: records_of.failed(record) or retyped(record),
+            taken_out=taken_out,
+            timing=output_path.parent,
+        ),
+    )
 
-    stage_started = time.time()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    # Each record is kept in the journal as it is made, so that a run that stops part way keeps what it
-    # had read, however the engines are arranged. The output is then added to, in the pages' order,
-    # and never begun again: it may hold an earlier run's pages, or the skipped pages written above.
-    with journal:
-        read = read_on_the_cards(app_cfg, classifications, extract_pages, sink=journal)
-    records, execution_mode = read.records, read.arrangement
-    append_jsonl(output_path, records)
-    journal.discard()
+    # Each page set apart has a record too, so that the stages after this one see one record a page.
+    # They are added after the reading and not before it: a first run with such pages is then not
+    # taken for one that carried on. The order above still puts them first.
+    held = read_completed_images(output_path)
+    left_unread = [records_of.left_unread(page) for page in set_apart if page["image_name"] not in held]
+    if left_unread:
+        logger.info("Skipping %d records with skip labels", len(left_unread))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        append_jsonl(output_path, left_unread)
+        in_the_order(output_path, order)
 
-    wall_clock = time.time() - stage_started
+    if carried.arrangement is None:
+        return output_path
+
+    records = carried.records
     # The model's time, apart from starting the engine: the sum of the pages' times, and with an engine on
     # each card the slowest card's sum.
-    logger.info(
-        "Extraction complete: %d images in %.1fs",
-        len(records),
-        inference_seconds_from_records(records, fallback=wall_clock),
-    )
-    note_stage_timing(
-        output_path.parent,
-        stage="extract",
-        records=records,
-        wall_clock=wall_clock,
-        execution_mode=execution_mode,
-        carried_on=bool(completed),
-        read_again=len(read_again),
-    )
+    logger.info("Extraction complete: %d images in %.1fs", len(records), carried.model_seconds)
     logger.info("Wrote %d extractions to %s", len(records), output_path)
     could_not = sum(1 for record in records if records_of.failed(record))
     if could_not:

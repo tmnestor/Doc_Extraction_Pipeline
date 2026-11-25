@@ -24,11 +24,11 @@ from typing import Any
 import pytest
 import yaml
 
-from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped
 from common.config_schema import ConfigError
 from common.engine_calls import StageStopped
 from common.settings import Settings
-from common.stage_timing import read_stage_timings
+from common.stage_timing import StageTiming, read_stage_timings, write_stage_timing
 from stages import __main__ as starter
 from stages import split
 from stages.io import read_jsonl, take_out
@@ -42,6 +42,11 @@ def records_by_name(path: Path) -> dict[str, dict[str, Any]]:
     names = [record["image_name"] for record in records]
     assert len(names) == len(set(names)), "a page is in the output twice"
     return {record["image_name"]: record for record in records}
+
+
+def in_reading_order(bench: Bench) -> list[str]:
+    """The bench's pages in the order extract reads them: one type after another."""
+    return sorted(bench.names, key=lambda name: (KINDS.index(name[8:-4]), name))
 
 
 def stop_after(bench: Bench, requests: int) -> None:
@@ -172,6 +177,8 @@ def test_a_page_extract_could_not_read_is_read_again_by_the_next_run(
     assert second[spoilt]["error"] is None
     assert second[spoilt]["raw_response"] == f"TOTAL_AMOUNT: read from {spoilt}"
     assert all(second[name] == first[name] for name in bench.names if name != spoilt)
+    # The page read again is put back in its place, and not added after the others.
+    assert list(second) == in_reading_order(bench)
     (row,) = [t for t in read_stage_timings(out) if t.stage == "extract"]
     assert row.images == len(bench.names)
 
@@ -220,6 +227,38 @@ def test_a_page_given_another_type_since_it_was_read_is_read_again(bench: Bench,
     records = records_by_name(output)
     assert set(records) == set(bench.names)
     assert records[retyped]["document_type"] == "RECEIPT" and records[retyped]["prompt_used"] == "receipt"
+    assert list(records) == in_reading_order(bench)
+
+
+def test_pages_set_apart_are_written_first_whether_the_run_went_straight_or_carried_on(
+    bench: Bench, tmp_path: Path
+) -> None:
+    bench.with_settings(lambda s: s["pipeline"]["extraction"].update(skip_labels=["RECEIPT"]))
+    out = tmp_path / "out"
+    classifications, output = classified(bench, out), out / "raw_extractions.jsonl"
+    straight = bench.extract(classifications, tmp_path / "straight" / "raw_extractions.jsonl")
+
+    bench.processor.stop_at_call = len(bench.processor.calls) + 2
+    with pytest.raises(Stopped):
+        bench.extract(classifications, output)
+    bench.processor.stop_at_call = None
+    bench.extract(classifications, output)
+
+    names = list(records_by_name(output))
+    assert names == list(records_by_name(straight))
+    assert [r["image_name"] for r in read_jsonl(output) if r.get("skipped")] == names[:2]
+
+
+def test_a_first_run_with_pages_set_apart_writes_its_row_of_time_anew(bench: Bench, tmp_path: Path) -> None:
+    """The records of the pages set apart must not make a first run look like one that carried on."""
+    bench.with_settings(lambda s: s["pipeline"]["extraction"].update(skip_labels=["RECEIPT"]))
+    out = tmp_path / "out"
+    write_stage_timing(out, StageTiming("extract", 999.0, 999.0, "an older run", 99))
+
+    bench.extract(classified(bench, out), out / "raw_extractions.jsonl")
+
+    (row,) = [t for t in read_stage_timings(out) if t.stage == "extract"]
+    assert row.images == 4 and row.execution_mode == "single-engine"
 
 
 # --- an engine that has stopped answering ---------------------------------------------------------------

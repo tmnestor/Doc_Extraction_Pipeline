@@ -8,8 +8,8 @@ from the file.
 
 The folders a task reads and writes are not here. They are worked out once, when the task starts
 (``common.stage_settings``), and handed to the stage. Until 25 November 2026 this object worked the
-folder of pages out a second time, and refused to load without one: so the SROIE task, which reads its
-own folder, could not start unless the pipeline's folder of pages existed.
+folder of pages out a second time, and refused to load without one: so a task that read a folder of
+its own, as the pipeline then had, could not start unless the pipeline's folder of pages existed.
 
 Nothing is defaulted in Python. A key that is needed and absent stops the run with a message that says
 what is wrong, where, what it should look like and how to mend it. A key the pipeline does not know is

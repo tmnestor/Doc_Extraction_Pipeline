@@ -18,7 +18,7 @@ def first_column(heading: str) -> list[str]:
 
 
 def test_the_tasks_listed_are_the_tasks_there_are() -> None:
-    assert first_column("The six tasks") == list(stage_settings.TASKS)
+    assert first_column("The five tasks") == list(stage_settings.TASKS)
 
 
 def test_the_models_listed_are_the_models_registered() -> None:
@@ -34,7 +34,7 @@ def test_every_variable_a_job_may_set_is_in_the_table() -> None:
         .split("# By hand")[0]
     )
     in_script = re.findall(r"^#   (\w+)", header, flags=re.MULTILINE)
-    assert len(in_script) == 11, in_script
+    assert len(in_script) == 10, in_script
     assert listed == in_script
 
 

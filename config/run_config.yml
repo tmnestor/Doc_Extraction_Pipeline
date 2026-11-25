@@ -134,14 +134,6 @@ pipeline:
 
   # The SROIE benchmark (KFP_TASK=sroie): 347 public receipts, four fields each. It has its own data,
   # prompt, scorer and output folder, and reads only this block.
-  sroie:
-    # The split's own folder, the one that holds img/ and entities/.
-    data_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/test
-    # One folder for each model: the task does not resume, and writes over its two files every time.
-    output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
-    max_new_tokens: 256        # the longest reply: four short fields
-    batch_size: 64             # receipts to an engine call, as pipeline.batching gives every type
-
   # Sets of pages that are all of one document type, known beforehand. A job reads one by naming it
   # (dataset=sroie). classify then gives every page that type and asks no model, and the stages after
   # it read the pages as they read any others, by the type's prompt and its fields in the schema file.

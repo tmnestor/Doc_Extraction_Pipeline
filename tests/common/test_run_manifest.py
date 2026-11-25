@@ -232,7 +232,7 @@ class Called:
 @pytest.fixture
 def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
-    for task in ("split", "classify", "extract", "clean", "evaluate", "sroie"):
+    for task in ("split", "classify", "extract", "clean", "evaluate"):
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
     return called
 

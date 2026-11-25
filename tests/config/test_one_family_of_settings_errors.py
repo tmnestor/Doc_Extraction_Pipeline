@@ -18,7 +18,6 @@ FAMILY = [
     ("common.vllm_stage_overrides", "StageOverrideConfigError"),
     ("common.photo_split", "PhotoSplitConfigError"),
     ("common.sheet_finder_config", "FinderConfigError"),
-    ("common.sroie.config", "SroieConfigError"),
     ("common.field_schema", "FieldSchemaError"),
 ]
 

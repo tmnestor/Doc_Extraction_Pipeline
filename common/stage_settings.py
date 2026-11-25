@@ -22,7 +22,7 @@ from typing import Any
 
 from common.settings import ConfigError, read_settings_file, value_at
 
-TASKS = ("split", "classify", "extract", "clean", "evaluate", "sroie")
+TASKS = ("split", "classify", "extract", "clean", "evaluate")
 
 # The tasks that read pages from the image folder.
 _READS_IMAGES = ("split", "classify", "extract")
@@ -34,7 +34,6 @@ _IMAGE_DIR = ("image_dir", "pipeline.information_extraction.input.dir")
 _GROUND_TRUTH = ("ground_truth", "pipeline.information_extraction.input.ground_truth")
 _OUTPUT = ("output", "pipeline.information_extraction.output.dir")
 _LOG_DIR = ("DOC_EXTRACT_LOG_DIR", "bootstrap.logging.log_dir")
-_SROIE_OUTPUT = "pipeline.sroie.output_dir"
 _DATASETS = "pipeline.datasets"
 _DATASET_KEYS = ("document_type", "image_dir")
 
@@ -50,7 +49,6 @@ class StageSettings:
     ground_truth: Path | None
     log_dir: Path
     clear_previous_output: bool
-    sroie_max_images: int | None
     # The settings file these were worked out from. A stage that reads more of it reads this one.
     config_path: Path
     # The dataset the job names, if it names one, and the document type that dataset gives its pages.
@@ -252,21 +250,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         image_dir = value(
             _IMAGE_DIR, task in _READS_IMAGES, "the folder of pages to read, e.g. image_dir=/data/pages"
         )
-    if task == "sroie":
-        # The benchmark writes to its own folder, named in its own block of the settings file. It is
-        # asked for no other: until 25 November 2026 it was asked for the pipeline's output folder,
-        # which it never writes to.
-        output = _from_file(raw, _SROIE_OUTPUT)
-        if output is None:
-            raise ConfigError(
-                f"What: the task 'sroie' has no folder to write to.\n"
-                f"Where: the key {_SROIE_OUTPUT} in {config_path.resolve()}.\n"
-                f"Expected: a folder for the benchmark's two files, one for each model, e.g. "
-                f"output_dir: /data/sroie/output_gemma4\n"
-                f"How to fix: give {_SROIE_OUTPUT} a folder in that file."
-            )
-    else:
-        output = value(_OUTPUT, True, "the folder the stages write to, e.g. output=/data/run_20261121")
+    output = value(_OUTPUT, True, "the folder the stages write to, e.g. output=/data/run_20261121")
     ground_truth = value(
         _GROUND_TRUTH,
         task == "evaluate",
@@ -291,7 +275,6 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         ground_truth=Path(ground_truth) if ground_truth else None,
         log_dir=log_dir(environ, config_path),
         clear_previous_output=_start_afresh(environ),
-        sroie_max_images=_whole_number(environ, "sroie_max_images"),
         config_path=config_path,
         dataset=dataset,
         given_type=given_type,
@@ -333,20 +316,6 @@ def _start_afresh(environ: Mapping[str, str]) -> bool:
             f"How to fix: set CLEAR_PREV_OUTPUT=true or CLEAR_PREV_OUTPUT=false, or leave it unset."
         )
     return given == "true"
-
-
-def _whole_number(environ: Mapping[str, str], variable: str) -> int | None:
-    given = _set(environ, variable)
-    if given is None:
-        return None
-    if not given.isdigit() or int(given) < 1:
-        raise ConfigError(
-            f"What: {variable} is {given!r}.\n"
-            f"Where: the environment variable {variable}.\n"
-            f"Expected: a whole number of 1 or more, e.g. {variable}=40. Unset means all of them.\n"
-            f"How to fix: set {variable} to a whole number, or leave it unset."
-        )
-    return int(given)
 
 
 def main() -> int:

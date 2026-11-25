@@ -12,9 +12,8 @@ NOTE ON THE INTERVAL. Production per-(document, field) F1 is CONTINUOUS:
 list fields (transaction dates, line items) are scored position-agnostically
 and earn partial credit. So the interval here is the normal approximation on
 a mean, ``1.96 * sd / sqrt(n)``. It is deliberately NOT the Wilson interval
-used for the SROIE benchmark, where a field holds a single value and each
-document scores 1 or 0: a proportion interval would be the wrong tool for
-continuous scores.
+that suits a field which holds a single value and scores 1 or 0 on each
+document: a proportion interval would be the wrong tool for continuous scores.
 """
 
 import math

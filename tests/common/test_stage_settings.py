@@ -59,8 +59,8 @@ def assert_diagnostic(message: str, *names: str) -> None:
     assert all(name in message for name in names), message
 
 
-def test_the_six_tasks() -> None:
-    assert TASKS == ("split", "classify", "extract", "clean", "evaluate", "sroie")
+def test_the_five_tasks() -> None:
+    assert TASKS == ("split", "classify", "extract", "clean", "evaluate")
 
 
 @pytest.mark.parametrize("task", ["split", "classify", "extract", "clean"])
@@ -76,7 +76,7 @@ def test_the_usual_variables_give_the_paths_the_entry_script_gave(task: str) -> 
     assert settings.raw_extractions == Path(f"{D}/output_run/raw_extractions.jsonl")
     assert settings.cleaned_extractions == Path(f"{D}/output_run/cleaned_extractions.jsonl")
     assert settings.evaluation_dir == Path(f"{D}/output_run/evaluation")
-    assert settings.clear_previous_output is False and settings.sroie_max_images is None
+    assert settings.clear_previous_output is False
 
 
 IN_THE_FILE = {
@@ -157,23 +157,6 @@ def test_a_job_that_does_not_name_a_folder_its_task_needs_is_stopped_and_told_wh
     assert_diagnostic(str(raised.value), variable, key, str(RUN_CONFIG.resolve()))
 
 
-def test_the_benchmark_is_asked_for_neither_the_pages_nor_the_output_folder() -> None:
-    """It reads and writes its own folders. Until 25 November 2026 it was asked for both."""
-    settings = resolve("sroie", {"DOC_EXTRACT_LOG_DIR": "/data/sroie/logs"}, RUN_CONFIG)
-
-    assert settings.image_dir is None
-    assert str(settings.output) == shipped("pipeline.sroie.output_dir")
-
-
-def test_the_benchmark_with_no_folder_of_its_own_to_write_to_is_stopped(tmp_path: Path) -> None:
-    path = config_with(tmp_path, lambda raw: raw["pipeline"]["sroie"].update(output_dir=None))
-
-    with pytest.raises(ConfigError) as raised:
-        resolve("sroie", USUAL, path)
-
-    assert_diagnostic(str(raised.value), "sroie", "pipeline.sroie.output_dir", str(path.resolve()))
-
-
 @pytest.mark.parametrize("task", ["split", "classify", "extract"])
 def test_a_task_that_reads_pages_is_not_started_without_its_folder_of_pages(
     tmp_path: Path, task: str
@@ -194,7 +177,7 @@ def test_a_task_that_reads_pages_is_not_started_without_its_folder_of_pages(
     )
 
 
-@pytest.mark.parametrize("task", ["clean", "evaluate", "sroie"])
+@pytest.mark.parametrize("task", ["clean", "evaluate"])
 def test_a_task_that_reads_no_pages_is_not_asked_whether_a_folder_of_pages_is_there(task: str) -> None:
     environ = {**USUAL, "image_dir": "/nowhere/at/all", "ground_truth": "/data/key.jsonl"}
 
@@ -207,8 +190,9 @@ def test_a_folder_of_pages_that_is_there_passes(tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("task", ["", "run_info_extract", "trust"])
-def test_a_task_that_is_not_one_of_the_six_is_refused(task: str) -> None:
+@pytest.mark.parametrize("task", ["", "run_info_extract", "trust", "sroie"])
+def test_a_task_that_is_not_one_of_the_five_is_refused(task: str) -> None:
+    """The benchmark that had a task of its own until 25 November 2026 is read as a dataset now."""
     with pytest.raises(ConfigError) as raised:
         resolve(task, USUAL, RUN_CONFIG)
 
@@ -266,14 +250,13 @@ def test_the_answer_key_is_needed_to_evaluate_and_not_to_classify(tmp_path: Path
     )
 
 
-def test_the_images_are_not_needed_to_clean_or_to_run_the_benchmark(tmp_path: Path) -> None:
+def test_the_images_are_not_needed_to_clean(tmp_path: Path) -> None:
     path = config_with(
         tmp_path, lambda raw: raw["pipeline"]["information_extraction"]["input"].update(dir=None)
     )
     environ = {k: v for k, v in USUAL.items() if k != "image_dir"}
 
     assert resolve("clean", environ, path).image_dir is None
-    assert resolve("sroie", environ, path).image_dir is None
 
 
 @pytest.mark.parametrize(
@@ -301,11 +284,22 @@ def test_any_other_answer_to_starting_afresh_is_refused() -> None:
     assert_diagnostic(str(raised.value), "CLEAR_PREV_OUTPUT", "true", "false")
 
 
-def test_the_benchmark_may_be_cut_short_by_a_whole_number() -> None:
-    assert resolve("sroie", {**USUAL, "sroie_max_images": "40"}, RUN_CONFIG).sroie_max_images == 40
+def test_the_variable_that_cut_the_benchmark_short_is_no_longer_read() -> None:
+    """How many pages are read is pipeline.information_extraction.input.max_images, for every run."""
+    settings = resolve("classify", {**USUAL, "sroie_max_images": "forty"}, RUN_CONFIG)
+
+    assert not hasattr(settings, "sroie_max_images")
+
+
+def test_a_settings_file_that_still_has_the_old_tasks_block_is_refused(tmp_path: Path) -> None:
+    path = config_with(
+        tmp_path, lambda raw: raw["pipeline"].update(sroie={"data_dir": "/data/sroie", "batch_size": 8})
+    )
+
     with pytest.raises(ConfigError) as raised:
-        resolve("sroie", {**USUAL, "sroie_max_images": "forty"}, RUN_CONFIG)
-    assert_diagnostic(str(raised.value), "sroie_max_images")
+        resolve("classify", USUAL, path)
+
+    assert_diagnostic(str(raised.value), "pipeline.sroie.data_dir", "pipeline.sroie.batch_size")
 
 
 def test_a_variable_under_the_old_prefix_is_refused() -> None:
@@ -414,14 +408,6 @@ def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) 
         tmp_path / "out" / "raw_extractions.jsonl",
         tmp_path / "out" / "cleaned_extractions.jsonl",
     )
-
-    starter.run_task(settings_for("sroie", tmp_path, sroie_max_images="40"))
-    assert stage.args == ()
-    assert stage.kwargs == {
-        "model_type": "gemma4-31b-w4a16-vllm",
-        "max_images": 40,
-        "config_path": RUN_CONFIG,
-    }
 
 
 def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads(

@@ -320,8 +320,12 @@ def _in_form(entry: Field, value: str) -> str:
     """A parsed value put into the form its kind of field is written in, before it is cleaned.
 
     A list with " | " between its entries, however the reply separated them (commas, stars on lines of
-    their own, wide gaps); a list of quantities bare; an address with spaces for its commas; a date, or
-    each date of a list, as DD/MM/YYYY.
+    their own, wide gaps); a list of quantities bare; a date, or each date of a list, as DD/MM/YYYY.
+
+    An address is left as it is, commas and all. Until 25 November 2026 its commas were taken out: the
+    answer key was once a CSV file, whose addresses could have none, and the cleaner matched it. The key
+    has been JSON lines since, with the commas of its addresses, so an address read to the letter was
+    compared without them against an answer with them, and never scored 1.
 
     Every value of every reply passes through here, whichever way the reply was written. Until
     24 November 2026 a reply written as JSON skipped it, so its dates and its lists were left as the
@@ -339,8 +343,6 @@ def _in_form(entry: Field, value: str) -> str:
             value = " | ".join(item.strip() for item in re.split(r"\s{2,}", value) if item.strip())
         if entry.cleaned_as == "quantity":
             value = bare_quantities(value)
-    elif entry.cleaned_as == "address" and "," in value:
-        value = " ".join(value.split(",")).strip()
     if entry.cleaned_as == "day_month_year":
         if entry.is_list:
             value = " | ".join(_as_day_month_year(date.strip()) for date in value.split(" | "))
@@ -478,7 +480,7 @@ def _clean_text(value: str) -> str:
 
 
 def _clean_address(value: str) -> str:
-    """An address without a telephone number or email address added to it. Its commas are gone already."""
+    """An address without a telephone number or email address added to it. Its commas are kept."""
     if not value or value == NOT_FOUND:
         return NOT_FOUND
     cleaned = re.sub(

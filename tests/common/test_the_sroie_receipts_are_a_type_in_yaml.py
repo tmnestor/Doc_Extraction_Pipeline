@@ -80,11 +80,10 @@ PLAIN = (
     "address: 12, JALAN ROOK 4, TAMAN HERON, 81750 MASAI, JOHOR\n"
     "total: 31.07\n"
 )
-# An address has spaces for its commas, as every address the pipeline cleans has.
 READ = {
     "COMPANY": "QUILL & FEATHER BOOKS SDN BHD",
     "DATE": "09/02/2031",
-    "ADDRESS": "12 JALAN ROOK 4 TAMAN HERON 81750 MASAI JOHOR",
+    "ADDRESS": "12, JALAN ROOK 4, TAMAN HERON, 81750 MASAI, JOHOR",
     "TOTAL": "31.07",
 }
 
@@ -173,17 +172,12 @@ def test_three_things_the_old_task_s_parser_read_and_the_pipeline_s_does_not() -
     assert fields_from_reply(PLAIN.replace("total: 31.07", "total = 31.07"), FIELDS)["TOTAL"] == "NOT_FOUND"
 
 
-def test_a_right_address_does_not_score_one_and_no_address_of_any_type_does() -> None:
-    """The cleaner gives an address spaces for its commas, and an answer keeps its commas.
-
-    So an address read to the letter earns its similarity to the answer, which is short of 1 by the
-    commas. It is so for BUSINESS_ADDRESS on every page the pipeline scores, and is left as it is here:
-    the dataset is scored as every other is.
+def test_an_address_read_to_the_letter_scores_one() -> None:
+    """The cleaner leaves an address its commas, and so does the answer (tests/common/
+    test_an_address_keeps_its_commas.py).
     """
     from common.scoring import score_field
 
     answer = "12, JALAN ROOK 4, TAMAN HERON, 81750 MASAI, JOHOR"
-    ours = score_field(fields_from_reply(PLAIN, FIELDS)["ADDRESS"], answer, "ADDRESS")["f1_score"]
-    theirs = score_field(READ["ADDRESS"], answer, "BUSINESS_ADDRESS")["f1_score"]
 
-    assert ours == theirs and 0.9 < ours < 1.0
+    assert score_field(fields_from_reply(PLAIN, FIELDS)["ADDRESS"], answer, "ADDRESS")["f1_score"] == 1.0

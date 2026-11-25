@@ -39,7 +39,8 @@ AS_WRITTEN = {
 }
 CLEANED = {
     "DOCUMENT_TYPE": "INVOICE",
-    "BUSINESS_ADDRESS": "14 Quillfeather Lane Marrowby VIC 3999",
+    # An address keeps its commas, as the page prints them and the answer key writes them.
+    "BUSINESS_ADDRESS": "14 Quillfeather Lane,Marrowby VIC 3999",
     "INVOICE_DATE": "09/02/2031",
     "LINE_ITEM_DESCRIPTIONS": "Ink | Blotting paper | Nibs",
     "LINE_ITEM_QUANTITIES": "2 | 1 | 3",

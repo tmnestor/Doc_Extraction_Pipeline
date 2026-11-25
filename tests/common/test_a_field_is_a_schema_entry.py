@@ -71,7 +71,7 @@ def test_a_reply_is_tidied_by_what_each_fields_entry_says(invented: list[str]) -
         "BAY_FEES": "$1204.50 | 6.30",
         "BAY_DATES": "03/02/2031 | 09/02/2031",
         "BAY_COUNTS": "2 | 4 | 1",
-        "DEPOT_ADDRESS": "4 Tannery Row Eastmere",
+        "DEPOT_ADDRESS": "4 Tannery Row, Eastmere",
         "PERMIT_REF": "77 104 2",
         "ISSUED": "01/03/2031",
         "NOTES": "gate code changed | bay 4 resurfaced",

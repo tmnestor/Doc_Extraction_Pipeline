@@ -371,9 +371,13 @@ def _as_day_month_year(date: str) -> str:
     text = date.split("(")[0].strip()
     day_first = _BEGINS_WITH_ITS_YEAR.match(text) is None
     try:
-        return date_parser.parse(text, dayfirst=day_first).strftime("%d/%m/%Y")
+        read = date_parser.parse(text, dayfirst=day_first)
     except (ValueError, TypeError, date_parser.ParserError):
         return date
+    # Written here and not by the system's own formatting of a date, which pads a year below 1000 with
+    # noughts on a Mac and not on Linux: a date with a digit of its year missing was cleaned to two
+    # different values, by where it was cleaned.
+    return f"{read.day:02d}/{read.month:02d}/{read.year:04d}"
 
 
 # ---------------------------------------------------------------------------------------------------

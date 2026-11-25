@@ -16,7 +16,6 @@ import base64
 import contextlib
 import hashlib
 import io
-import json
 import os
 import queue
 import sys
@@ -81,19 +80,11 @@ def write_pages(folder: Path) -> None:
         Image.new("RGB", size, "white").save(folder / name)
 
 
-def write_sroie_split(folder: Path) -> None:
-    """Write a small invented split in the benchmark's layout: img/ and entities/, one of each a receipt."""
-    (folder / "img").mkdir(parents=True)
-    (folder / "entities").mkdir()
-    answer = {
-        "company": "MARROWBY GROCER",
-        "date": "04/02/2031",
-        "address": "1 QUILL LANE",
-        "total": "23.15",
-    }
+def write_receipts(folder: Path) -> None:
+    """Write a small folder of blank receipts, each told apart by its width, for the dataset of them."""
+    folder.mkdir(parents=True)
     for number in range(SROIE_RECEIPTS):
-        Image.new("RGB", (100 + number, 150), "white").save(folder / "img" / f"R{number:03d}.jpg")
-        (folder / "entities" / f"R{number:03d}.txt").write_text(json.dumps(answer))
+        Image.new("RGB", (100 + number, 150), "white").save(folder / f"R{number:03d}.jpg")
 
 
 def page_of(image: Image.Image) -> tuple[str, str]:
@@ -190,7 +181,7 @@ def stand_in_vllm(recorder: Recorder, model_folder: Path) -> types.ModuleType:
         def reply(self, kind: str) -> str:
             if recorder.stage == "split":
                 return SPLIT_REPLY
-            if recorder.stage in ("sroie", "dataset_sroie"):
+            if recorder.stage == "dataset_sroie":
                 return SROIE_REPLY
             return (CLASSIFY_REPLIES if recorder.stage == "classify" else EXTRACT_REPLIES)[kind]
 
@@ -251,8 +242,6 @@ def test_config(folder: Path) -> Path:
     raw["pipeline"]["information_extraction"]["input"]["document_types"] = None
     raw["pipeline"]["information_extraction"]["input"]["dir"] = str(folder / "pages")
     raw["pipeline"]["photo_split"]["enabled"] = True
-    raw["pipeline"]["sroie"]["data_dir"] = str(folder / "sroie")
-    raw["pipeline"]["sroie"]["output_dir"] = str(folder / "sroie_output")
     path = folder / "run_config.yml"
     path.write_text(yaml.safe_dump(raw, sort_keys=False))
     return path
@@ -290,12 +279,12 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
     Returns:
         The engines built, the calls made to them and the prompt texts those calls refer to.
     """
-    from stages import classify, extract, split, sroie
+    from stages import classify, extract, split
 
     pages, output = folder / "pages", folder / "output"
     write_pages(pages)
     output.mkdir()
-    write_sroie_split(folder / "sroie")
+    write_receipts(folder / "receipts")
     config = test_config(folder)
     recorder = Recorder()
     with recording(recorder, folder / "model"):
@@ -309,11 +298,9 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         )
         recorder.stage = "split"
         split.run(pages, output / "split", model_type=model, config_path=config)
-        recorder.stage = "sroie"
-        sroie.run(model_type=model, config_path=config)
-        # The same receipts read as a dataset: given their type by classify, which asks no model, and
-        # read by extract. tests/reference/test_model_inputs.py sets these calls beside the old task's.
-        receipts = folder / "sroie" / "img"
+        # A dataset whose pages are all of one type: given their type by classify, which asks no
+        # model, and read by extract by the prompt of that type.
+        receipts = folder / "receipts"
         recorder.stage = "dataset_sroie_classify"
         given = classify.run(
             receipts,

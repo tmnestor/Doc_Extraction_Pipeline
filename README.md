@@ -25,7 +25,7 @@ Each box is a task. A task is one start of `entrypoint.sh`, so that the same tas
 server and as the steps of a pipeline job. Every task reads and writes files under one output folder, which
 is how one task finds what another wrote.
 
-## The six tasks
+## The five tasks
 
 | Task | Uses the cards | Reads | Writes under `output` |
 |---|---|---|---|
@@ -34,13 +34,12 @@ is how one task finds what another wrote.
 | `extract` | yes | `classifications.jsonl` and the pages | `raw_extractions.jsonl`: the model's reply for each page |
 | `clean` | no | `raw_extractions.jsonl` | `cleaned_extractions.jsonl`: the replies parsed into fields and tidied |
 | `evaluate` | no | `cleaned_extractions.jsonl` and the answer key | `evaluation/`: each field scored, with the totals |
-| `sroie` | yes | the public SROIE receipts named under `pipeline.sroie` in the settings file | the benchmark's score, in the folder that block names |
 
 `split` is optional. It is for photographs that may hold several documents or sit at an angle. When it has
 run, give the later tasks `image_dir=<output>/split/images`.
 
-`sroie` stands apart from the other five: it reads a public benchmark of 347 receipts with the same model
-stack, so that a model can be compared with published results.
+A set of pages that are all of one type, known beforehand, is read by the same tasks: see
+[Reading a dataset whose pages are all of one type](#reading-a-dataset-whose-pages-are-all-of-one-type).
 
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
@@ -110,9 +109,63 @@ What the tasks share is three modules of functions that a task calls: `stages/io
 `stages/records.py` for records and `stages/carry_on.py` for carrying on. None of them calls a task, and
 there is no base class to inherit from: a task's `run` is still the place to read what that task does.
 
-`clean` and `evaluate` use no cards and take seconds, so each is rebuilt whole on every run. `sroie` is a
-benchmark beside the pipeline: it is started the same way and imports no task, and is otherwise left to
-itself. It writes over its two files on every run.
+`clean` and `evaluate` use no cards and take seconds, so each is rebuilt whole on every run.
+
+## Reading a dataset whose pages are all of one type
+
+Some sets of pages are all of one document type, known beforehand: the receipts of a public dataset,
+say. Such a set is described in the YAML files and read by the five tasks. There is no code for it.
+
+A dataset is four entries. The receipts of the public SROIE test split are the one shipped:
+
+```yaml
+# config/field_definitions.yaml: the type and its fields, each of a kind the pipeline cleans and scores
+document_types:
+  sroie_receipt:
+    completion_tokens: 256
+    fields: [COMPANY, DATE, ADDRESS, TOTAL]
+
+# prompts/extraction_prompts.yaml: a prompt of the type's name
+prompts:
+  sroie_receipt:
+    prompt: |
+      Read this scanned receipt and report four fields. ...
+
+# config/run_config.yml: how many of its pages go to the engine in one call, and the dataset itself
+pipeline:
+  batching:
+    sroie_receipt: 64
+  datasets:
+    sroie:
+      document_type: SROIE_RECEIPT
+      image_dir: /data/sroie/test/img    # or null, for the job to name
+```
+
+A job reads it by naming it:
+
+```bash
+for task in classify extract clean; do
+  KFP_TASK=$task dataset=sroie model=gemma4-31b-w4a16-vllm output=/data/run_sroie \
+    DOC_EXTRACT_LOG_DIR=/data/run_sroie/logs bash entrypoint.sh
+done
+```
+
+- `classify` gives every page the dataset's type and asks no model: it starts no engine. Each record
+  says so, with `type_from: dataset`.
+- `extract`, `clean` and `evaluate` read the pages as they read any others: by the type's prompt, its
+  fields and their kinds. A run of a dataset keeps the model's replies, carries on from where it
+  stopped and reads a failed page again, like any run.
+- The job's own `image_dir` stands in place of the dataset's when it is set.
+- `evaluate` wants an answer key in the pipeline's form: JSON lines, a line a page, with the page's file
+  name and the type's fields.
+
+Every dataset in the file is checked when a task starts, whichever the job names. One that is not its
+two keys, or whose type the schema file does not have, stops the run and says how to mend it. With no
+dataset at all, write `datasets: {}`.
+
+Until 25 November 2026 the SROIE receipts had a task of their own, with its own prompt, parser, scorer
+and report, and two scores of its own. They are scored now as every other page is, so a figure from this
+pipeline is not one to set beside a published SROIE result.
 
 ## How a failed page is tried again
 
@@ -241,10 +294,6 @@ pages. A value of 1 stops a task at the first page that fails.
 | As many requests failed in a row as are allowed | 1 | `FATAL: the task was stopped part way.` and why |
 | A setting cannot be used | 1 | `FATAL: the task cannot be started.` and why |
 
-`sroie` differs in two ways. It does not carry on from an earlier run, so it reads every receipt each
-time. And it exits with code 1 if any receipt failed, after writing its results, so that a score with
-failures in it is not read as a clean one.
-
 ## The two models
 
 | Model | What it is | How it sits on two 24 GB cards |
@@ -254,7 +303,7 @@ failures in it is not read as a clean one.
 
 Both arrangements read pages through the same code. An engine on each card is given its share of the pages
 and runs exactly what a single engine runs. That holds for every task that uses the model: `split`,
-`classify`, `extract` and `sroie`.
+`classify` and `extract`.
 
 Both models run on vLLM 0.29.0 in one conda environment, `conda_envs/vllm_env4.yaml`.
 
@@ -293,19 +342,17 @@ it, what it should look like and how to mend it.
 The four folders (`image_dir`, `output`, `ground_truth` and `DOC_EXTRACT_LOG_DIR`) are null in the settings
 file as shipped, so a job names each folder its task needs. A folder written into the file would be one
 machine's, and a run that forgot to name its own would read it, or write into it, without a word. A task
-is asked only for the folders it uses: `clean` and `evaluate` for no folder of pages, and `sroie` for
-neither that nor `output`, since it reads and writes the folders of its own block.
+is asked only for the folders it uses: `clean` and `evaluate` for no folder of pages.
 
 | Variable | Meaning | Needed by | Key in `run_config.yml` when unset | Name before 21 November 2026 |
 |---|---|---|---|---|
 | `KFP_TASK` | The task to run | every start | none: it must be set | unchanged |
 | `model` | A registered model | every task | `bootstrap.model.type` | unchanged |
 | `image_dir` | The folder of pages | `split`, `classify`, `extract` | `pipeline.information_extraction.input.dir` | unchanged |
-| `output` | The folder the tasks write to | every task but `sroie` | `pipeline.information_extraction.output.dir` | unchanged |
+| `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
 | `dataset` | A dataset of the settings file, whose pages are all of one type: `classify` gives each page that type and asks no model, and the dataset's folder of pages is read unless `image_dir` is set | optional | a block under `pipeline.datasets` | new |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
-| `sroie_max_images` | Score only the first N receipts of the benchmark | optional, `sroie` only | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | none: the default is in `entrypoint.sh` | `LMM_CONDA_ENV` |
 | `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | `inference.vllm` | `LMM_GPU_MEMORY_UTILIZATION` |
@@ -557,7 +604,7 @@ when that change is intended.
 | Folder | Holds |
 |---|---|
 | `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
-| `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder, the SROIE benchmark |
+| `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
 | `config/` | `run_config.yml` and `field_definitions.yaml` |
 | `prompts/` | The classification and extraction prompts |

@@ -178,15 +178,13 @@ def test_what_crosses_to_a_workers_process_can_be_pickled(bench: Bench) -> None:
     """
     import pickle
 
-    from stages.sroie import read_sroie
-
     settings = Settings.load(dict(bench.overrides), config_path=bench.config_path).for_stage("classify")
     crossed = pickle.loads(pickle.dumps(settings.on_one_card()))
 
     assert (crossed.model_type, crossed.num_gpus, crossed._stage) == (settings.model_type, 1, "classify")
     assert crossed.get_vllm_config(crossed.model_type) == settings.get_vllm_config(settings.model_type)
     assert crossed.raw == settings.raw and crossed.model_path == settings.model_path
-    for read in (classify_pages, extract_pages, read_sroie):
+    for read in (classify_pages, extract_pages):
         assert pickle.loads(pickle.dumps(read)) is read
     pages = bench.pages(1)
     assert pickle.loads(pickle.dumps((pages, bench.classified(pages)))) == (pages, bench.classified(pages))

@@ -83,7 +83,7 @@ def test_every_way_of_importing_a_stage_is_seen() -> None:
     assert modules_of_stages_imported_by(ast.parse(source)) == {"a", "b", "c", "d", "e", "f"}
 
 
-@pytest.mark.parametrize("name", [*STAGES, "sroie"])
+@pytest.mark.parametrize("name", STAGES)
 def test_a_stage_is_started_one_way(name: str) -> None:
     stage = importlib.import_module(f"stages.{name}")
 
@@ -91,7 +91,7 @@ def test_a_stage_is_started_one_way(name: str) -> None:
     assert list(inspect.signature(stage.start).parameters) == ["task"]
 
 
-@pytest.mark.parametrize("name", [*STAGES, "sroie"])
+@pytest.mark.parametrize("name", STAGES)
 def test_a_stage_imports_no_other_stage(name: str) -> None:
     tree = ast.parse((STAGES_FOLDER / f"{name}.py").read_text())
 

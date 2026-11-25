@@ -14,14 +14,13 @@
 # second. This script decides none of it.
 #
 # The variables a job may set:
-#   KFP_TASK                 split, classify, extract, clean, evaluate or sroie
+#   KFP_TASK                 split, classify, extract, clean or evaluate
 #   model                    a registered model
 #   image_dir                the folder of pages to read
 #   output                   the folder the stages write to
 #   ground_truth             the answer key, for evaluate
 #   dataset                  a dataset of the settings file, whose pages are all of one type
 #   CLEAR_PREV_OUTPUT        true = delete the stage's earlier output first; default false
-#   sroie_max_images         score only the first N receipts of the benchmark
 #   DOC_EXTRACT_LOG_DIR      the folder for the log
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
 #   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take

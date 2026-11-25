@@ -1,6 +1,7 @@
 """What each stage hands to the model must not change unless a change is meant.
 
-`model_inputs.py` runs `classify`, `extract`, `split` and `sroie` on invented pages with a stand-in for the
+`model_inputs.py` runs `classify`, `extract` and `split` on invented pages, and `classify` and `extract`
+again on a dataset whose pages are all of one type, with a stand-in for the
 engine, and returns what the engine was given: the arguments each engine was built with and the cards it
 was put on, and for every call its requests in order, its sampling settings and its chat arguments. The
 record for each model the pipeline runs is kept beside this file.
@@ -47,41 +48,40 @@ def test_what_is_sent_to_the_model_has_not_changed(model: str, tmp_path: Path) -
     assert now["calls"] == recorded["calls"]
 
 
-def as_asked(record: dict[str, Any], stage: str) -> list[dict[str, Any]]:
-    """A stage's calls with everything that is sent, and without what only says where in the record it is.
-
-    The name of the stage is dropped, and so is the engine's running number, which counts the engines
-    started so far and so differs between any two stages. In its place is what that engine was started
-    with and the card it was put on.
-    """
-    return [
-        {
-            "engine": {
-                key: value for key, value in record["engines"][call["engine"]].items() if key != "stage"
-            },
-            "sampling": call["sampling"],
-            "others": call["others"],
-            "requests": call["requests"],
-        }
-        for call in record["calls"]
-        if call["stage"] == stage
-    ]
+# The first twelve characters of the SHA-256 of the dataset's prompt, which is how the record names a prompt
+# (tests/common/test_the_sroie_receipts_are_a_type_in_yaml.py holds the whole digest).
+THE_DATASETS_PROMPT = "4faf339e27dd"
 
 
 @pytest.mark.parametrize("model", MODELS)
-def test_the_dataset_s_receipts_are_asked_as_the_old_task_asks_them(model: str, tmp_path: Path) -> None:
-    """The SROIE receipts read as a dataset, by classify and extract, beside the task that read them.
+def test_a_dataset_s_pages_are_asked_by_their_type_s_prompt_and_the_model_is_not_asked_what_they_are(
+    model: str, tmp_path: Path
+) -> None:
+    """The receipts of the dataset: one request each, by the prompt of their type and its fixed budget.
 
-    The same engines with the same arguments on the same cards, the same receipts in the same calls in
-    the same order, and for each the same prompt, image, completion budget, sampling and chat
-    arguments. And the model is not asked what the receipts are: their dataset says.
+    Until the task that read these receipts was deleted, this record held its requests too, and a test
+    set the two beside each other: the same engines with the same arguments on the same cards, the same
+    receipts in the same order, and for each the same prompt, image, completion budget, sampling and
+    chat arguments. What is pinned here is what that showed.
     """
     record = json.loads(as_text(record_model_inputs(model, tmp_path)))
 
-    new = as_asked(record, "dataset_sroie")
-    assert new, "the dataset's receipts were not read"
-    assert new == as_asked(record, "sroie")
-    assert as_asked(record, "dataset_sroie_classify") == []
+    calls = [call for call in record["calls"] if call["stage"] == "dataset_sroie"]
+    requests = [request for call in calls for request in call["requests"]]
+    assert len(requests) == 12
+    assert all(call["sampling"] == {"max_tokens": 256, "temperature": 0} for call in calls)
+    assert all(
+        [(role, kind) for role, kind, _ in request] == [("user", "text"), ("user", "image_pil")]
+        for request in requests
+    )
+    assert {request[0][2] for request in requests} == {THE_DATASETS_PROMPT}
+    assert record["prompts"][THE_DATASETS_PROMPT].startswith(
+        "Read this scanned receipt and report four fields."
+    )
+    # Each receipt once, in the order of its name, however the engines are arranged.
+    assert sorted(request[1][2] for request in requests) == [f"image {100 + n}x150 RGB" for n in range(12)]
+    # Their dataset says what they are: classify starts no engine and asks nothing.
+    assert not [call for call in record["calls"] if call["stage"] == "dataset_sroie_classify"]
     assert not [engine for engine in record["engines"] if engine["stage"] == "dataset_sroie_classify"]
 
 

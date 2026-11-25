@@ -15,30 +15,31 @@ import pytest
 import yaml
 from PIL import Image
 
+from common import photo_split
 from common.photo_split import (
     Box,
-    PhotoSplitConfig,
-    PhotoSplitConfigError,
     box_within,
     crop_rectangles,
     cut,
     decide,
     level_turn,
     parse_boxes,
-    photo_split_config_from,
     rectify,
     row_direction,
     row_measures,
     turn,
     worth_straightening,
 )
-from common.sheet_finder_config import load_finder_params
+from common.prompt_catalog import PromptCatalog
 from stages.split import apply_reply, checked, cut_name
 from stages.split import run as run_the_stage
 
 RUN_CONFIG = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
 RAW = yaml.safe_load(RUN_CONFIG.read_text())
-CONFIG = photo_split_config_from(RAW, config_path=RUN_CONFIG)
+# The rules the stage goes by, with their measured values. Until 26 November 2026 they were read from
+# the settings file; a test that wants another value makes its own record with dataclasses.replace.
+CONFIG = photo_split.CONFIG
+FINDER = photo_split.FINDER
 RED, GREEN, DESK = (200, 40, 40), (40, 160, 40), (120, 120, 120)
 
 # The replies below are in the form the model gave on real photographs.
@@ -221,7 +222,7 @@ def test_a_photograph_of_one_is_copied_through_byte_for_byte(tmp_path: Path) -> 
 
 def test_the_stage_as_shipped_copies_every_photograph_through_without_a_model(tmp_path: Path) -> None:
     """Shipped with enabled false: the stage changes nothing, and never loads the model."""
-    assert CONFIG.enabled is False
+    assert RAW["pipeline"]["photo_split"]["enabled"] is False
     data = tmp_path / "data"
     data.mkdir()
     sources = [photograph(data / f"CASE00{n}_bank_statement.png") for n in (1, 2)]
@@ -252,61 +253,15 @@ def test_a_second_run_does_not_repeat_photographs_already_recorded(tmp_path: Pat
 
 
 def test_the_shipped_prompt_is_the_one_that_was_measured() -> None:
-    assert CONFIG.prompt == (
+    assert PromptCatalog().photo_split_prompt() == (
         "Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each "
         'receipt, in the form {"box_2d": [ymin, xmin, ymax, xmax], "label": "receipt"}, where the four numbers '
         "are normalised to 0-1000."
     )
 
 
-def _raw(mutate) -> dict:
-    raw = yaml.safe_load(RUN_CONFIG.read_text())
-    mutate(raw["pipeline"]["photo_split"])
-    return raw
-
-
-@pytest.mark.parametrize(
-    ("mutate", "said"),
-    [
-        (lambda s: s.pop("enabled"), "missing key enabled"),
-        (lambda s: s.pop("prompt"), "missing key prompt"),
-        (lambda s: s.pop("max_receipts"), "missing key max_receipts"),
-        (lambda s: s.update(enabled="yes"), "enabled is 'yes', which is not true or false"),
-        (lambda s: s.update(max_tokens=400.5), "max_tokens is 400.5, which is not int"),
-        (lambda s: s.update(batch_size=True), "batch_size is True, which is not int"),
-        (lambda s: s.update(margin_frac="wide"), "margin_frac is 'wide', which is not float"),
-        (lambda s: s.update(prompt="   "), "prompt is empty"),
-        (lambda s: s.update(max_tokens=0), "max_tokens is 0, which is below 1"),
-        (lambda s: s.update(max_receipts=1), "max_receipts is 1, which is below 2"),
-        (lambda s: s.update(margin_frac=0.9), "margin_frac is 0.9, which is outside 0.0 to 0.5"),
-        (
-            lambda s: s.update(max_overlap_frac=-0.1),
-            "max_overlap_frac is -0.1, which is outside 0.0 to 1.0",
-        ),
-    ],
-)
-def test_a_missing_or_malformed_setting_is_refused_with_all_four_elements(mutate, said: str) -> None:
-    with pytest.raises(PhotoSplitConfigError) as raised:
-        photo_split_config_from(_raw(mutate), config_path=RUN_CONFIG)
-    message = str(raised.value)
-    assert said in message
-    assert all(element in message for element in ("What:", "Where:", "Expected:", "How to fix:"))
-    assert str(RUN_CONFIG.resolve()) in message and "pipeline.photo_split" in message
-
-
-def test_a_config_without_the_section_is_refused() -> None:
-    with pytest.raises(PhotoSplitConfigError, match="section is missing"):
-        photo_split_config_from({"pipeline": {}}, config_path=RUN_CONFIG)
-
-
-def test_the_settings_are_what_the_stage_reads() -> None:
-    assert isinstance(CONFIG, PhotoSplitConfig)
-    assert (CONFIG.max_tokens, CONFIG.batch_size, CONFIG.max_receipts) == (400, 16, 12)
-
-
 # ---- straightening -----------------------------------------------------------------------------------------
 
-FINDER = load_finder_params(RUN_CONFIG)
 # Turning alone: rectification, which is tried first for a whole photograph and for a cut image, is off.
 TURN_ONLY = dataclasses.replace(CONFIG, rectify_pages=False, rectify_pieces=False)
 
@@ -431,27 +386,6 @@ def test_with_straightening_off_nothing_is_turned(tmp_path: Path) -> None:
     assert record["turned_deg"] == [0.0, 0.0]
     first = row_direction(Image.open(images / "IMG_6__r1.png"), FINDER)
     assert first == pytest.approx(14.0, abs=1.0)
-
-
-@pytest.mark.parametrize(
-    ("mutate", "said"),
-    [
-        (lambda s: s.pop("straighten"), "missing key straighten"),
-        (lambda s: s.pop("straighten_max_deg"), "missing key straighten_max_deg"),
-        (lambda s: s.update(straighten="yes"), "straighten is 'yes', which is not true or false"),
-        (lambda s: s.update(straighten_min_deg=50.0), "they must run from 0 up to at most 90"),
-        (lambda s: s.update(straighten_max_deg=120.0), "they must run from 0 up to at most 90"),
-        (lambda s: s.pop("straighten_fill_rgb"), "straighten_fill_rgb is None"),
-        (lambda s: s.update(straighten_fill_rgb=[255, 255]), "not three whole numbers from 0 to 255"),
-        (lambda s: s.update(straighten_fill_rgb=[255, 255, 300]), "not three whole numbers from 0 to 255"),
-    ],
-)
-def test_a_missing_or_malformed_straightening_setting_is_refused(mutate, said: str) -> None:
-    with pytest.raises(PhotoSplitConfigError) as raised:
-        photo_split_config_from(_raw(mutate), config_path=RUN_CONFIG)
-    message = str(raised.value)
-    assert said in message
-    assert all(element in message for element in ("What:", "Where:", "Expected:", "How to fix:"))
 
 
 def test_a_page_with_no_receipt_found_is_turned_whole_by_all_its_print(tmp_path: Path) -> None:
@@ -730,38 +664,6 @@ def test_a_box_is_restated_on_the_scale_of_the_image_cut_around_it() -> None:
     assert (outside.left, outside.top, outside.right, outside.bottom) == (0.0, 0.0, 1000.0, 1000.0)
 
 
-@pytest.mark.parametrize(
-    ("mutate", "said"),
-    [
-        (lambda s: s.pop("rectify_pages"), "missing key rectify_pages"),
-        (lambda s: s.pop("rectify_pieces"), "missing key rectify_pieces"),
-        (lambda s: s.update(rectify_pieces="yes"), "rectify_pieces is 'yes', which is not true or false"),
-        (
-            lambda s: s.update(straighten=False, rectify_pages=False),
-            "rectify_pieces is true but straighten is false",
-        ),
-        (lambda s: s.pop("rectify_min_print_frac"), "missing key rectify_min_print_frac"),
-        (lambda s: s.update(rectify_min_edges=5), "rectify_min_edges is 5, which is not from 1 to 4"),
-        (lambda s: s.update(rectify_min_edges=3.5), "rectify_min_edges is 3.5, which is not int"),
-        (
-            lambda s: s.update(rectify_min_area_frac=0.0),
-            "rectify_min_area_frac is 0.0, which is not above 0",
-        ),
-        (
-            lambda s: s.update(rectify_min_print_frac=1.5),
-            "rectify_min_print_frac is 1.5, which is not above 0",
-        ),
-        (lambda s: s.update(straighten=False), "rectify_pages is true but straighten is false"),
-    ],
-)
-def test_a_missing_or_malformed_rectification_setting_is_refused(mutate, said: str) -> None:
-    with pytest.raises(PhotoSplitConfigError) as raised:
-        photo_split_config_from(_raw(mutate), config_path=RUN_CONFIG)
-    message = str(raised.value)
-    assert said in message
-    assert all(element in message for element in ("What:", "Where:", "Expected:", "How to fix:"))
-
-
 def test_an_altered_jpeg_photograph_is_written_as_png_not_compressed_again(tmp_path: Path) -> None:
     """A photograph usually arrives as a JPEG. Turned or rectified, it must not be saved as a JPEG again."""
     source = tmp_path / "IMG_13.jpg"
@@ -879,30 +781,3 @@ def test_a_photograph_on_a_two_coloured_surface_is_rectified_by_the_stage(tmp_pa
 
     assert record["action"] == "pass_through" and record["rectified"] is True
     assert record["outputs"] == ["IMG_20.png"]
-
-
-@pytest.mark.parametrize(
-    ("mutate", "said"),
-    [
-        (lambda s: s.pop("rectify_paper_model"), "missing key rectify_paper_model"),
-        (lambda s: s.pop("rectify_paper_min_fit"), "missing key rectify_paper_min_fit"),
-        (
-            lambda s: s.update(rectify_paper_model="yes"),
-            "rectify_paper_model is 'yes', which is not true or false",
-        ),
-        (
-            lambda s: s.update(rectify_paper_min_fit=0.0),
-            "rectify_paper_min_fit is 0.0, which is not above 0",
-        ),
-        (
-            lambda s: s.update(rectify_paper_min_fit=1.2),
-            "rectify_paper_min_fit is 1.2, which is not above 0",
-        ),
-    ],
-)
-def test_a_missing_or_malformed_paper_method_setting_is_refused(mutate, said: str) -> None:
-    with pytest.raises(PhotoSplitConfigError) as raised:
-        photo_split_config_from(_raw(mutate), config_path=RUN_CONFIG)
-    message = str(raised.value)
-    assert said in message
-    assert all(element in message for element in ("What:", "Where:", "Expected:", "How to fix:"))

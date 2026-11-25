@@ -5,13 +5,11 @@ angles, with a drop shadow, blur and noise. The true corners are therefore known
 is needed.
 """
 
-import dataclasses
 from pathlib import Path
 
 import cv2
 import numpy as np
 import pytest
-import yaml
 
 from common.sheet_finder import (
     FinderParams,
@@ -23,10 +21,10 @@ from common.sheet_finder import (
     text_direction,
     warp_upright,
 )
-from common.sheet_finder_config import FinderConfigError, finder_params_from, load_finder_params
 
 RUN_CONFIG = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
-PARAMS = load_finder_params(RUN_CONFIG)
+# The finder's measured values. Until 26 November 2026 they were read from the settings file.
+PARAMS = FinderParams()
 SHEET_W, SHEET_H = 352, 704
 # Placements are given on a 900 by 640 layout and scaled by this, so the sheets are about the size (in pixels)
 # of a receipt in a phone photograph shrunk to the finder's working size.
@@ -214,82 +212,6 @@ def test_a_sheet_is_warped_upright_at_its_own_size() -> None:
     # The rows of print now run straight across.
     marks, text_height = print_marks(cv2.cvtColor(upright, cv2.COLOR_RGB2GRAY), PARAMS)
     assert text_direction(marks, text_height, PARAMS) == pytest.approx(0.0, abs=1.0)
-
-
-def _section() -> dict:
-    return dict(yaml.safe_load(RUN_CONFIG.read_text())["pipeline"]["photo_split"]["finder"])
-
-
-def assert_four_elements(error: BaseException, *fragments: str) -> None:
-    message = str(error)
-    for element in ("What:", "Where:", "Expected:", "How to fix:"):
-        assert element in message
-    assert str(RUN_CONFIG.resolve()) in message and "pipeline.photo_split.finder" in message
-    for fragment in fragments:
-        assert fragment in message
-
-
-def test_the_shipped_config_states_every_setting_and_nothing_else() -> None:
-    assert set(_section()) == {field.name for field in dataclasses.fields(FinderParams)}
-    assert isinstance(PARAMS.work_long_edge, int) and isinstance(PARAMS.step_min, float)
-
-
-@pytest.mark.parametrize("name", [field.name for field in dataclasses.fields(FinderParams)])
-def test_a_missing_setting_is_refused_by_name(name: str) -> None:
-    section = _section()
-    del section[name]
-
-    with pytest.raises(FinderConfigError) as raised:
-        finder_params_from(section, config_path=RUN_CONFIG)
-    assert_four_elements(raised.value, f"missing key {name}", f"pipeline.photo_split.finder.{name}")
-
-
-@pytest.mark.parametrize(
-    ("name", "value", "said"),
-    [
-        ("work_long_edge", 1600.5, "not a whole number"),
-        ("step_span_px", True, "not a whole number"),
-        ("step_min", "nine", "not a number"),
-        ("min_edge_support", False, "not a number"),
-        ("min_region_frac", 0, "not above zero"),
-        ("blur_sigma_px", -1.0, "not above zero"),
-        ("mark_block_px", 30, "not an odd number"),
-    ],
-)
-def test_a_setting_of_the_wrong_kind_is_refused(name: str, value: object, said: str) -> None:
-    section = _section()
-    section[name] = value
-
-    with pytest.raises(FinderConfigError) as raised:
-        finder_params_from(section, config_path=RUN_CONFIG)
-    assert_four_elements(raised.value, name, said)
-
-
-def test_a_misspelt_setting_is_refused_not_ignored() -> None:
-    section = _section()
-    section["step_minimum"] = 9.0
-
-    with pytest.raises(FinderConfigError) as raised:
-        finder_params_from(section, config_path=RUN_CONFIG)
-    assert_four_elements(raised.value, "unknown key(s) ['step_minimum']")
-
-
-def test_a_config_without_the_section_or_the_file_is_refused(tmp_path: Path) -> None:
-    empty = tmp_path / "run_config.yml"
-    without_the_section = yaml.safe_load(RUN_CONFIG.read_text())
-    del without_the_section["pipeline"]["photo_split"]["finder"]
-    empty.write_text(yaml.safe_dump(without_the_section))
-
-    for path, said in ((empty, "missing or is not a mapping"), (tmp_path / "absent.yml", "does not exist")):
-        with pytest.raises(ValueError) as raised:
-            load_finder_params(path)
-        message = str(raised.value)
-        assert said in message and str(path.resolve()) in message
-        assert all(element in message for element in ("What:", "Where:", "Expected:", "How to fix:"))
-
-
-def test_a_seed_of_zero_is_allowed() -> None:
-    assert PARAMS.ransac_seed == 0
 
 
 # ---- the paper method --------------------------------------------------------------------------------------

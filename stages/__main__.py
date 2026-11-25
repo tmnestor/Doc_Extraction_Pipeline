@@ -34,9 +34,10 @@ CONFIG_PATH = REPOSITORY / "config" / "run_config.yml"
 def _stage(task: str) -> Any:
     """The stage's own module. Imported only now, so that a task loads nothing another task needs.
 
-    A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, and a
-    ``start`` that is given the task's settings, runs the stage and returns the line that says it is
-    done. What a stage reads and writes, and which of its files a run started afresh deletes, is the
+    A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, a
+    ``check`` that is given the task's settings, reads everything the stage will use and writes
+    nothing, and a ``start`` that is given the same, runs the stage and returns the line that says it
+    is done. What a stage reads and writes, and which of its files a run started afresh deletes, is the
     stage's own to know. Until 25 November 2026 this module knew it for every stage, in a branch each.
     """
     return importlib.import_module(f"stages.{task}")
@@ -84,6 +85,13 @@ def run_task(settings: StageSettings) -> None:
     for name in ("model", "image_dir", "output", "ground_truth", "clear_previous_output"):
         logger.info("  %-22s %s", name + ":", getattr(settings, name))
 
+    # In this order. The task is checked whole before anything is written: the note of what made the
+    # folder is one thing written, and a stage started afresh deletes its earlier output. Until
+    # 26 November 2026 the note came first, and the stage read its own settings only once started.
+    # A task that could not start then left a note in a folder that held none of its output, and the
+    # next start with another model was refused as "output from another run"; started afresh, it had
+    # deleted the earlier output before it found that it could not replace it.
+    stage.check(settings)
     _check_what_made_the_folder(settings)
     logger.info(stage.start(settings))
 

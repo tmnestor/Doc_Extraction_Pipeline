@@ -80,6 +80,7 @@ def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
         )
 
     monkeypatch.setattr("stages.split.run", refuses)
+    monkeypatch.setattr("stages.split.check", lambda task: None)
     (tmp_path / "pages").mkdir()
     for name, value in {
         "KFP_TASK": "split",

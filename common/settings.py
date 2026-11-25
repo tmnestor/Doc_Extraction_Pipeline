@@ -79,6 +79,18 @@ def _is_none(value: Any) -> bool:
     return value is None or str(value).strip().lower() in {"none", "null", ""}
 
 
+# What the engine is started with (models.model_loader.load_engine), for every model.
+_ENGINE_KEYS = (
+    "gpu_memory_utilization",
+    "max_model_len",
+    "max_num_seqs",
+    "limit_mm_per_prompt",
+    "enable_prefix_caching",
+)
+# What resources.infrastructure must set: each is read by name (Settings.get_infra).
+_INFRASTRUCTURE = ("dp_join_timeout",)
+
+
 def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
     """The engine settings of each model: ``vllm.defaults`` with the model's own laid over them."""
     section = raw.get("inference", {}).get("vllm", {})
@@ -97,6 +109,24 @@ def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
             "        limit_mm_per_prompt: 1\n"
             "        enable_prefix_caching: true\n"
             f"How to fix: add that block to {path}."
+        )
+    missing = [key for key in _ENGINE_KEYS if key not in defaults]
+    if missing:
+        raise ConfigError(
+            f"What: inference.vllm.defaults does not set {', '.join(missing)}. The engine is started with "
+            f"every one of {', '.join(_ENGINE_KEYS)}, and a model's own block may leave any of them to the "
+            f"defaults.\n"
+            f"Where: {path} -> inference.vllm.defaults.{missing[0]}\n"
+            "Expected: each of them under defaults, e.g.\n"
+            "  inference:\n"
+            "    vllm:\n"
+            "      defaults:\n"
+            "        gpu_memory_utilization: 0.90\n"
+            "        max_model_len: 8192\n"
+            "        max_num_seqs: 1\n"
+            "        limit_mm_per_prompt: 1\n"
+            "        enable_prefix_caching: true\n"
+            f"How to fix: add {', '.join(missing)} under inference.vllm.defaults in {path}."
         )
     models = section.get("models", {})
     _check_model_names(models, path)
@@ -231,7 +261,7 @@ class Settings:
 
         self._vllm_config = _build_vllm_config(raw, path)
         self._token_budgets = cls._budgets(raw, path)
-        self._infrastructure = dict(raw.get("resources", {}).get("infrastructure", {}))
+        self._infrastructure = cls._infrastructure_of(raw, path)
         self.classification_fallback_type = _need(
             raw,
             "pipeline.classification.fallback_type",
@@ -307,10 +337,9 @@ class Settings:
 
     @staticmethod
     def _tracing(raw: dict[str, Any], path: Path) -> tuple[bool, str | None]:
-        """Whether what is sent to the model is kept, and where. No ``inference.tracing`` block is off."""
+        """Whether what is sent to the model is kept, and where. The block must be there: one left out
+        is not taken for 'off'. Until 26 November 2026 it was."""
         tracing = raw.get("inference", {}).get("tracing")
-        if tracing is None:
-            return False, None
         enabled = tracing.get("raw_prompts") if isinstance(tracing, dict) else None
         if not isinstance(enabled, bool) or "path" not in tracing:
             raise ConfigError(
@@ -336,6 +365,25 @@ class Settings:
                 f"page that fails."
             )
         return value
+
+    @staticmethod
+    def _infrastructure_of(raw: dict[str, Any], path: Path) -> dict[str, int | float]:
+        """The settings of resources.infrastructure, each a number of 0 or more. Checked here, and
+        not where each is first used: one of them is used only with an engine on each card, so a model
+        that takes one engine would never have met its absence."""
+        found: dict[str, int | float] = {}
+        for name in _INFRASTRUCTURE:
+            key = f"resources.infrastructure.{name}"
+            value = _need(raw, key, path, f"a number of seconds, e.g. {name}: 60")
+            if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+                raise ConfigError(
+                    f"What: {key} is {value!r}, not a number of 0 or more.\n"
+                    f"Where: {path} -> {key}\n"
+                    f"Expected: a number of seconds, e.g. {name}: 60\n"
+                    f"How to fix: set {key} to a number of 0 or more."
+                )
+            found[name] = value
+        return found
 
     @staticmethod
     def _budgets(raw: dict[str, Any], path: Path) -> dict[str, int]:

@@ -124,6 +124,15 @@ def run(
 BANNER = "Stage 3: clean, the model's replies parsed and tidied (CPU)"
 
 
+def check(task: StageSettings) -> None:
+    """Read and check everything the stage will use: the schema file. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    get_field_schema()
+
+
 def start(task: StageSettings) -> str:
     """Run the stage for a task, and give the line that says it is done."""
     start_afresh(task.clear_previous_output, task.cleaned_extractions)

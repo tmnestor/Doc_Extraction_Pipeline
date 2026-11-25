@@ -357,6 +357,7 @@ def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
     for task in TASKS:
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
+        monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "check", lambda task: None)
     return called
 
 
@@ -430,12 +431,13 @@ def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads
 
 @pytest.mark.parametrize("task", TASKS)
 def test_every_stage_has_a_banner_and_is_started_the_one_way(task: str) -> None:
-    """The runner knows no stage by name: it asks each for these two, and nothing else."""
+    """The runner knows no stage by name: it asks each for these three, and nothing else."""
     module = importlib.import_module(f"stages.{task}")
     parameters = list(inspect.signature(module.start).parameters)
 
     assert isinstance(module.BANNER, str) and task in module.BANNER.lower()
     assert parameters == ["task"]
+    assert list(inspect.signature(module.check).parameters) == ["task"]
     assert inspect.signature(module.start).return_annotation is str
 
 

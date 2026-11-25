@@ -21,9 +21,10 @@ from typing import Any
 
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
-from common.vllm_dp import RecordSink
-
+from common.pipeline_ops import check_processor
+from common.settings import Settings
 from common.stage_settings import StageSettings
+from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
@@ -59,23 +60,10 @@ def run(
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    from common.settings import Settings
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
 
-    # Read classifications
-    classifications = read_jsonl(classifications_path)
-    if not classifications:
-        msg = f"No classifications found in {classifications_path}"
-        raise FileNotFoundError(msg)
-
+    app_cfg, classifications = _checked(classifications_path, model_type, config_path, output_path.parent)
     logger.info("Read %d classifications from %s", len(classifications), classifications_path)
-
-    cli_args: dict[str, Any] = {"output_dir": str(output_path.parent)}
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-
-    app_cfg = Settings.load(cli_args, config_path=config_path)
-    check_settings(app_cfg, classifications)
 
     # Pages of a type the settings say not to read are set apart. The rest are put one document type
     # after another, so that the engine reuses its work on a type's prompt.
@@ -148,6 +136,40 @@ def run(
             len(records),
         )
     return output_path
+
+
+def _checked(
+    classifications_path: Path, model_type: str | None, config_path: Path | None, output_dir: Path
+) -> tuple[Settings, list[dict[str, Any]]]:
+    """The run's settings and the pages' classifications, with what reading the fields depends on checked.
+
+    The one place the stage works out what it is run with: ``check`` calls it before anything is
+    written, and ``run`` calls it for what it reads the pages with.
+
+    Raises:
+        FileNotFoundError: If the classifications file holds no record.
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    classifications = read_jsonl(classifications_path)
+    if not classifications:
+        msg = f"No classifications found in {classifications_path}"
+        raise FileNotFoundError(msg)
+    given: dict[str, Any] = {"output_dir": str(output_dir)}
+    if model_type is not None:
+        given["model_type"] = model_type
+    settings = Settings.load(given, config_path=config_path)
+    check_settings(settings, classifications)
+    return settings, classifications
+
+
+def check(task: StageSettings) -> None:
+    """Read and check everything the stage will use. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    settings, _ = _checked(task.classifications, task.model, task.config_path, task.raw_extractions.parent)
+    check_processor(settings)
 
 
 def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> None:

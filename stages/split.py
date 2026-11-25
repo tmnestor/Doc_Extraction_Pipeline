@@ -34,7 +34,8 @@ from typing import Any
 
 
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
-
+from common.pipeline_ops import check_processor
+from common.settings import Settings
 from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
@@ -259,6 +260,52 @@ def _remove_the_images_of(records: list[dict[str, Any]], images_dir: Path) -> No
                 (images_dir / name).unlink(missing_ok=True)
 
 
+def _checked(
+    model_type: str | None, config_path: Path | None, output_dir: Path
+) -> tuple[Any, Any | None, Settings | None]:
+    """The photo split settings, the sheet finder's, and the run's settings, each read and checked.
+
+    The one place the stage works its settings out: ``check`` calls it before anything is written, and
+    ``run`` calls it for what it deals with the photographs by. With the photo split off no model is
+    asked: the finder's settings and the run's are not read, and come back as None. The finder's are
+    None too when no image is to be straightened.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    from common.photo_split import photo_split_config_from
+    from common.settings import DEFAULT_CONFIG, read_settings_file
+
+    resolved_config = config_path or DEFAULT_CONFIG
+    raw_config = read_settings_file(resolved_config)
+    split_config = photo_split_config_from(raw_config, config_path=resolved_config)
+    if not split_config.enabled:
+        return split_config, None, None
+
+    given: dict[str, Any] = {"output_dir": str(output_dir)}
+    if model_type is not None:
+        given["model_type"] = model_type
+    settings = Settings.load(given, config_path=config_path)
+    finder = None
+    if split_config.straighten:
+        from common.sheet_finder_config import finder_params_from
+
+        finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
+        finder = finder_params_from(finder_section, config_path=resolved_config)
+    return split_config, finder, settings
+
+
+def check(task: StageSettings) -> None:
+    """Read and check everything the stage will use. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    _, _, settings = _checked(task.model, task.config_path, task.split_dir)
+    if settings is not None:
+        check_processor(settings)
+
+
 def run(
     image_dir: Path,
     output_dir: Path,
@@ -289,13 +336,10 @@ def run(
         FileNotFoundError: The directory holds no images.
         common.photo_split.PhotoSplitConfigError: The photo split settings are missing or malformed.
     """
-    from common.photo_split import photo_split_config_from
-    from common.settings import DEFAULT_CONFIG, read_settings_file
     from stages.io import discover_images
 
-    resolved_config = config_path or DEFAULT_CONFIG
-    raw_config = read_settings_file(resolved_config)
-    split_config = photo_split_config_from(raw_config, config_path=resolved_config)
+    # Read before the engine is started, so that a setting that cannot be used stops the run first.
+    split_config, finder, app_cfg = _checked(model_type, config_path, output_dir)
 
     # Every image in the directory is examined. The selection the later stages apply (document types, a
     # limit on the number of images) is theirs to apply, to what this stage writes.
@@ -342,21 +386,7 @@ def run(
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(copied))
         return images_dir
 
-    from common.settings import Settings
-
-    cli_args: dict[str, Any] = {"output_dir": str(output_dir)}
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-    app_cfg = Settings.load(cli_args, config_path=config_path)
-
-    # Read before the engine is started, so that a setting that cannot be used stops the run first.
-    finder = None
-    if split_config.straighten:
-        from common.sheet_finder_config import finder_params_from
-
-        finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
-        finder = finder_params_from(finder_section, config_path=resolved_config)
-
+    assert app_cfg is not None
     acted_on = 0
 
     def act_on(asked: dict[str, Any]) -> dict[str, Any]:

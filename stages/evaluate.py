@@ -19,9 +19,9 @@ from rich.console import Console
 from rich.table import Table
 
 from common import scoring
-from common.stage_timing import RunTime, read_stage_timings, run_time
-
+from common.field_schema import get_field_schema
 from common.stage_settings import StageSettings
+from common.stage_timing import RunTime, read_stage_timings, run_time
 
 from . import records as records_of
 from .io import read_jsonl, start_afresh, write_jsonl
@@ -320,6 +320,16 @@ def _print_summary_table(
 
 
 BANNER = "Stage 4: evaluate, the fields scored against the answer key (CPU)"
+
+
+def check(task: StageSettings) -> None:
+    """Read and check everything the stage will use: the schema file, with its thresholds. Nothing is
+    written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    get_field_schema()
 
 
 def start(task: StageSettings) -> str:

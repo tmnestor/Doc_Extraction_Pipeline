@@ -181,12 +181,46 @@ def _refuse_old_names(environ: Mapping[str, str]) -> None:
         )
 
 
+_MEMORY_SHARE = "DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+
+
+def _check_memory_share(environ: Mapping[str, str]) -> None:
+    """Refuse a share of each card's memory that is not a share.
+
+    The engine loader reads the variable when it starts an engine (``models.model_loader``). It is
+    checked here, with every other variable of the job, so that one that cannot be used stops the run
+    before anything is written and not as an engine starts.
+
+    Raises:
+        ConfigError: If the variable is set and is not a number above 0 and at most 1.
+    """
+    given = _set(environ, _MEMORY_SHARE)
+    if given is None:
+        return
+    try:
+        usable = 0.0 < float(given) <= 1.0
+    except ValueError:
+        usable = False
+    if not usable:
+        raise ConfigError(
+            f"What: {_MEMORY_SHARE} is {given!r}, not a share of a card's memory.\n"
+            f"Where: the environment variable {_MEMORY_SHARE}.\n"
+            f"Expected: a number above 0 and at most 1, e.g. {_MEMORY_SHARE}=0.90. Unset, the share is "
+            f"the model's gpu_memory_utilization in the settings file.\n"
+            f"How to fix: set {_MEMORY_SHARE} to such a number, or leave it unset."
+        )
+
+
 def log_dir(environ: Mapping[str, str], config_path: Path) -> Path:
     """The folder the run's log is written to."""
     _refuse_old_names(environ)
+    return _log_dir(environ, read_settings_file(config_path), config_path)
+
+
+def _log_dir(environ: Mapping[str, str], raw: Mapping[str, Any], config_path: Path) -> Path:
     found = _value(
         environ,
-        read_settings_file(config_path),
+        raw,
         config_path,
         _LOG_DIR,
         needed_by="every task",
@@ -212,6 +246,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
             value cannot be read.
     """
     _refuse_old_names(environ)
+    _check_memory_share(environ)
     if task not in TASKS:
         raise ConfigError(
             f"What: KFP_TASK is {task!r}, which is not a task of this pipeline.\n"
@@ -273,7 +308,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         image_dir=Path(image_dir) if image_dir else None,
         output=Path(output),
         ground_truth=Path(ground_truth) if ground_truth else None,
-        log_dir=log_dir(environ, config_path),
+        log_dir=_log_dir(environ, raw, config_path),
         clear_previous_output=_start_afresh(environ),
         config_path=config_path,
         dataset=dataset,

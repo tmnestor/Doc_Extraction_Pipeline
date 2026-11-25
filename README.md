@@ -89,7 +89,10 @@ Seven rules, which `tests/stages/test_every_stage_keeps_the_contract.py` holds.
 
 A task stands alone:
 
-1. It is one module of `stages/` with a `BANNER` and a `start(task)`. The runner knows no more.
+1. It is one module of `stages/` with a `BANNER`, a `check(task)` and a `start(task)`. The runner knows
+   no more. `check` reads everything the task will use and writes nothing, and the runner calls it
+   before the note of what made the folder is written and before a task started afresh deletes its
+   earlier output: a task that cannot start leaves the folder as it found it.
 2. It reads its settings and the file the task before it wrote, and writes its own file. It imports no
    other task.
 3. A record handed from one task to the next is made by `stages/records.py` and by nothing else.
@@ -603,7 +606,7 @@ when that change is intended.
 
 | Folder | Holds |
 |---|---|
-| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
+| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER`, and a `check` and a `start` that are each given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
 | `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
 | `config/` | `run_config.yml` and `field_definitions.yaml` |

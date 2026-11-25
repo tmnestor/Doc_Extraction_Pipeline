@@ -234,6 +234,7 @@ def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
     for task in ("split", "classify", "extract", "clean", "evaluate"):
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
+        monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "check", lambda task: None)
     return called
 
 

@@ -159,15 +159,20 @@ def test_a_field_left_out_or_declined_as_the_prompt_asks_is_not_found() -> None:
     assert set(declined.values()) == {"NOT_FOUND"}
 
 
-def test_three_things_the_old_task_s_parser_read_and_the_pipeline_s_does_not() -> None:
-    """Written down as they are, and not mended here: the pipeline's parser is every type's.
-
-    The old parser read a line that began with a dash, took the first of two answers to one field, and
-    read "=" for the colon. No recorded run of the dataset kept its replies, so how often a model
-    writes any of the three is not known: the first run of the dataset on the cards counts them.
-    """
+def test_lines_that_begin_with_a_dash_are_read() -> None:
+    """As the old task's parser read them (tests/common/test_a_line_that_begins_with_a_dash_is_read.py)."""
     with_dashes = "".join(f"- {line}\n" for line in PLAIN.splitlines())
-    assert set(fields_from_reply(with_dashes, FIELDS).values()) == {"NOT_FOUND"}
+
+    assert fields_from_reply(with_dashes, FIELDS) == READ
+
+
+def test_two_things_the_old_task_s_parser_read_and_the_pipeline_s_does_not() -> None:
+    """Written down as they are, and not mended here: each is a choice, and the parser is every type's.
+
+    The old parser took the first of two answers to one field, where the pipeline's takes the last, and
+    read "=" for the colon. No recorded run of the dataset kept its replies, so how often a model
+    writes either is not known: the first run of the dataset on the cards counts them.
+    """
     assert fields_from_reply(PLAIN + "total: 99.00\n", FIELDS)["TOTAL"] == "99.00"
     assert fields_from_reply(PLAIN.replace("total: 31.07", "total = 31.07"), FIELDS)["TOTAL"] == "NOT_FOUND"
 

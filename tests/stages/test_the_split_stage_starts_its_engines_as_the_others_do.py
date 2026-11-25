@@ -17,9 +17,8 @@ from typing import Any
 import pytest
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
-from bench import split_checked
+from bench import run_settings, split_checked
 from common.engine_calls import StageStopped
-from common.settings import Settings
 from common.stage_settings import resolve
 from common.stage_timing import read_stage_timings
 from stages import split
@@ -29,7 +28,7 @@ TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [
 
 
 def run(bench: Bench, output: Path, model: str, *, photo_split: bool = True) -> Path:
-    return split.run(output, split_checked(model, bench.config, bench.pages, photo_split=photo_split))
+    return split.run(output, split_checked(model, bench.models, bench.pages, photo_split=photo_split))
 
 
 def names_in(path: Path) -> list[str]:
@@ -181,11 +180,11 @@ def test_split_carries_on_though_a_photograph_it_had_finished_has_gone(
     shutil.copytree(bench.pages, photographs)
     bench.processor.stop_at_call = 2
     with pytest.raises(Stopped):
-        split.run(output, split_checked(ONE_ENGINE, bench.config, photographs))
+        split.run(output, split_checked(ONE_ENGINE, bench.models, photographs))
     bench.processor.stop_at_call = None
     (photographs / bench.names[0]).unlink()
 
-    split.run(output, split_checked(ONE_ENGINE, bench.config, photographs))
+    split.run(output, split_checked(ONE_ENGINE, bench.models, photographs))
 
     # Its record is kept, after those of the photographs that are still there, and so is its image.
     assert names_in(output / "splits.jsonl") == [*bench.names[1:], bench.names[0]]
@@ -220,7 +219,7 @@ def test_photo_split_switched_off_after_a_stopped_run_keeps_what_that_run_had_do
 def test_asking_about_photographs_gives_the_replies_and_writes_nothing(
     bench: Bench, tmp_path: Path
 ) -> None:
-    settings = Settings.load({"model_type": ONE_ENGINE}, config_path=bench.config)
+    settings = run_settings(ONE_ENGINE, bench.models)
     photographs = [bench.pages / name for name in bench.names]
     seen: list[dict[str, Any]] = []
 
@@ -296,7 +295,7 @@ def test_with_an_engine_on_each_card_the_stage_stops_when_the_engine_stops_answe
 def test_a_run_of_split_given_the_runs_folder_notes_a_row_of_its_time(bench: Bench, tmp_path: Path) -> None:
     split.run(
         tmp_path / "out" / "split",
-        split_checked(ONE_ENGINE, bench.config, bench.pages),
+        split_checked(ONE_ENGINE, bench.models, bench.pages),
         timing=tmp_path / "out",
     )
 
@@ -311,10 +310,11 @@ def test_split_started_as_a_task_notes_its_row_in_the_runs_output_folder(
         "model": AN_ENGINE_ON_EACH_CARD,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         "photo_split": "true",
     }
 
-    task = resolve("split", environ, bench.config)
+    task = resolve("split", environ)
     split.start(task, split.check(task))
 
     (row,) = read_stage_timings(tmp_path / "out")

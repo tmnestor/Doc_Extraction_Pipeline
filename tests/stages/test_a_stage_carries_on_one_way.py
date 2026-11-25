@@ -20,8 +20,8 @@ from typing import Any
 
 import pytest
 
-from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
-from common.settings import Settings
+from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped, run_settings
+from common.stage_settings import StageSettings
 from common.stage_timing import read_stage_timings
 from stages.carry_on import Work, carry_on
 from stages.io import Journal, in_the_order, read_jsonl, take_out, write_jsonl
@@ -228,8 +228,8 @@ def work(output: Path, **more: Any) -> Work:
     return Work(**described)
 
 
-def settings_of(bench: Bench, model: str) -> Settings:
-    return Settings.load({"model_type": model}, config_path=bench.config)
+def settings_of(bench: Bench, model: str) -> StageSettings:
+    return run_settings(model, bench.models)
 
 
 def without_card(path: Path) -> list[dict[str, Any]]:

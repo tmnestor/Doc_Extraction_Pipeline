@@ -22,14 +22,13 @@ from typing import Any
 
 from common import run_manifest
 from common.engine_calls import StageStopped
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.stage_settings import StageSettings, resolve
 
 
 logger = logging.getLogger("stages")
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-CONFIG_PATH = REPOSITORY / "config" / "run_config.yml"
 
 
 def _stage(task: str) -> Any:
@@ -59,7 +58,7 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
         for line in run_manifest.describe(settings.output):
             logger.info("  made by %s", line)
         return
-    assert settings.image_dir is not None and settings.model is not None
+    assert settings.image_dir is not None
     settings.output.mkdir(parents=True, exist_ok=True)
     run_manifest.check_and_note(
         settings.output,
@@ -99,8 +98,7 @@ def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONFIG_PATH
-        run_task(resolve(os.environ["KFP_TASK"], os.environ, config_path))
+        run_task(resolve(os.environ["KFP_TASK"], os.environ))
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")
         return 1

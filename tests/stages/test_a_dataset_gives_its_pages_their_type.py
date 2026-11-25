@@ -22,7 +22,7 @@ from stages.io import read_jsonl
 
 def given(bench: Bench, output: Path, kind: str, model: str = ONE_ENGINE) -> Path:
     return classify.run(
-        output, classify.checked(bench.pages, run_settings(model, bench.config)), given_type=kind
+        output, classify.checked(bench.pages, run_settings(model, bench.models)), given_type=kind
     )
 
 
@@ -96,18 +96,19 @@ def test_the_stages_after_read_the_dataset_s_pages_as_their_type(bench: Bench, t
 def test_a_type_the_schema_file_does_not_have_stops_classify_before_anything_is_written(
     bench: Bench, tmp_path: Path
 ) -> None:
-    from common.config_schema import ConfigError
+    from common.errors import ConfigError
     from common.stage_settings import resolve
 
     job = {
         "model": ONE_ENGINE,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         "document_type": "LEDGER",
     }
 
     with pytest.raises(ConfigError) as refused:
-        classify.check(resolve("classify", job, bench.config))
+        classify.check(resolve("classify", job))
 
     message = str(refused.value)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
@@ -125,7 +126,8 @@ def test_a_type_of_the_schema_file_in_either_case_passes_the_check(
         "model": ONE_ENGINE,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         "document_type": written,
     }
 
-    assert len(classify.check(resolve("classify", job, bench.config)).images) == len(bench.names)
+    assert len(classify.check(resolve("classify", job)).images) == len(bench.names)

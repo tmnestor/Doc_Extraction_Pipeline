@@ -30,7 +30,7 @@ STAGES_FOLDER = Path(classify.__file__).parent
 
 def given(bench: Bench, output: Path, kind: str = "RECEIPT") -> list[dict[str, Any]]:
     classify.run(
-        output, classify.checked(bench.pages, run_settings(ONE_ENGINE, bench.config)), given_type=kind
+        output, classify.checked(bench.pages, run_settings(ONE_ENGINE, bench.models)), given_type=kind
     )
     return read_jsonl(output)
 
@@ -98,7 +98,7 @@ def test_what_a_stopped_run_had_classified_is_recovered_before_the_dataset_gives
 
 
 def split_off(bench: Bench, output: Path) -> list[dict[str, Any]]:
-    split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages, photo_split=False))
+    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages, photo_split=False))
     return read_jsonl(output / "splits.jsonl")
 
 

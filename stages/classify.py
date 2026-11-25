@@ -14,13 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from common.classification import BY_THE_DATASET
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common import extraction_batching
 from common.field_schema import get_field_schema
 from common.pipeline_ops import check_processor
-from common.settings import Settings
-from common.stage_settings import StageSettings, run_settings
+from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
 from . import records as records_of
@@ -155,12 +154,12 @@ def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
 class Checked:
     """What the stage is run with, read and checked."""
 
-    settings: Settings
+    settings: StageSettings
     # The pages to classify: those of the folder the settings select, in the order of their names.
     images: list[Path]
 
 
-def checked(image_dir: Path, settings: Settings) -> Checked:
+def checked(image_dir: Path, settings: StageSettings) -> Checked:
     """The run's settings and the pages to classify, each read and checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
@@ -213,7 +212,7 @@ def check(task: StageSettings) -> Checked:
             f"{', '.join(sorted(schema.document_types))}.\n"
             f"How to fix: name one of those, or leave document_type unset for the model to be asked."
         )
-    found = checked(task.image_dir, run_settings(task))
+    found = checked(task.image_dir, task)
     check_processor(found.settings)
     return found
 

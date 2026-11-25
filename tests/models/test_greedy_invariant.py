@@ -9,8 +9,9 @@ hardcoded zero ever became configurable, a model could start sampling without an
 """
 
 import inspect
+import re
+from pathlib import Path
 
-from common.config_schema import KNOWN_KEYS
 from models.backends import vllm_backend
 
 
@@ -22,13 +23,17 @@ def test_the_vllm_extraction_path_hardcodes_temperature_zero():
 
 
 def test_no_setting_offers_a_sampler():
-    """Until 24 November 2026 the settings file held temperature, do_sample and top_p, which nothing read.
+    """Until 24 November 2026 a settings file held temperature, do_sample and top_p, which nothing read.
 
-    They read as if sampling could be switched on there. No key may name a sampler: the zero is fixed
-    where the request is made.
+    They read as if sampling could be switched on there. No variable a job may set names a sampler: the
+    zero is fixed where the request is made.
     """
-    sampler_words = ("temperature", "do_sample", "top_p", "top_k", "generation")
-    assert [key for key in KNOWN_KEYS if any(word in key for word in sampler_words)] == []
+    script = (Path(__file__).resolve().parents[2] / "entrypoint.sh").read_text()
+    header = script.split("# The variables a job may set.")[1].split("# By hand")[0]
+    variables = re.findall(r"^#   (\w+)", header, flags=re.MULTILINE)
+    sampler_words = ("temperature", "do_sample", "top_p", "top_k", "sampl")
+    assert len(variables) == 15
+    assert [name for name in variables if any(word in name.lower() for word in sampler_words)] == []
 
 
 def test_both_models_have_the_same_token_budget():

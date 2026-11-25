@@ -24,7 +24,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 
 logger = logging.getLogger(__name__)
 

@@ -22,7 +22,7 @@ from typing import Any
 
 import yaml
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.prompt_catalog import PromptCatalog, Question
 
 # A label may follow markdown, a number or a bullet: "### 1. COLUMNS", "- PAID: YES".

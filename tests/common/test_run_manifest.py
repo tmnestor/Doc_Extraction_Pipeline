@@ -19,12 +19,11 @@ from typing import Any
 import pytest
 
 from common import run_manifest
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.stage_settings import StageSettings, resolve
 from stages import __main__ as starter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 A_MODEL = "gemma4-31b-w4a16-vllm"
 ANOTHER_MODEL = "gemma4-12b-unified-w4a16-vllm"
 FOUR_PARTS = ("What:", "Where:", "Expected:", "How to fix:")
@@ -217,10 +216,9 @@ def settings_for(task: str, folder: Path, **changes: Any) -> StageSettings:
         "image_dir": str(folder / "pages"),
         "output": str(folder / "out"),
         "ground_truth": str(folder / "truth.jsonl"),
-        "DOC_EXTRACT_LOG_DIR": str(folder / "logs"),
         **changes,
     }
-    return resolve(task, environ, RUN_CONFIG)
+    return resolve(task, environ)
 
 
 class Called:
@@ -307,7 +305,6 @@ def test_a_run_refused_ends_with_the_reason_and_not_a_traceback(
         "model": ANOTHER_MODEL,
         "image_dir": str(tmp_path / "pages"),
         "output": str(tmp_path / "out"),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("CLEAR_PREV_OUTPUT", raising=False)

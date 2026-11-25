@@ -11,7 +11,7 @@ Nothing here imports the engine, so reading the registry costs nothing.
 from dataclasses import dataclass, field
 from typing import Any
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 
 
 @dataclass(frozen=True)
@@ -20,11 +20,13 @@ class VllmSpec:
 
     Attributes:
         model_type: The name a task asks for, e.g. "gemma4-31b-w4a16-vllm".
+        weights_folder: The name of the folder of its weights, under the folder a job names in
+            ``DOC_EXTRACT_MODELS_DIR``. A model's weights cannot be loaded under another's name.
         prompt_file: The file of its extraction prompts, in ``prompts/``.
         description: A line for a reader.
         chat_template_kwargs: Sent with every request. For a chat template that can think,
-            ``{"enable_thinking": False}``. A model whose template ignores that needs
-            ``bootstrap.model.chat_template`` in the settings file instead.
+            ``{"enable_thinking": False}``. A model whose template ignores that needs a
+            ``chat_template`` of its own instead.
         supports_data_parallel: Whether one whole engine fits on each card. False for a model too large
             for one card: starting an engine on each would run out of memory.
         default_image_first: Whether a request puts the image before the text. The model's chat template
@@ -43,6 +45,7 @@ class VllmSpec:
     """
 
     model_type: str
+    weights_folder: str
     max_model_len: int
     max_num_seqs: int
     gpu_memory_utilization: float
@@ -79,11 +82,10 @@ def get_model(model_type: str) -> VllmSpec:
         raise ConfigError(
             f"Unknown model type: {model_type!r}.\n"
             f"  What: model type {model_type!r} is not registered in models/registry.py.\n"
-            "  Where: the variable model in the job's environment, or config/run_config.yml -> "
-            "bootstrap.model.type; a typo or a retired model name is the usual cause.\n"
+            "  Where: the variable model in the job's environment; a typo or a retired model name is "
+            "the usual cause.\n"
             f"  Expected: one of the registered types: {available}\n"
-            "  How to fix: name a registered model, e.g. model=gemma4-31b-w4a16-vllm, or "
-            "bootstrap:\\n  model:\\n    type: gemma4-31b-w4a16-vllm in config/run_config.yml."
+            "  How to fix: name a registered model, e.g. model=gemma4-31b-w4a16-vllm."
         )
     return _REGISTRY[model_type]
 
@@ -114,6 +116,7 @@ def supports_data_parallel(model_type: str) -> bool:
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-31b-w4a16-vllm",
+        weights_folder="gemma-4-31B-it-qat-w4a16-ct",
         max_model_len=8192,
         # 16 is where the gain stops: the engine's cache holds about 16 bank statements at once.
         max_num_seqs=16,
@@ -159,7 +162,8 @@ register_vllm_model(
 register_vllm_model(
     VllmSpec(
         model_type="gemma4-12b-unified-w4a16-vllm",
-        # What every run has used. The settings file shipped 16384 and 10, and each run changed them.
+        weights_folder="gemma-4-12B-it-qat-w4a16-ct",
+        # What every run has used.
         max_model_len=8192,
         max_num_seqs=16,
         gpu_memory_utilization=0.90,

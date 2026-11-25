@@ -24,11 +24,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import yaml
 from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 
 CARDS = 2
 KINDS = ("bank_statement", "invoice", "receipt")
@@ -224,34 +222,51 @@ class InProcessContext:
     Process = InProcess
 
 
-def run_settings(model: str, config: Path, **choices: Any) -> Any:
-    """The run's settings for a model, with the choices a job's variables would give it."""
-    from common.settings import Settings
+def run_settings(model: str, models: Path, **choices: Any) -> Any:
+    """The run's settings for a model, with the choices a job's variables would give it.
 
-    return Settings.load({"model_type": model, **choices}, config_path=config)
+    Args:
+        model: A registered model.
+        models: The folder that holds each model's folder of weights (``models_folder``).
+        choices: Fields of ``StageSettings`` to set: ``document_types``, ``max_images``, ``photo_split``.
+    """
+    from common.stage_settings import StageSettings
+
+    return StageSettings(
+        task="",
+        model=model,
+        image_dir=None,
+        output=models.parent / "output",
+        ground_truth=None,
+        clear_previous_output=False,
+        models_dir=models,
+        **choices,
+    )
 
 
-def split_checked(model: str, config: Path, photographs: Path, *, photo_split: bool = True) -> Any:
+def split_checked(model: str, models: Path, photographs: Path, *, photo_split: bool = True) -> Any:
     """What the split stage's check gives for a model and a folder of photographs.
 
     The photo split is on, as a job sets it with ``photo_split=true``, unless the test says otherwise.
     """
     from stages import split
 
-    return split.checked(photo_split, lambda: run_settings(model, config), photographs)
+    return split.checked(run_settings(model, models, photo_split=photo_split), photographs)
 
 
-def test_config(folder: Path) -> Path:
-    """The shipped settings file, with each model's folder of weights pointed at a temporary place."""
-    raw = yaml.safe_load(RUN_CONFIG.read_text())
-    model_folder = folder / "model"
-    model_folder.mkdir()
-    (model_folder / "config.json").write_text("{}")
-    paths = raw["bootstrap"]["model"]["default_paths"]
-    raw["bootstrap"]["model"]["default_paths"] = dict.fromkeys(paths, str(model_folder))
-    path = folder / "run_config.yml"
-    path.write_text(yaml.safe_dump(raw, sort_keys=False))
-    return path
+def models_folder(folder: Path) -> Path:
+    """A folder such as ``DOC_EXTRACT_MODELS_DIR`` names: a folder of weights for each registered model.
+
+    Each holds an empty ``config.json`` and nothing else: no engine is started on it.
+    """
+    from models.registry import get_model, list_models
+
+    models = folder / "models"
+    for name in list_models():
+        weights = models / get_model(name).weights_folder
+        weights.mkdir(parents=True)
+        (weights / "config.json").write_text("{}")
+    return models
 
 
 @contextlib.contextmanager
@@ -291,22 +306,23 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
     Returns:
         The engines built, the calls made to them and the prompt texts those calls refer to.
     """
+    from models.registry import get_model
     from stages import classify, extract, split
 
     pages, output = folder / "pages", folder / "output"
     write_pages(pages)
     output.mkdir()
     write_receipts(folder / "receipts")
-    config = test_config(folder)
+    models = models_folder(folder)
     recorder = Recorder()
-    with recording(recorder, folder / "model"):
+    with recording(recorder, models / get_model(model).weights_folder):
         recorder.stage = "classify"
-        settings = run_settings(model, config)
+        settings = run_settings(model, models)
         classifications = classify.run(output / "classifications.jsonl", classify.checked(pages, settings))
         recorder.stage = "extract"
         extract.run(output / "raw_extractions.jsonl", extract.checked(classifications, settings))
         recorder.stage = "split"
-        split.run(output / "split", split_checked(model, config, pages))
+        split.run(output / "split", split_checked(model, models, pages))
         # A set of pages that are all of one type (document_type=SROIE_RECEIPT): given their type by
         # classify, which asks no model, and read by extract by the prompt of that type.
         receipts = folder / "receipts"

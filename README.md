@@ -352,14 +352,14 @@ parameter as the text "None".
 | `document_type` | Every page is of this document type, and `classify` asks no model | optional | the model is asked |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional | `false`: the task carries on |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | the job is stopped |
+| `DOC_EXTRACT_MODELS_DIR` | The folder that holds each model's folder of weights | `split`, `classify`, `extract` | the job is stopped |
 | `DOC_EXTRACT_TRACE_FILE` | Keep everything sent to the model, and its replies, in this file | optional | it is not kept |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | the folder written in `entrypoint.sh` |
 | `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | the model's own share, in its registration |
 
-Three kinds of variable that are no longer read are refused by name, and not run with the setting
-silently dropped: one under the old `LMM_` prefix (replaced by `DOC_EXTRACT_` on 21 November 2026),
-`dataset`, and `run_config`. Until 26 November 2026 a run's choices were keys of a settings file, which
-`run_config` named.
+Two variables that are no longer read are refused by name, and not run with the setting silently
+dropped: `dataset` and `run_config`. Until 26 November 2026 a run's choices were keys of a settings
+file, which `run_config` named.
 
 The number of cards is not a variable or a setting. They are counted: those named in
 `CUDA_VISIBLE_DEVICES` if that is set, else those `nvidia-smi` lists.
@@ -391,17 +391,17 @@ file beside the code that is opened for writing, made, moved or removed.
 What the engine and its libraries write for themselves (their caches, under the home folder and the
 temporary folder) is not the pipeline's and is not covered by this.
 
-## The settings file
+## There is no settings file
 
-`config/run_config.yml` holds what is left once a run's choices are variables: the folder of each
-model's weights. A key the code does not know is refused, so a misspelt key cannot sit in the file doing
-nothing.
-
-Nothing else that shapes a run is in a file to be edited for it:
+A run's settings are its variables, and nothing that shapes a run is in a file to be edited for it:
 
 - the values the code was tuned to (how many pages go to an engine call, the completion budgets, the
   photo split's rules) are named constants beside the code that uses them, changed by a commit;
-- what an engine is started with is in the model's registration, `models/registry.py`.
+- what an engine is started with, and the name of the folder of its weights, are in the model's
+  registration, `models/registry.py`.
+
+Until 26 November 2026 `config/run_config.yml` held 120 keys, each required and each checked in
+Python. No run had ever changed 97 of them.
 
 The document types, their fields and the prompts are not settings of a run: they are part of the code, in
 `config/field_definitions.yaml` and `prompts/`, and are named by the commit.
@@ -607,8 +607,10 @@ types with an earlier run: a question that helps one type can cost another.
 1. **Register it** in `models/registry.py`, with one `register_vllm_model(VllmSpec(...))` call beside the
    two that are there. The specification holds what is true of the model itself: its name, its prompt
    file, whether it can run as one engine on each card, and what its engine is started with (context
-   length, requests at once, share of memory, image tokens).
-2. **Say where its weights are**, under `bootstrap.model.default_paths` in `config/run_config.yml`.
+   length, requests at once, share of memory, image tokens). A field left out is refused where the
+   call is written.
+2. **Name the folder of its weights** in the same call, as `weights_folder`. It is looked for under
+   the folder a job names in `DOC_EXTRACT_MODELS_DIR`, and must hold the model's `config.json`.
 
 Then name it in `model`.
 
@@ -637,7 +639,7 @@ when that change is intended.
 | `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER`, and a `check` and a `start` that are each given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
 | `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
-| `config/` | `run_config.yml` and `field_definitions.yaml` |
+| `config/` | `field_definitions.yaml` |
 | `prompts/` | The classification and extraction prompts |
 | `docs/` | How documents are classified, and setting up the 12B model on a new machine |
 | `conda_envs/` | The conda environment |

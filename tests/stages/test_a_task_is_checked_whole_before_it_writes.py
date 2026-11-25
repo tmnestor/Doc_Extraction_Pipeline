@@ -20,13 +20,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
 from common import classification, run_manifest
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 from common.prompt_catalog import PromptCatalog
-from common.settings import Settings
 from common.stage_settings import TASKS, resolve
 from models.registry import get_model
 from stages import __main__ as starter
@@ -47,11 +45,12 @@ def task(bench: Bench, name: str, out: Path, model: str = ONE_ENGINE, **more: st
         "image_dir": str(bench.pages),
         "output": str(out),
         "ground_truth": str(out.parent / "ground_truth.jsonl"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
         # The photo split is on, so that the split task loads a model as the other two do.
         "photo_split": "true",
         **more,
     }
-    return resolve(name, environ, bench.config)
+    return resolve(name, environ)
 
 
 def everything_under(folder: Path) -> list[str]:
@@ -182,65 +181,7 @@ def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: s
     assert "tuning[" not in loader and "get_vllm_config" not in loader
 
 
-# --- the settings file is read once to work a task out --------------------------------------------------
-
-
-def test_working_a_task_out_reads_the_settings_file_once(
-    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    read: list[Path] = []
-    real = yaml.safe_load
-
-    def counted(text: str) -> Any:
-        parsed = real(text)
-        # The schema file is YAML too, and is read the first time it is asked for: only the settings
-        # file has a bootstrap block.
-        if isinstance(parsed, dict) and "bootstrap" in parsed:
-            read.append(bench.config)
-        return parsed
-
-    monkeypatch.setattr("common.settings.yaml.safe_load", counted)
-
-    task(bench, "clean", tmp_path / "out")
-
-    assert len(read) == 1
-
-
 # --- a task is worked out once: what its check built is what it runs with ------------------------------
-
-
-@pytest.mark.parametrize("name", ["split", "classify", "extract"])
-def test_one_start_of_a_task_reads_its_settings_file_once_and_loads_its_settings_once(
-    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
-) -> None:
-    """Until 26 November 2026 the file was read to work the task out, and again by the stage; and for
-    a day the stage's settings were built by its check and built again by its run."""
-    out = tmp_path / "out"
-    if name == "extract":
-        starter.run_task(task(bench, "classify", out))
-    read: list[str] = []
-    real_read = yaml.safe_load
-
-    def counted(text: str) -> Any:
-        parsed = real_read(text)
-        if isinstance(parsed, dict) and "bootstrap" in parsed:
-            read.append("read")
-        return parsed
-
-    loaded: list[str] = []
-    real_load = Settings.load.__func__  # type: ignore[attr-defined]
-
-    def counted_load(cls: Any, *args: Any, **kwargs: Any) -> Settings:
-        loaded.append("loaded")
-        return real_load(cls, *args, **kwargs)
-
-    monkeypatch.setattr("common.settings.yaml.safe_load", counted)
-    monkeypatch.setattr(Settings, "load", classmethod(counted_load))
-
-    starter.run_task(task(bench, name, out))
-
-    assert read == ["read"]
-    assert loaded == ["loaded"]
 
 
 @pytest.mark.parametrize("name", ["split", "classify", "extract"])
@@ -274,15 +215,15 @@ def test_what_a_stages_check_gives_is_what_its_run_is_handed(
 def test_the_share_of_memory_a_job_sets_reaches_the_engine_with_the_settings(
     bench: Bench, tmp_path: Path
 ) -> None:
-    from common.stage_settings import run_settings
+    import pickle
 
     with_a_share = task(bench, "classify", tmp_path / "out", DOC_EXTRACT_GPU_MEMORY_UTILIZATION="0.85")
     without = task(bench, "classify", tmp_path / "out")
 
-    assert run_settings(with_a_share).gpu_memory_utilization == 0.85
-    assert run_settings(without).gpu_memory_utilization is None
+    assert with_a_share.gpu_memory_utilization == 0.85
+    assert without.gpu_memory_utilization is None
     # A copy made for a worker's process carries it.
-    assert run_settings(with_a_share).gpu_memory_utilization == 0.85
+    assert pickle.loads(pickle.dumps(with_a_share)).gpu_memory_utilization == 0.85
 
 
 def test_the_engine_loader_reads_no_variable_of_the_job_itself() -> None:

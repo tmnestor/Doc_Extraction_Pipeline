@@ -12,7 +12,6 @@ from typing import Any
 import cv2
 import numpy as np
 import pytest
-import yaml
 from PIL import Image
 
 from common import photo_split
@@ -31,11 +30,10 @@ from common.photo_split import (
     worth_straightening,
 )
 from common.prompt_catalog import PromptCatalog
+from common.stage_settings import resolve
 from stages.split import apply_reply, checked, cut_name
 from stages.split import run as run_the_stage
 
-RUN_CONFIG = Path(__file__).resolve().parents[2] / "config" / "run_config.yml"
-RAW = yaml.safe_load(RUN_CONFIG.read_text())
 # The rules the stage goes by, with their measured values. Until 26 November 2026 they were read from
 # the settings file; a test that wants another value makes its own record with dataclasses.replace.
 CONFIG = photo_split.CONFIG
@@ -53,10 +51,10 @@ ONE = '```json\n[\n  {"box_2d": [131, 363, 923, 621], "label": "receipt"}\n]\n``
 def run(image_dir: Path, output_dir: Path) -> Path:
     """The stage as shipped: the photo split is off, so no model is asked and none is looked for."""
 
-    def never() -> Any:
-        raise AssertionError("with the photo split off the run's settings are not asked for")
+    settings = resolve("split", {"output": str(output_dir), "photo_split": "false"})
+    assert settings.models_dir is None
 
-    return run_the_stage(output_dir, checked(False, never, image_dir))
+    return run_the_stage(output_dir, checked(settings, image_dir))
 
 
 def reply_for(*boxes: list[int]) -> str:

@@ -18,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .config_schema import ConfigError
+from .errors import ConfigError
 from .field_schema import NOT_FOUND, Table, get_field_schema
 from .reply_fields import IDENTIFIER_LABEL
 

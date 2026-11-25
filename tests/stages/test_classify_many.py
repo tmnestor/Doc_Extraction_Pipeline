@@ -24,7 +24,6 @@ from stages import classify as classify_stage
 NEVER = EngineWatch(10_000)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 DETECTION_FILE = REPO_ROOT / "prompts" / "document_type_detection.yaml"
 
 REPLIES = [

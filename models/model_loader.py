@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from common.cards import cards_to_use
-from common.settings import Settings
+from common.stage_settings import StageSettings
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
 from models.registry import VllmSpec
@@ -32,13 +32,12 @@ PREFIX_CACHING = True
 
 
 @contextmanager
-def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
+def load_engine(spec: VllmSpec, settings: StageSettings) -> Iterator[Any]:
     """Start the model's vLLM engine, and let go of it on the way out.
 
     Args:
         spec: The model's specification.
-        settings: The run's settings; for a stage with its own engine settings, the copy made by
-            ``for_stage``.
+        settings: The run's settings.
 
     Yields:
         The engine (``vllm.LLM``).
@@ -110,7 +109,7 @@ def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
         del engine
 
 
-def build_processor(spec: VllmSpec, engine: Any, settings: Settings) -> DocumentOrchestrator:
+def build_processor(spec: VllmSpec, engine: Any, settings: StageSettings) -> DocumentOrchestrator:
     """The document processor on a started engine.
 
     Args:
@@ -126,4 +125,4 @@ def build_processor(spec: VllmSpec, engine: Any, settings: Settings) -> Document
         default_image_first=spec.default_image_first,
         trace_path=settings.trace_file,
     )
-    return DocumentOrchestrator(backend, model_type_key=spec.model_type, app_config=settings)
+    return DocumentOrchestrator(backend, model_type_key=spec.model_type)

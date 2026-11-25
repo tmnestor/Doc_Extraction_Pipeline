@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from common.config_schema import ConfigError
+from common.errors import ConfigError
 
 logger = logging.getLogger("stages")
 

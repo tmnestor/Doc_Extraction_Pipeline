@@ -342,10 +342,8 @@ def test_a_job_whose_engine_stops_answering_ends_with_its_reason_and_exit_code_o
         "model": AN_ENGINE_ON_EACH_CARD,
         "image_dir": str(bench.pages),
         "output": str(tmp_path / "out"),
-        "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
     }
-    monkeypatch.setattr(starter, "CONFIG_PATH", bench.config)
-    monkeypatch.setattr("common.settings.DEFAULT_CONFIG", bench.config)
     monkeypatch.setattr(starter.os, "environ", environ)
 
     code = starter.main()
@@ -370,7 +368,7 @@ def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
     bench.processor.dead_from_attempt = 1
 
     with caplog.at_level(logging.WARNING):
-        split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
+        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
 
     assert "The model could not be asked about 6 of 6 photograph(s)" in caplog.text
     first = records_by_name(output / "splits.jsonl")
@@ -380,7 +378,7 @@ def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
     # This time the model answers, and says each photograph holds two receipts.
     bench.processor.dead_from_attempt = None
     bench.processor.ask = lambda images, prompts, max_tokens: [TWO_RECEIPTS] * len(images)  # type: ignore[method-assign]
-    split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
+    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
 
     second = records_by_name(output / "splits.jsonl")
     assert set(second) == set(bench.names) and not any(record.get("error") for record in second.values())
@@ -398,7 +396,7 @@ def test_split_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Pat
     bench.processor.dead_from_attempt = 2
 
     with pytest.raises(StageStopped):
-        split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
+        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
 
     # The first call's two photographs were dealt with and are kept: the model's replies in the
     # stage's journal, and the images written.

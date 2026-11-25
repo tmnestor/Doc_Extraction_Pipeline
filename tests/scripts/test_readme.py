@@ -34,7 +34,7 @@ def test_every_variable_a_job_may_set_is_in_the_table() -> None:
         .split("# By hand")[0]
     )
     in_script = re.findall(r"^#   (\w+)", header, flags=re.MULTILINE)
-    assert len(in_script) == 14, in_script
+    assert len(in_script) == 15, in_script
     assert listed == in_script
 
 

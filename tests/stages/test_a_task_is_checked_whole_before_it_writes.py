@@ -28,6 +28,7 @@ from common import classification, run_manifest
 from common.config_schema import ConfigError
 from common.settings import Settings
 from common.stage_settings import TASKS, resolve
+from models.registry import get_model
 from stages import __main__ as starter
 
 PARTS = ("What:", "Where:", "Expected:", "How to fix:")
@@ -165,38 +166,16 @@ def loaded_with(bench: Bench, change: Any, model: str = ONE_ENGINE) -> Settings:
     return Settings.load({"model_type": model}, config_path=bench.config)
 
 
-@pytest.mark.parametrize(
-    "key",
-    [
-        "gpu_memory_utilization",
-        "max_model_len",
-        "max_num_seqs",
-        "limit_mm_per_prompt",
-        "enable_prefix_caching",
-    ],
-)
-def test_a_key_the_engine_is_started_with_is_missed_when_the_settings_are_loaded(
-    bench: Bench, key: str
-) -> None:
-    def left_out(settings: dict[str, Any]) -> None:
-        del settings["inference"]["vllm"]["defaults"][key]
-
-    with pytest.raises(ConfigError) as refused:
-        loaded_with(bench, left_out)
-
-    message = str(refused.value)
-    assert all(part in message for part in PARTS)
-    assert f"inference.vllm.defaults.{key}" in message and str(bench.config) in message
-
-
 @pytest.mark.parametrize("model", [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD])
-def test_every_key_the_engine_loader_reads_is_there_for_every_model(bench: Bench, model: str) -> None:
+def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: str) -> None:
+    """Until 26 November 2026 they were keys of the settings file, and one left out was a ``KeyError`` as
+    the engine loaded. A registration is a typed record: a number left out is refused where it is written."""
     loader = (Path(starter.REPOSITORY) / "models" / "model_loader.py").read_text()
-    read = set(re.findall(r'tuning\["([a-z_]+)"\]', loader))
-    settings = Settings.load({"model_type": model}, config_path=bench.config)
+    read = set(re.findall(r"spec\.([a-z_]+)", loader))
 
-    assert read and read <= set(settings.get_vllm_config(model))
-    assert read <= set(settings.get_vllm_config("a model with no block of its own"))
+    assert {"max_model_len", "max_num_seqs", "gpu_memory_utilization"} <= read
+    assert all(hasattr(get_model(model), name) for name in read)
+    assert "tuning[" not in loader and "get_vllm_config" not in loader
 
 
 @pytest.mark.parametrize("model", [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD])
@@ -333,8 +312,8 @@ def test_the_share_of_memory_a_job_sets_reaches_the_engine_with_the_settings(
 
     assert run_settings(with_a_share).gpu_memory_utilization == 0.85
     assert run_settings(without).gpu_memory_utilization is None
-    # A copy made for a worker's process, or for a stage, carries it.
-    assert run_settings(with_a_share).on_one_card().for_stage("classify").gpu_memory_utilization == 0.85
+    # A copy made for a worker's process carries it.
+    assert run_settings(with_a_share).on_one_card().gpu_memory_utilization == 0.85
 
 
 def test_the_engine_loader_reads_no_variable_of_the_job_itself() -> None:

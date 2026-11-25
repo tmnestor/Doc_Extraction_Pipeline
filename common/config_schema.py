@@ -7,11 +7,8 @@ them before any work begins. A key that is not declared stops the run.
 This is the one place the keys are named. It holds no values and no rules about values: those checks stay
 with the code that reads each setting.
 
-Two marks stand for levels whose names are data and not settings:
-
-- ``*`` is one level of any name, such as a model's name under ``inference.vllm.models``.
-- ``**`` at the end is everything beneath, for the blocks handed to the engine as they are
-  (``mm_processor_kwargs`` and ``hf_overrides``), whose keys belong to vLLM and the model.
+One mark stands for a level whose name is data and not a setting: ``*`` is one level of any name, such
+as a model's name under ``bootstrap.model.default_paths``.
 """
 
 from pathlib import Path
@@ -22,27 +19,11 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "bootstrap.gpus.data_parallel_size",
         "bootstrap.gpus.num_gpus",
         "bootstrap.logging.log_dir",
-        "bootstrap.model.chat_template",
         "bootstrap.model.default_paths.*",
-        "bootstrap.model.enforce_eager",
         "bootstrap.model.path",
         "bootstrap.model.type",
         "inference.tracing.path",
         "inference.tracing.raw_prompts",
-        "inference.vllm.defaults.enable_prefix_caching",
-        "inference.vllm.defaults.gpu_memory_utilization",
-        "inference.vllm.defaults.limit_mm_per_prompt",
-        "inference.vllm.defaults.max_model_len",
-        "inference.vllm.defaults.max_num_seqs",
-        "inference.vllm.models.*.enable_prefix_caching",
-        "inference.vllm.models.*.gpu_memory_utilization",
-        "inference.vllm.models.*.hf_overrides.**",
-        "inference.vllm.models.*.limit_mm_per_prompt",
-        "inference.vllm.models.*.max_model_len",
-        "inference.vllm.models.*.max_num_seqs",
-        "inference.vllm.models.*.mm_processor_kwargs.**",
-        "inference.vllm.models.*.stage_overrides.classify.hf_overrides.**",
-        "inference.vllm.models.*.stage_overrides.classify.mm_processor_kwargs.**",
         # `classify`, `default`, and a size for any document type by its name.
         "pipeline.batching.*",
         "pipeline.classification.fallback_type",
@@ -165,9 +146,6 @@ def _is_a_block_of(parts: list[str], known: list[str]) -> bool:
 
 
 def _matches(parts: list[str], known: list[str]) -> bool:
-    if known[-1] == "**":
-        head = known[:-1]
-        return len(parts) > len(head) and all(k in ("*", p) for k, p in zip(head, parts, strict=False))
     return len(parts) == len(known) and all(k in ("*", p) for k, p in zip(known, parts, strict=True))
 
 

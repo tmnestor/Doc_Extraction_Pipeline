@@ -6508,8 +6508,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6534,8 +6534,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6560,8 +6560,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6586,8 +6586,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6612,8 +6612,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6638,8 +6638,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6664,8 +6664,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },
@@ -6690,8 +6690,8 @@
         "limit_mm_per_prompt": {
           "image": 1
         },
-        "max_model_len": 16384,
-        "max_num_seqs": 10,
+        "max_model_len": 8192,
+        "max_num_seqs": 16,
         "mm_processor_kwargs": {
           "max_soft_tokens": 560
         },

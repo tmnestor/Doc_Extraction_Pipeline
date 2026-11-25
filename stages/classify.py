@@ -155,14 +155,13 @@ def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
 class Checked:
     """What the stage is run with, read and checked."""
 
-    # The run's settings as classify loads its engine with them.
     settings: Settings
     # The pages to classify: those of the folder the settings select, in the order of their names.
     images: list[Path]
 
 
 def checked(image_dir: Path, settings: Settings) -> Checked:
-    """The run's settings as classify loads its engine with them, and the pages, each read and checked.
+    """The run's settings and the pages to classify, each read and checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
     nothing is read or worked out a second time.
@@ -175,28 +174,27 @@ def checked(image_dir: Path, settings: Settings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it. A folder with no
             page to read is one such: until 26 November 2026 it ended the task with a traceback.
     """
-    staged = settings.for_stage("classify")
-    check_settings(staged)
+    check_settings(settings)
     # Both filters are config-driven and MUST be passed: calling with the
     # directory alone silently ignored max_images and document_types, so a
     # 12-image request processed all 165 (fixed 2026-09-21).
     images = list(
         discover_images(
             image_dir,
-            document_types=staged.document_types,
-            max_images=staged.max_images,
+            document_types=settings.document_types,
+            max_images=settings.max_images,
         )
     )
     if not images:
         selected = (
-            f" of the types the settings select ({', '.join(staged.document_types)}, under "
-            f"pipeline.information_extraction.input.document_types in {staged.config_path})"
-            if staged.document_types
+            f" of the types the settings select ({', '.join(settings.document_types)}, under "
+            f"pipeline.information_extraction.input.document_types in {settings.config_path})"
+            if settings.document_types
             else ""
         )
         raise no_pages_in(image_dir, selected)
     logger.info("Found %d images in %s", len(images), image_dir)
-    return Checked(staged, images)
+    return Checked(settings, images)
 
 
 def check(task: StageSettings) -> Checked:

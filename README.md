@@ -362,7 +362,7 @@ is asked only for the folders it uses: `clean` and `evaluate` for no folder of p
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | none: the default is in `entrypoint.sh` | `LMM_CONDA_ENV` |
-| `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | `inference.vllm` | `LMM_GPU_MEMORY_UTILIZATION` |
+| `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | none: the model's own share, in its registration | `LMM_GPU_MEMORY_UTILIZATION` |
 
 A job that still sets a variable under the old `LMM_` prefix is refused with a message naming the new
 variables. It is not run with the setting silently dropped.
@@ -634,9 +634,9 @@ types with an earlier run: a question that helps one type can cost another.
 
 1. **Register it** in `models/registry.py`, with one `register_vllm_model(VllmSpec(...))` call beside the
    two that are there. The specification holds what is true of the model itself: its name, its prompt
-   file, and whether it can run as one engine on each card.
-2. **Give it its settings** in `config/run_config.yml`: the folder of its weights under
-   `bootstrap.model.default_paths`, and its engine limits in a block under `inference.vllm.models`.
+   file, whether it can run as one engine on each card, and what its engine is started with (context
+   length, requests at once, share of memory, image tokens).
+2. **Say where its weights are**, under `bootstrap.model.default_paths` in `config/run_config.yml`.
 
 Then name it in `model`.
 

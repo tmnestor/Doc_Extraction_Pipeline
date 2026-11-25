@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from common.config_schema import KNOWN_KEYS, check_known_keys, is_known, leaf_paths
+from common.config_schema import KNOWN_KEYS, check_known_keys, leaf_paths
 from common.settings import read_settings_file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -185,12 +185,6 @@ def test_a_batch_size_for_a_misspelt_document_type_is_refused(tmp_path: Path) ->
     message = str(raised.value)
     assert "pipeline.batching.reciept" in message and "receipt" in message
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-
-
-def test_what_is_handed_to_the_engine_may_hold_any_key() -> None:
-    assert is_known("inference.vllm.models.gemma4-31b-w4a16-vllm.mm_processor_kwargs.anything_at_all")
-    assert is_known("inference.vllm.models.some-new-model.max_num_seqs")
-    assert not is_known("inference.vllm.models.some-new-model.max_num_seq")
 
 
 @pytest.mark.parametrize("key", sorted(KNOWN_KEYS))

@@ -6,11 +6,12 @@ the message must say which names are allowed.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
-from models.registry import get_model, list_models
+from models.registry import IMAGE_TOKENS, get_model, list_models
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
@@ -38,4 +39,44 @@ def test_the_shipped_settings_name_a_registered_model() -> None:
 
     assert raw["bootstrap"]["model"]["type"] in MODELS
     assert sorted(raw["bootstrap"]["model"]["default_paths"]) == MODELS
-    assert sorted(raw["inference"]["vllm"]["models"]) == MODELS
+
+
+# --- what a model's engine is started with is in its registration ---------------------------------------
+# Until 26 November 2026 these were a block for each model in the settings file, with defaults under
+# them, overrides for one stage over them, and the number of image tokens written three times a model.
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_a_models_engine_numbers_are_in_its_registration(model: str) -> None:
+    spec = get_model(model)
+
+    # The values every run of either model has used. The settings file shipped the 12B with 16384 and
+    # 10, and every run sheet changed them to these.
+    assert (spec.max_model_len, spec.max_num_seqs, spec.gpu_memory_utilization) == (8192, 16, 0.90)
+    assert spec.chat_template is None
+
+
+def numbers_in(block: Any) -> list[int]:
+    if isinstance(block, dict):
+        return [number for value in block.values() for number in numbers_in(value)]
+    return [block]
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_a_models_image_tokens_are_one_number_wherever_it_is_named(model: str) -> None:
+    """The processor and the model's own configuration each name it, and they must agree."""
+    spec = get_model(model)
+
+    assert IMAGE_TOKENS == 560
+    assert numbers_in(spec.mm_processor_kwargs) == [IMAGE_TOKENS]
+    assert numbers_in(spec.hf_overrides) and set(numbers_in(spec.hf_overrides)) == {IMAGE_TOKENS}
+
+
+def test_each_model_names_its_image_tokens_as_its_own_configuration_does() -> None:
+    assert get_model("gemma4-31b-w4a16-vllm").hf_overrides == {
+        "vision_soft_tokens_per_image": 560,
+        "vision_config": {"default_output_length": 560},
+    }
+    assert get_model("gemma4-12b-unified-w4a16-vllm").hf_overrides == {
+        "vision_config": {"num_soft_tokens": 560}
+    }

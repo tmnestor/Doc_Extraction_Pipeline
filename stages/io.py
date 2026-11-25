@@ -125,8 +125,11 @@ class Journal:
     ``recover`` adds those records to the output, in the pages' own order, and the stage then carries on
     from them like any other earlier output.
 
-    The output itself is never written out of order: the order of its pages decides how a later stage
-    groups them into engine calls, which must not depend on which card finished first.
+    The output itself is never left out of order: the order of its pages decides how a later stage
+    groups them into engine calls, which must not depend on which card finished first, nor on whether
+    the run was stopped on its way. ``stages.carry_on`` is the one place a journal is used: it adds a
+    run's records to the output and puts the whole in order (``in_the_order``) before it removes the
+    journal.
     """
 
     def __init__(self, output_path: Path) -> None:

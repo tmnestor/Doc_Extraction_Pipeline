@@ -1,7 +1,10 @@
 """A run's time on the cards: one row for each stage that uses them, kept in the output folder.
 
-``classify`` and ``extract`` each note what they spent in ``<output>/.stage_timing.jsonl``, and the
-evaluate stage reads the rows for its summary. That file is the one record of a run's time.
+Each stage that uses the cards notes what it spent in ``<output>/.stage_timing.jsonl``, and the
+evaluate stage reads the rows for its summary. That file is the one record of a run's time. The rows are
+noted in one place, ``stages.carry_on``. The rows of ``classify`` and ``extract`` make the summary's
+model time and its rate of pages a minute; the row of ``split``, which reads photographs and not pages,
+is shown apart from them.
 
 A row holds two times, because they answer different questions:
 

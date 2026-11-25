@@ -47,6 +47,44 @@ def test_what_is_sent_to_the_model_has_not_changed(model: str, tmp_path: Path) -
     assert now["calls"] == recorded["calls"]
 
 
+def as_asked(record: dict[str, Any], stage: str) -> list[dict[str, Any]]:
+    """A stage's calls with everything that is sent, and without what only says where in the record it is.
+
+    The name of the stage is dropped, and so is the engine's running number, which counts the engines
+    started so far and so differs between any two stages. In its place is what that engine was started
+    with and the card it was put on.
+    """
+    return [
+        {
+            "engine": {
+                key: value for key, value in record["engines"][call["engine"]].items() if key != "stage"
+            },
+            "sampling": call["sampling"],
+            "others": call["others"],
+            "requests": call["requests"],
+        }
+        for call in record["calls"]
+        if call["stage"] == stage
+    ]
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_the_dataset_s_receipts_are_asked_as_the_old_task_asks_them(model: str, tmp_path: Path) -> None:
+    """The SROIE receipts read as a dataset, by classify and extract, beside the task that read them.
+
+    The same engines with the same arguments on the same cards, the same receipts in the same calls in
+    the same order, and for each the same prompt, image, completion budget, sampling and chat
+    arguments. And the model is not asked what the receipts are: their dataset says.
+    """
+    record = json.loads(as_text(record_model_inputs(model, tmp_path)))
+
+    new = as_asked(record, "dataset_sroie")
+    assert new, "the dataset's receipts were not read"
+    assert new == as_asked(record, "sroie")
+    assert as_asked(record, "dataset_sroie_classify") == []
+    assert not [engine for engine in record["engines"] if engine["stage"] == "dataset_sroie_classify"]
+
+
 if __name__ == "__main__":
     for name in MODELS:
         with tempfile.TemporaryDirectory() as folder:

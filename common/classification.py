@@ -114,7 +114,15 @@ BY_THE_DEFAULT = "default"  # the answers were read and no rule fitted: the file
 FALLBACK_NO_ANSWERS = "fallback_no_answers"  # the reply held no answers that could be read
 FALLBACK_NO_RULE = "fallback_no_rule"  # the answers were read, no rule fitted, and the file has no default
 FALLBACK_NOT_ASKED = "fallback_not_asked"  # the model could not be asked, or its reply not read at all
-REACHED_BY = (BY_A_RULE, BY_THE_DEFAULT, FALLBACK_NO_ANSWERS, FALLBACK_NO_RULE, FALLBACK_NOT_ASKED)
+BY_THE_DATASET = "dataset"  # the page's dataset says what its pages are: the model was not asked
+REACHED_BY = (
+    BY_A_RULE,
+    BY_THE_DEFAULT,
+    FALLBACK_NO_ANSWERS,
+    FALLBACK_NO_RULE,
+    FALLBACK_NOT_ASKED,
+    BY_THE_DATASET,
+)
 
 
 def document_type(reply: str, fallback_type: str) -> str:

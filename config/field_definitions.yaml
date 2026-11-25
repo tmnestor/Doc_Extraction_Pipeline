@@ -181,6 +181,17 @@ document_types:
       - JOURNEY_DISTANCES
       - JOURNEY_PURPOSES
 
+  # The receipts of the public SROIE test split: four fields, each of a kind the pipeline has, and a
+  # fixed budget, since a reply is four short lines. Their pages are not classified by a rule: the
+  # dataset says what they are (pipeline.datasets in config/run_config.yml).
+  sroie_receipt:
+    completion_tokens: 256
+    fields:
+      - COMPANY
+      - DATE
+      - ADDRESS
+      - TOTAL
+
 # The fields. Every field a document type names has an entry here, and nothing in Python names a field.
 #
 #   cleaned_as  how a value in a reply is tidied, so that one answer written two ways compares as the
@@ -256,6 +267,10 @@ fields:
   JOURNEY_DATES:                {cleaned_as: date, list: false, scored_as: date, scored_row_by_row: true}
   JOURNEY_DISTANCES:            {cleaned_as: text, list: false, scored_as: text, scored_row_by_row: true}
   JOURNEY_PURPOSES:             {cleaned_as: text, list: false, scored_as: text}
+  COMPANY:                      {cleaned_as: text, list: false, scored_as: text}
+  DATE:                         {cleaned_as: day_month_year, list: false, scored_as: date}
+  ADDRESS:                      {cleaned_as: address, list: false, scored_as: text}
+  TOTAL:                        {cleaned_as: money, list: false, scored_as: money}
 
 # The scoring thresholds.
 evaluation:

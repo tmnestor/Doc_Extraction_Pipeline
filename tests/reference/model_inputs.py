@@ -190,7 +190,7 @@ def stand_in_vllm(recorder: Recorder, model_folder: Path) -> types.ModuleType:
         def reply(self, kind: str) -> str:
             if recorder.stage == "split":
                 return SPLIT_REPLY
-            if recorder.stage == "sroie":
+            if recorder.stage in ("sroie", "dataset_sroie"):
                 return SROIE_REPLY
             return (CLASSIFY_REPLIES if recorder.stage == "classify" else EXTRACT_REPLIES)[kind]
 
@@ -311,4 +311,23 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         split.run(pages, output / "split", model_type=model, config_path=config)
         recorder.stage = "sroie"
         sroie.run(model_type=model, config_path=config)
+        # The same receipts read as a dataset: given their type by classify, which asks no model, and
+        # read by extract. tests/reference/test_model_inputs.py sets these calls beside the old task's.
+        receipts = folder / "sroie" / "img"
+        recorder.stage = "dataset_sroie_classify"
+        given = classify.run(
+            receipts,
+            output / "dataset" / "classifications.jsonl",
+            model_type=model,
+            config_path=config,
+            given_type="SROIE_RECEIPT",
+        )
+        recorder.stage = "dataset_sroie"
+        extract.run(
+            given,
+            receipts,
+            output / "dataset" / "raw_extractions.jsonl",
+            model_type=model,
+            config_path=config,
+        )
     return recorder.as_record()

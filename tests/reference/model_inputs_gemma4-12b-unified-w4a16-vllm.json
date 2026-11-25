@@ -6627,6 +6627,184 @@
         "temperature": 0
       },
       "stage": "sroie"
+    },
+    {
+      "engine": 8,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 100x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 102x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 104x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 106x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 108x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 110x150 RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 256,
+        "temperature": 0
+      },
+      "stage": "dataset_sroie"
+    },
+    {
+      "engine": 9,
+      "others": {
+        "chat_template": null,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        },
+        "use_tqdm": false
+      },
+      "requests": [
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 101x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 103x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 105x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 107x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 109x150 RGB"
+          ]
+        ],
+        [
+          [
+            "user",
+            "text",
+            "4faf339e27dd"
+          ],
+          [
+            "user",
+            "image_pil",
+            "image 111x150 RGB"
+          ]
+        ]
+      ],
+      "sampling": {
+        "max_tokens": 256,
+        "temperature": 0
+      },
+      "stage": "dataset_sroie"
     }
   ],
   "engines": [
@@ -6837,6 +7015,58 @@
       },
       "cards": "1",
       "stage": "sroie"
+    },
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "num_soft_tokens": 560
+          }
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 16384,
+        "max_num_seqs": 10,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 1,
+        "trust_remote_code": true
+      },
+      "cards": "0",
+      "stage": "dataset_sroie"
+    },
+    {
+      "arguments": {
+        "disable_log_stats": true,
+        "enable_prefix_caching": true,
+        "enforce_eager": false,
+        "gpu_memory_utilization": 0.9,
+        "hf_overrides": {
+          "vision_config": {
+            "num_soft_tokens": 560
+          }
+        },
+        "limit_mm_per_prompt": {
+          "image": 1
+        },
+        "max_model_len": 16384,
+        "max_num_seqs": 10,
+        "mm_processor_kwargs": {
+          "max_soft_tokens": 560
+        },
+        "model": "<model>",
+        "tensor_parallel_size": 1,
+        "trust_remote_code": true
+      },
+      "cards": "1",
+      "stage": "dataset_sroie"
     }
   ],
   "prompts": {

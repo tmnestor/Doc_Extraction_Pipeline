@@ -128,6 +128,23 @@ def classified(image_path: str, result: Mapping[str, Any], seconds: float) -> di
     return record
 
 
+def given_its_type(image_path: str, document_type: str, type_from: str) -> dict[str, Any]:
+    """The classification record of a page that was given its type without the model being asked.
+
+    The record a page the model was asked about has, with nothing for a reply and no time spent.
+
+    Args:
+        image_path: The page.
+        document_type: The type it is given.
+        type_from: What gave it, one of ``common.classification.REACHED_BY``.
+    """
+    return classified(
+        image_path,
+        {"document_type": document_type, "type_from": type_from, "raw_response": "", "prompt_used": "none"},
+        0.0,
+    )
+
+
 # --- extract --------------------------------------------------------------------------------------------
 
 

@@ -19,6 +19,7 @@
 #   image_dir                the folder of pages to read
 #   output                   the folder the stages write to
 #   ground_truth             the answer key, for evaluate
+#   dataset                  a dataset of the settings file, whose pages are all of one type
 #   CLEAR_PREV_OUTPUT        true = delete the stage's earlier output first; default false
 #   sroie_max_images         score only the first N receipts of the benchmark
 #   DOC_EXTRACT_LOG_DIR      the folder for the log

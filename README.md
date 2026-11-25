@@ -303,6 +303,7 @@ neither that nor `output`, since it reads and writes the folders of its own bloc
 | `image_dir` | The folder of pages | `split`, `classify`, `extract` | `pipeline.information_extraction.input.dir` | unchanged |
 | `output` | The folder the tasks write to | every task but `sroie` | `pipeline.information_extraction.output.dir` | unchanged |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
+| `dataset` | A dataset of the settings file, whose pages are all of one type: `classify` gives each page that type and asks no model, and the dataset's folder of pages is read unless `image_dir` is set | optional | a block under `pipeline.datasets` | new |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `sroie_max_images` | Score only the first N receipts of the benchmark | optional, `sroie` only | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |

@@ -21,11 +21,9 @@ KNOWN_KEYS: frozenset[str] = frozenset(
         "bootstrap.model.type",
         "inference.tracing.path",
         "inference.tracing.raw_prompts",
-        "pipeline.classification.fallback_type",
         # A dataset by any name, each with its two keys.
         "pipeline.datasets.*.document_type",
         "pipeline.datasets.*.image_dir",
-        "pipeline.extraction.order",
         "pipeline.extraction.skip_labels",
         "pipeline.information_extraction.input.dir",
         "pipeline.information_extraction.input.document_types",

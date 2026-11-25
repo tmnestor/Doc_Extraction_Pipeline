@@ -84,23 +84,6 @@ def test_a_rule_that_cannot_be_used_stops_classify_before_an_engine_starts(
     assert not output.exists()
 
 
-def test_a_fallback_type_that_is_no_document_type_stops_classify_before_an_engine_starts(
-    bench: Bench, tmp_path: Path
-) -> None:
-    bench.with_settings(
-        lambda settings: settings["pipeline"]["classification"].update(fallback_type="LEDGER")
-    )
-
-    with pytest.raises(ConfigError) as refused:
-        bench.classify(tmp_path / "out" / "classifications.jsonl")
-
-    message = str(refused.value)
-    assert all(part in message for part in PARTS)
-    assert "'LEDGER'" in message and "pipeline.classification.fallback_type" in message
-    assert str(bench.config) in message and "fallback_type: UNIVERSAL" in message
-    assert bench.engines_started == 0
-
-
 def test_the_shipped_fallback_type_is_a_document_type(bench: Bench, tmp_path: Path) -> None:
     bench.classify(tmp_path / "out" / "classifications.jsonl")
 

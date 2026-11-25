@@ -34,7 +34,7 @@ class DocumentOrchestrator:
         self._model_type_key = model_type_key
         self.app_config: Settings = app_config
         # The type of a page whose classification reply cannot be read.
-        self._fallback_type = app_config.classification_fallback_type
+        self._fallback_type = get_field_schema().fallback_type
 
     # -- Completion budgets ----------------------------------------------------
 

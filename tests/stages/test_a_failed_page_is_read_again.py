@@ -138,6 +138,8 @@ def test_a_page_classify_could_not_read_is_asked_about_again_by_the_next_run(
     assert set(second) == set(bench.names)
     assert second[spoilt]["document_type"] == "BANK_STATEMENT" and "error" not in second[spoilt]
     assert all(second[name] == first[name] for name in bench.names if name != spoilt)
+    # The page read again is put back in its place, and not added after the others.
+    assert list(second) == bench.names
     # The stage's row of timing covers every page of the output once.
     (row,) = [t for t in read_stage_timings(output.parent) if t.stage == "classify"]
     assert row.images == len(bench.names)

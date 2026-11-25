@@ -27,7 +27,7 @@ from common.stage_settings import StageSettings
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import append_jsonl, in_the_order, read_completed_images, read_jsonl, start_afresh
+from .io import in_the_order, read_completed_images, read_jsonl, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +129,7 @@ def run(
     left_unread = [records_of.left_unread(page) for page in set_apart if page["image_name"] not in held]
     if left_unread:
         logger.info("Skipping %d records with skip labels", len(left_unread))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        append_jsonl(output_path, left_unread)
-        in_the_order(output_path, order)
+        in_the_order(output_path, order, adding=left_unread)
 
     if carried.arrangement is None:
         return output_path

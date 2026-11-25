@@ -24,7 +24,7 @@ from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
 from common.settings import Settings
 from common.stage_timing import read_stage_timings
 from stages.carry_on import Work, carry_on
-from stages.io import Journal, in_the_order, read_jsonl, write_jsonl
+from stages.io import Journal, in_the_order, read_jsonl, take_out, write_jsonl
 
 
 def names_in(path: Path) -> list[str]:
@@ -126,19 +126,65 @@ def test_an_output_written_whole_is_what_it_always_was(tmp_path: Path) -> None:
 # --- what a journal held is made into the stage's record -------------------------------------------------
 
 
-def test_what_is_recovered_is_made_into_the_stages_record_before_it_is_added(tmp_path: Path) -> None:
+def test_a_journal_keeps_the_record_made_of_a_reply_beside_the_reply(tmp_path: Path) -> None:
+    """For a stage whose output is what was done about a reply. What is recovered is the record that
+    was made then: nothing is done a second time, and nothing the reply was about need still be there.
+    """
     output = tmp_path / "records.jsonl"
     journal = Journal(output)
+    reply = {"image_name": "a.png", "raw_response": "a reply", "processing_time": 2.0}
     with journal:
-        journal.write({"image_name": "a.png", "raw_response": "a reply", "processing_time": 2.0})
+        journal.write(reply, made={"image_name": "a.png", "made": True})
+        journal.write({"image_name": "b.png", "processing_time": 1.0})
 
-    recovered = journal.recover(
-        ["a.png"], made_of=lambda asked: {"image_name": asked["image_name"], "made": True}
-    )
+    recovered = journal.recover(["a.png", "b.png"])
 
-    assert recovered == [{"image_name": "a.png", "raw_response": "a reply", "processing_time": 2.0}]
-    assert read_jsonl(output) == [{"image_name": "a.png", "made": True}]
+    # What the journal kept of each, for the stage's time; and in the output, the stage's record.
+    assert recovered == [reply, {"image_name": "b.png", "processing_time": 1.0}]
+    assert read_jsonl(output) == [
+        {"image_name": "a.png", "made": True},
+        {"image_name": "b.png", "processing_time": 1.0},
+    ]
     assert not journal.path.exists()
+
+
+def test_a_record_recovered_is_not_run_into_a_line_an_earlier_stop_left_half_written(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Until 25 November 2026 what was recovered was added to the end of the file as it stood: the
+    first record ran into the half line, the two were dropped together as one line that could not be
+    read, and that page was read again though the journal had held it.
+    """
+    output = tmp_path / "records.jsonl"
+    whole = json.dumps({"image_name": "a.png"})
+    output.write_text(whole + '\n{"image_name": "b.png", "raw_resp')
+    journal = Journal(output)
+    with journal:
+        journal.write({"image_name": "b.png", "from": "the journal"})
+        journal.write({"image_name": "c.png", "from": "the journal"})
+
+    with caplog.at_level(logging.WARNING):
+        journal.recover(["a.png", "b.png", "c.png"])
+
+    assert output.read_text().splitlines()[0] == whole
+    assert read_jsonl(output)[1:] == [
+        {"image_name": "b.png", "from": "the journal"},
+        {"image_name": "c.png", "from": "the journal"},
+    ]
+    assert "1 line" in caplog.text
+
+
+def test_a_line_taken_out_because_it_cannot_be_read_is_said(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    output = tmp_path / "records.jsonl"
+    output.write_text('{"image_name": "a.png"}\n{"image_name": "b.png", "raw_resp')
+
+    with caplog.at_level(logging.WARNING):
+        take_out(output, lambda record: False)
+
+    assert output.read_text() == '{"image_name": "a.png"}\n'
+    assert "records.jsonl" in caplog.text and "1 line" in caplog.text
 
 
 # --- the one way a stage carries on -----------------------------------------------------------------------
@@ -309,22 +355,30 @@ def test_a_run_stopped_after_its_records_were_added_adds_nothing_twice(
 def test_the_stages_record_is_written_and_the_reply_is_what_the_journal_keeps(
     bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """For a stage whose output is what was done about a reply: the reply can be acted on again."""
+    """For a stage whose output is what was done about a reply. The journal keeps both, so that a run
+    that carries on does nothing about a reply a second time.
+    """
     output = tmp_path / "out" / "r.jsonl"
+    acted_on: list[str] = []
 
     def made_of(asked: dict[str, Any]) -> dict[str, Any]:
+        acted_on.append(asked["image_name"])
         return {"image_name": asked["image_name"], "made": True}
 
     stop_before(monkeypatch, THINGS[3])
     with pytest.raises(RuntimeError, match="the card fell over"):
         carry_on(settings_of(bench, ONE_ENGINE), work(output, made_of=made_of))
-    assert all("raw_response" in line and "made" not in line for line in read_jsonl(Journal(output).path))
+    kept = read_jsonl(Journal(output).path)
+    assert [line["image_name"] for line in kept] == THINGS[:3]
+    assert all("raw_response" in line and "processing_time" in line for line in kept)
 
     stop_before(monkeypatch)
     carried = carry_on(settings_of(bench, ONE_ENGINE), work(output, made_of=made_of))
 
     assert read_jsonl(output) == [{"image_name": name, "made": True} for name in THINGS]
     assert carried.records == [{"image_name": name, "made": True} for name in THINGS[3:]]
+    # Each reply was acted on once, by the run that was given it.
+    assert acted_on == THINGS
     assert all(record["processing_time"] == 1.5 for record in carried.read)
     # The time of the pages recovered is in the row with the rest: the journal kept it.
     (row,) = read_stage_timings(output.parent)
@@ -378,3 +432,74 @@ def test_a_page_added_to_the_folder_since_is_read_and_put_in_its_place(
 
     assert [r["image_name"] for r in carried.records] == [THINGS[1], THINGS[3], THINGS[4]]
     assert names_in(output) == THINGS
+
+
+# --- what the review of 25 November found ---------------------------------------------------------------
+
+
+def test_a_run_stopped_while_its_output_is_put_in_place_leaves_the_earlier_file_and_loses_nothing(
+    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stage adds nothing to its output where it stands. Until 25 November 2026 it did, so a run
+    stopped then left half a line under the name the next stage reads.
+    """
+    import os
+
+    output = tmp_path / "out" / "r.jsonl"
+    carry_on(settings_of(bench, ONE_ENGINE), work(output, items=THINGS[:3]))
+    before = output.read_text()
+    moved_into_place = os.replace
+
+    def stopped(*args: Any) -> None:
+        raise Stopped
+
+    monkeypatch.setattr("stages.io.os.replace", stopped)
+    with pytest.raises(Stopped):
+        carry_on(settings_of(bench, ONE_ENGINE), work(output))
+    monkeypatch.setattr("stages.io.os.replace", moved_into_place)
+
+    assert output.read_text() == before
+    assert names_in(Journal(output).path) == THINGS[3:]
+
+    started = bench.engines_started
+    carry_on(settings_of(bench, ONE_ENGINE), work(output))
+
+    assert names_in(output) == THINGS and bench.engines_started == started
+    assert not [p.name for p in output.parent.iterdir() if p.name.endswith((".journal", ".rewriting"))]
+
+
+def test_a_first_run_stopped_while_its_output_is_put_in_place_leaves_no_output(
+    bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "out" / "r.jsonl"
+
+    def stopped(*args: Any) -> None:
+        raise Stopped
+
+    monkeypatch.setattr("stages.io.os.replace", stopped)
+    with pytest.raises(Stopped):
+        carry_on(settings_of(bench, ONE_ENGINE), work(output))
+
+    assert not output.exists() and names_in(Journal(output).path) == THINGS
+
+
+def test_a_failed_record_of_a_page_that_is_not_one_of_this_runs_is_kept(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """Its page cannot be read again by this run, so taking its record out would only lose it."""
+    output = tmp_path / "out" / "r.jsonl"
+    output.parent.mkdir()
+    write_jsonl(
+        output,
+        [
+            {"image_name": "gone.png", "error": "refused"},
+            {"image_name": THINGS[1], "error": "refused"},
+        ],
+    )
+    told: list[dict[str, Any]] = []
+
+    carried = carry_on(settings_of(bench, ONE_ENGINE), work(output, taken_out=told.extend))
+
+    assert [record["image_name"] for record in told] == [THINGS[1]] and carried.taken_out == 1
+    assert names_in(output) == [*THINGS, "gone.png"]
+    assert read_jsonl(output)[-1] == {"image_name": "gone.png", "error": "refused"}

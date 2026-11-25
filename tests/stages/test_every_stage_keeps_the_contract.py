@@ -33,10 +33,9 @@ from typing import Any
 import pytest
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
-from common.extraction_sort import sort_for_extraction
-from common.settings import Settings
-from stages import classify, extract, split
-from stages.io import Journal, read_jsonl
+from common.engine_calls import StageStopped
+from stages import split
+from stages.io import read_jsonl
 
 STAGES = ("split", "classify", "extract", "clean", "evaluate")
 SHARED = {"io", "records", "carry_on"}
@@ -106,26 +105,43 @@ def test_what_the_stages_share_imports_no_stage(name: str) -> None:
     assert modules_of_stages_imported_by(tree) <= SHARED - {name}
 
 
+def writes_a_file_itself(call: ast.Call) -> bool:
+    """Whether a call writes a file where it stands, and not by putting it in place whole."""
+    function = call.func
+    if isinstance(function, ast.Name):
+        return function.id == "append_jsonl"
+    if not isinstance(function, ast.Attribute):
+        return False
+    if function.attr == "open":
+        # Image.open reads a picture.
+        return not (isinstance(function.value, ast.Name) and function.value.id == "Image")
+    return function.attr in ("write_text", "write_bytes", "append_jsonl")
+
+
+def test_every_way_of_writing_a_file_where_it_stands_is_seen() -> None:
+    """The check below is of no use if it cannot see such a call: each is shown to it here."""
+    source = (
+        "path.write_text(text)\npath.write_bytes(data)\npath.open('a')\nappend_jsonl(path, records)\n"
+        "io.append_jsonl(path, records)\nImage.open(photograph)\nwrite_jsonl(path, records)\n"
+        "in_the_order(path, order, adding=records)\n"
+    )
+    calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)]
+
+    assert sorted(call.lineno for call in calls if writes_a_file_itself(call)) == [1, 2, 3, 4, 5]
+
+
 @pytest.mark.parametrize("name", STAGES)
 def test_a_stage_writes_no_file_of_records_itself(name: str) -> None:
     """A file of records is written by ``stages/io.py``, which puts it in place whole.
 
-    A stage that opened its own file, or wrote one out as text, would be the one whose output a reader
-    could find half written. ``Image.open`` reads a picture and is not that.
+    A stage that opened its own file, wrote one out as text, or added to one where it stood, would be
+    the one whose output a reader could find half written.
     """
     tree = ast.parse((STAGES_FOLDER / f"{name}.py").read_text())
     own_writes = [
         f"line {node.lineno}"
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and (
-            node.func.attr in ("write_text", "write_bytes")
-            or (
-                node.func.attr == "open"
-                and not (isinstance(node.func.value, ast.Name) and node.func.value.id == "Image")
-            )
-        )
+        if isinstance(node, ast.Call) and writes_a_file_itself(node)
     ]
 
     assert own_writes == []
@@ -149,20 +165,14 @@ def comparable(path: Path, run_folder: Path) -> list[dict[str, Any]]:
     ]
 
 
-def left_part_done(
-    bench: Bench,
-    model: str,
-    stage: Callable[[], Any],
-    output: Path,
-    card_0s_share: Callable[[Journal], Any],
-) -> None:
-    """Leave a stage as a run stopped part way leaves it, before it is run.
+def left_part_done(bench: Bench, model: str, stage: Callable[[], Any]) -> None:
+    """Run a stage and stop it part way, as a run that did not finish leaves it.
 
-    With one engine the stage is run and stopped at its second engine call. With an engine on each
-    card the bench cannot stage that: a worker runs inside the test's own process, and a run killed
-    there leaves before its parent has written what the cards sent. What a stop between the cards
-    leaves is put there instead: card 0's share in the stage's journal, made by the stage's own reading
-    function.
+    With one engine the run is killed at its second engine call. With an engine on each card the bench
+    cannot stage that truly: a worker runs inside the test's own process, and a run killed there
+    leaves before its parent has kept what the cards sent. So there the engine stops answering after
+    its first call, which is a stop the bench does stage truly: the card's worker hands it to its
+    parent through the queue, as on the cards.
     """
     if model == ONE_ENGINE:
         bench.processor.stop_at_call = len(bench.processor.calls) + 2
@@ -170,64 +180,36 @@ def left_part_done(
             stage()
         bench.processor.stop_at_call = None
         return
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with Journal(output) as journal:
-        card_0s_share(journal)
+    bench.processor.dead_from_attempt = len(bench.processor.attempts) + 2
+    with pytest.raises(StageStopped):
+        stage()
+    bench.processor.dead_from_attempt = None
 
 
 def through_all_five(bench: Bench, out: Path, model: str, *, stop_each_card_stage_once: bool) -> Path:
     """Run the five stages in order, each reading what the one before it wrote."""
-    settings = Settings.load({"model_type": model}, config_path=bench.config)
-    photographs = [bench.pages / name for name in bench.names]
     classifications = out / "classifications.jsonl"
     raw_extractions = out / "raw_extractions.jsonl"
+    if stop_each_card_stage_once:
+        # Two requests that fail one after another stop a stage: the bench has six pages.
+        bench.with_settings(
+            lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=2)
+        )
 
     def split_it() -> Path:
         return bench.split(out / "split", model)
 
-    if stop_each_card_stage_once:
-        left_part_done(
-            bench,
-            model,
-            split_it,
-            out / "split" / "splits.jsonl",
-            lambda journal: split.ask_about_photographs(
-                bench.processor, photographs[0::2], settings, sink=journal
-            ),
-        )
-    images = split_it()
-
     def classify_it() -> Path:
-        return bench.classify(classifications, model, pages=images)
-
-    if stop_each_card_stage_once:
-        pages = sorted(images.iterdir(), key=lambda page: page.name.lower())
-        left_part_done(
-            bench,
-            model,
-            classify_it,
-            classifications,
-            lambda journal: classify.classify_pages(
-                bench.processor, pages[0::2], settings.for_stage("classify"), sink=journal
-            ),
-        )
-    classify_it()
+        return bench.classify(classifications, model, pages=out / "split" / "images")
 
     def extract_it() -> Path:
         return bench.extract(classifications, raw_extractions, model)
 
-    if stop_each_card_stage_once:
-        in_order = sort_for_extraction(
-            read_jsonl(classifications), settings.extraction_order, secondary_sort=settings.secondary_sort
-        )
-        left_part_done(
-            bench,
-            model,
-            extract_it,
-            raw_extractions,
-            lambda journal: extract.extract_pages(bench.processor, in_order[0::2], settings, sink=journal),
-        )
-    extract_it()
+    for stage in (split_it, classify_it, extract_it):
+        if stop_each_card_stage_once:
+            left_part_done(bench, model, stage)
+            assert [p.name for p in out.rglob("*.journal")], "the stop left nothing to carry on from"
+        stage()
 
     cleaned = bench.clean(raw_extractions, out / "cleaned_extractions.jsonl")
     bench.evaluate(cleaned, bench.answer_key(out / "ground_truth.jsonl"), out / "evaluation")

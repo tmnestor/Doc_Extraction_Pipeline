@@ -74,8 +74,8 @@ alike. Each choice below is a well-known pattern, used for the reason given.
 | **Pipes and filters** | Each task is a filter and each file under `output` is a pipe: `classifications.jsonl` carries `classify`'s work to `extract`, and so on | A task knows only the file it reads and the file it writes. Any task can be run again on files an earlier run left, on another machine, without the tasks before it |
 | **Strategy** | `stages/carry_on.py` is one fixed sequence. Each task that uses the cards hands it the part that differs: how that task asks the model (`classify_pages`, `extract_pages`, `ask_about_photographs`) | Carrying on from an earlier run is written once, not once a task. A fix to it is one fix |
 | **Write-ahead journal** | `<output file>.journal`, written by `Journal` in `stages/io.py` | Each record is on disk the moment the model gives it. A run stopped at page 100 of 165 loses nothing |
-| **Checkpoint and restart** | `carry_on`: recover the journal, take out the failed records, read only what is left | A run that carries on ends with the file a run straight through would have written |
-| **Atomic write** | `write_jsonl` in `stages/io.py` writes beside the file and renames it into place | A reader finds the old file or the new one, never half of one |
+| **Checkpoint and restart** | `carry_on`: recover the journal, take out the failed records, read only what is left | A run that carries on ends with the records, in the order, that a run straight through would have written |
+| **Atomic write** | `write_jsonl` and `in_the_order` in `stages/io.py` write beside the file and rename it into place. They are the only two ways a task's output is written | A reader finds the old file or the new one, never half of one |
 | **Retry, then stop** | `common/engine_calls.py`: a failed engine call is tried again one page at a time, and a task stops when request after request fails | One bad page costs one page. An engine that has stopped answering costs seconds, not a file of failures |
 | **Registry** | `models/registry.py` | A model is one entry there, with whether it fits an engine on each card. No task's code depends on which model it is given |
 | **Settings as data, checked first** | `config/run_config.yml` and `config/field_definitions.yaml` hold every setting, field and threshold. Nothing is defaulted in Python | What a run is set to do can be read from two files. A mistake stops the run before an engine starts, with what is wrong, where, what is expected and the fix |
@@ -98,9 +98,11 @@ A task stands alone:
 The five behave alike:
 
 4. A task's output holds one record for each item of its input, in the task's own order.
-5. That output is the same file whether the run went straight through, was stopped and started again,
-   or had failed pages read again.
-6. An output file is put in place whole, by `stages/io.py` and by no task itself.
+5. That output holds the same records in the same order whether the run went straight through, was
+   stopped and started again, or had failed pages read again. Only a page's time, and the card that
+   read it, can differ.
+6. An output file is put in place whole, by `stages/io.py` and by no task itself. Nothing is added to
+   a file where it stands: a run stopped at any moment leaves the file as it was or as it is to be.
 7. A task that uses the cards carries on by `stages/carry_on.py`, and notes a row of its time in
    `<output>/.stage_timing.jsonl`.
 
@@ -183,9 +185,9 @@ that output, so that those pages are read again with any that are new:
   document type since it was read, whose record is of the wrong fields. A page `classify` got right the
   second time is therefore read again under its own type;
 - `split` asks again about each photograph it could not ask about, and removes the image it had passed
-  through in the photograph's place. Its journal keeps the model's replies, and `splits.jsonl` is written
-  when it has finished: a run that carries on acts again on the replies it recovers, which writes the
-  same images.
+  through in the photograph's place. Its journal keeps each reply with the record of what was done about
+  it, and `splits.jsonl` is written when it has finished: a run that carries on does nothing a second
+  time about a photograph an earlier run had finished.
 
 Three things follow:
 

@@ -22,7 +22,7 @@ from common.settings import Settings
 from common.stage_settings import resolve
 from common.stage_timing import read_stage_timings
 from stages import split
-from stages.io import Journal, read_jsonl
+from stages.io import read_jsonl
 
 TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [0, 520, 1000, 1000], "label": "receipt"}]'
 
@@ -151,29 +151,69 @@ def test_split_stopped_and_carried_on_writes_the_records_and_images_of_a_straigh
     same_records_and_images(stopped, straight)
 
 
-def test_replies_one_card_had_given_are_acted_on_when_the_stage_carries_on(
+def test_with_an_engine_on_each_card_a_stage_whose_engine_stopped_carries_on_to_a_straight_runs_files(
     bench: Bench, tmp_path: Path
 ) -> None:
-    """A stop between the cards: card 0's replies are in the journal.
-
-    The bench runs a worker inside the test's own process, so a run killed between the cards cannot be
-    staged by stopping it. What such a stop leaves is put there instead, by the stage's own function.
-    None of card 0's images are there, so this also shows that a reply recovered is acted on again.
+    """A stop that the bench stages truly with an engine on each card: the engine stops answering, the
+    card's worker hands that to its parent, and the parent has by then kept what the cards had sent.
     """
+    bench.with_settings(
+        lambda settings: settings["pipeline"]["processing"].update(stop_after_failed_requests=2)
+    )
     two_receipts_in_each(bench)
     straight, stopped = tmp_path / "straight", tmp_path / "stopped"
     run(bench, straight, AN_ENGINE_ON_EACH_CARD)
-    settings = Settings.load({"model_type": AN_ENGINE_ON_EACH_CARD}, config_path=bench.config)
-    photographs = [bench.pages / name for name in bench.names]
-    stopped.mkdir()
-    with Journal(stopped / "splits.jsonl") as journal:
-        split.ask_about_photographs(bench.processor, photographs[0::2], settings, sink=journal)
-    bench.processor.calls.clear()
+    bench.processor.dead_from_attempt = len(bench.processor.attempts) + 2
+    with pytest.raises(StageStopped):
+        run(bench, stopped, AN_ENGINE_ON_EACH_CARD)
+    assert read_jsonl(stopped / "splits.jsonl.journal") and not (stopped / "splits.jsonl").exists()
+    bench.processor.dead_from_attempt = None
 
     run(bench, stopped, AN_ENGINE_ON_EACH_CARD)
 
-    assert len(bench.processor.calls) == 2  # the three photographs left, dealt to the two cards
     same_records_and_images(stopped, straight)
+
+
+def test_split_carries_on_though_a_photograph_it_had_finished_has_gone(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """The journal keeps the record made of a reply, so carrying on needs nothing of the photograph."""
+    photographs, output = tmp_path / "photographs", tmp_path / "split"
+    shutil.copytree(bench.pages, photographs)
+    bench.processor.stop_at_call = 2
+    with pytest.raises(Stopped):
+        split.run(photographs, output, model_type=ONE_ENGINE, config_path=bench.config)
+    bench.processor.stop_at_call = None
+    (photographs / bench.names[0]).unlink()
+
+    split.run(photographs, output, model_type=ONE_ENGINE, config_path=bench.config)
+
+    # Its record is kept, after those of the photographs that are still there, and so is its image.
+    assert names_in(output / "splits.jsonl") == [*bench.names[1:], bench.names[0]]
+    assert images_in(output / "images") == bench.names
+    assert not (output / "splits.jsonl.journal").exists()
+
+
+def test_photo_split_switched_off_after_a_stopped_run_keeps_what_that_run_had_done(
+    bench: Bench, tmp_path: Path
+) -> None:
+    two_receipts_in_each(bench)
+    output = tmp_path / "split"
+    bench.processor.stop_at_call = 2
+    with pytest.raises(Stopped):
+        run(bench, output, ONE_ENGINE)
+    bench.processor.stop_at_call = None
+    bench.with_settings(lambda settings: settings["pipeline"]["photo_split"].update(enabled=False))
+
+    run(bench, output, ONE_ENGINE)
+
+    records = read_jsonl(output / "splits.jsonl")
+    assert [record["image_name"] for record in records] == bench.names
+    assert [record["action"] for record in records] == ["split"] * 2 + ["pass_through"] * 4
+    # No photograph is there whole beside the images cut from it.
+    images = images_in(output / "images")
+    assert len(images) == 2 * 2 + 4 and not set(images) & set(bench.names[:2])
+    assert not (output / "splits.jsonl.journal").exists()
 
 
 # --- asking is apart from acting ------------------------------------------------------------------------

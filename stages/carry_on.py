@@ -28,7 +28,7 @@ from common.stage_timing import inference_seconds_from_records, note_recovered, 
 from common.vllm_dp import Reading, read_on_the_cards
 
 from . import records
-from .io import Journal, append_jsonl, in_the_order, read_completed_images, take_out
+from .io import Journal, in_the_order, read_completed_images, take_out
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ class Work:
     # Told of the records taken out to be read again, before anything is read.
     taken_out: Callable[[list[dict[str, Any]]], None] | None = None
     # Makes the stage's record of what the reading function gave, for a stage whose output holds what
-    # was done about a reply and not the reply. None: the output holds what the reading function gave.
+    # was done about a reply and not the reply. It is called once for each reply, when the reply is
+    # given, and never by a run that carries on. None: the output holds what the reading function gave.
     made_of: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     # The run's output folder, where the row of the stage's time is noted. None: no row.
     timing: Path | None = None
@@ -86,7 +87,11 @@ class Carried:
 
 
 class _Kept:
-    """Keeps each record as it is made: the reply in the journal first, then the stage's record of it."""
+    """Keeps each record as it is made, in the journal.
+
+    For a stage that makes its own record of a reply, the reply is acted on first and the two are
+    kept together: a run that carries on then has the record, and does nothing about the reply again.
+    """
 
     def __init__(
         self, journal: Journal, made_of: Callable[[dict[str, Any]], dict[str, Any]] | None
@@ -95,8 +100,9 @@ class _Kept:
         self._journal, self._made_of = journal, made_of
 
     def write(self, record: dict[str, Any]) -> None:
-        self._journal.write(record)
-        self.made.append(self._made_of(record) if self._made_of is not None else record)
+        made = self._made_of(record) if self._made_of is not None else None
+        self._journal.write(record, made)
+        self.made.append(record if made is None else made)
 
 
 def carry_on(settings: Settings, work: Work) -> Carried:
@@ -105,12 +111,13 @@ def carry_on(settings: Settings, work: Work) -> Carried:
     In this order:
 
     1. What an earlier run had read before it stopped is recovered from the journal into the output.
-    2. The records of items to be read again are taken out of the output.
+    2. The records of this run's items that are to be read again are taken out of the output.
     3. The items whose names the output does not hold are what is left to read.
     4. With nothing left, the output is put in order and no engine is started.
     5. Otherwise they are read on the cards. Each record goes into the journal the moment it is made.
-    6. The records are added to the output, the output is put in the stage's order, and only then is
-       the journal removed: a run stopped anywhere before leaves the next run able to recover.
+    6. The output is put in place whole, with the records added and in the stage's order, and only
+       then is the journal removed: a run stopped anywhere before leaves the earlier output as it
+       was and the next run able to recover.
     7. The stage's time is noted.
 
     Args:
@@ -127,7 +134,7 @@ def carry_on(settings: Settings, work: Work) -> Carried:
     order = work.order if work.order is not None else [work.name_of(item) for item in work.items]
     journal = Journal(work.output)
 
-    recovered = journal.recover(order, made_of=work.made_of)
+    recovered = journal.recover(order)
     if recovered:
         logger.info(
             "Recovered %d %s(s) an earlier run had finished before it stopped", len(recovered), work.thing
@@ -135,7 +142,12 @@ def carry_on(settings: Settings, work: Work) -> Carried:
         if work.timing is not None:
             note_recovered(work.timing, stage=work.stage, records=recovered)
 
-    taken = take_out(work.output, work.read_again)
+    # Only a record of one of this run's pages is taken out: a page that is no longer among them
+    # cannot be read again, and taking its record out would only lose it.
+    of_this_run = set(order)
+    taken = take_out(
+        work.output, lambda record: record.get("image_name") in of_this_run and work.read_again(record)
+    )
     if taken and work.taken_out is not None:
         work.taken_out(taken)
 
@@ -160,9 +172,7 @@ def carry_on(settings: Settings, work: Work) -> Carried:
     # order of the items.
     place = {work.name_of(item): position for position, item in enumerate(left)}
     made = sorted(kept.made, key=lambda record: place.get(record.get("image_name", ""), len(place)))
-    work.output.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl(work.output, made)
-    in_the_order(work.output, order)
+    in_the_order(work.output, order, adding=made)
     journal.discard()
 
     if work.timing is not None:

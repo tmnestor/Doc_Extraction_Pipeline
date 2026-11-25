@@ -39,7 +39,7 @@ from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
-from .io import append_jsonl, in_the_order, read_completed_images, take_out
+from .io import Journal, in_the_order, read_completed_images, take_out
 from .records import failed
 
 logger = logging.getLogger(__name__)
@@ -272,8 +272,8 @@ def run(
     A run carries on from what an earlier one left (``stages.carry_on``): photographs already dealt with
     are not asked about again, a photograph an earlier run could not ask about is, and splits.jsonl is
     left in the photographs' order however the run went. The model's reply about each photograph goes
-    into a journal the moment it is given, and is acted on at once: a run that stops part way keeps
-    every reply, and the next run acts again on those, which writes the same images.
+    with the record of what was done about it into a journal, the moment it has been acted on: a run
+    that stops part way keeps both, and the next run has nothing to do about those photographs again.
 
     Args:
         image_dir: Directory containing the photographs.
@@ -317,8 +317,13 @@ def run(
         )
 
     if not split_config.enabled:
-        # Every photograph is copied through, and no engine is started.
-        taken = take_out(records_path, failed)
+        # Every photograph is copied through, and no engine is started. What a run with the photo
+        # split on had done before it stopped is kept as that run left it.
+        Journal(records_path).recover(order)
+        of_this_run = set(order)
+        taken = take_out(
+            records_path, lambda record: record.get("image_name") in of_this_run and failed(record)
+        )
         if taken:
             asked_again(taken)
         done = read_completed_images(records_path)
@@ -333,8 +338,7 @@ def run(
                     photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None]
                 )
             )
-        append_jsonl(records_path, copied)
-        in_the_order(records_path, order)
+        in_the_order(records_path, order, adding=copied)
         logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(copied))
         return images_dir
 

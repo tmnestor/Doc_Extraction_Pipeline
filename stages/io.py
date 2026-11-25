@@ -419,7 +419,7 @@ def no_pages_in(image_dir: Path, selection: str) -> ConfigError:
 
 def discover_images(
     data_dir: Path,
-    document_types: list[str] | None = None,
+    document_types: Sequence[str] | None = None,
     max_images: int | None = None,
 ) -> list[Path]:
     """Discover images in a data directory, applying the configured selection.

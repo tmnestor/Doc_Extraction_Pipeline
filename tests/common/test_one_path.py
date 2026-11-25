@@ -77,7 +77,7 @@ class Bench:
         self.config_path = test_config(folder)
         self.folder = folder / "pages"
         self.folder.mkdir()
-        self.overrides = {"output_dir": str(folder / "out")}
+        self.overrides = {"model_type": "gemma4-31b-w4a16-vllm"}
         monkeypatch.setattr(extraction_batching, "PAGES_PER_CALL", 2)
         self.processor = StandIn()
         self.opened_with: list[Any] = []

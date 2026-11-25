@@ -44,7 +44,7 @@ def run_on(tmp_path: Path, records: list[dict], answered: list[str]) -> Path:
 def test_a_run_with_every_page_scored_has_no_row_for_pages_left_out() -> None:
     results = [{"median_f1": 1.0, "overall_accuracy": 1.0}, {"median_f1": 0.5, "overall_accuracy": 0.5}]
 
-    scores = evaluate.headline(results, failed=0, unanswered=0, not_read=0)
+    scores = evaluate.headline(results, failed=0, unanswered=0)
 
     assert (scores.pages, scores.scored, scores.failed, scores.unanswered) == (2, 2, 0, 0)
     assert scores.mean_f1 == scores.mean_f1_counting_failures == 0.75
@@ -64,7 +64,7 @@ def test_failed_pages_are_counted_and_the_mean_is_also_given_with_each_as_nothin
         {"median_f1": 0, "overall_accuracy": 0, "error": "the engine ran out of memory"},
     ]
 
-    scores = evaluate.headline(results, failed=2, unanswered=0, not_read=0)
+    scores = evaluate.headline(results, failed=2, unanswered=0)
 
     assert (scores.pages, scores.scored, scores.failed) == (4, 2, 2)
     # The mean over the scored pages is what it was; the failed pages are beside it, not hidden in it.
@@ -82,7 +82,7 @@ def test_a_page_with_no_answer_is_counted_and_is_in_neither_mean() -> None:
         {"error": "No ground truth for page_2.png", "overall_accuracy": 0},
     ]
 
-    scores = evaluate.headline(results, failed=0, unanswered=1, not_read=0)
+    scores = evaluate.headline(results, failed=0, unanswered=1)
 
     assert (scores.pages, scores.scored, scores.unanswered) == (2, 1, 1)
     assert scores.mean_f1 == scores.mean_f1_counting_failures == 1.0
@@ -94,7 +94,7 @@ def test_a_page_with_no_answer_is_counted_and_is_in_neither_mean() -> None:
 
 def test_a_run_with_nothing_scored_gives_no_means() -> None:
     scores = evaluate.headline(
-        [{"error": "x", "median_f1": 0, "overall_accuracy": 0}], failed=1, unanswered=0, not_read=0
+        [{"error": "x", "median_f1": 0, "overall_accuracy": 0}], failed=1, unanswered=0
     )
 
     assert scores.scored == 0 and scores.mean_f1_counting_failures == 0.0

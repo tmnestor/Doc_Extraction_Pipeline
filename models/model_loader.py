@@ -16,7 +16,6 @@ from contextlib import contextmanager
 from typing import Any
 
 from common.cards import cards_to_use
-from common.prompt_trace import effective_trace_path
 from common.settings import Settings
 from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
@@ -57,7 +56,7 @@ def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
         # sees the one card it was given.
         cards = cards_to_use()
 
-        # The share of each card's memory: the job's, else the settings file's. The job's is read
+        # The share of each card's memory: the job's, else the model's own. The job's is read
         # and checked once, with the job's other variables (common.stage_settings), and comes here
         # with the settings: until 26 November 2026 it was read here from the environment.
         from_environment = settings.gpu_memory_utilization
@@ -125,6 +124,6 @@ def build_processor(spec: VllmSpec, engine: Any, settings: Settings) -> Document
         chat_template=spec.chat_template,
         chat_template_kwargs=spec.chat_template_kwargs,
         default_image_first=spec.default_image_first,
-        trace_path=effective_trace_path(settings),
+        trace_path=settings.trace_file,
     )
     return DocumentOrchestrator(backend, model_type_key=spec.model_type, app_config=settings)

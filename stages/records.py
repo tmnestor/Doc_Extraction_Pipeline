@@ -3,11 +3,11 @@
 A stage writes one JSON object a line, and the next stage reads them. Until 25 November 2026 the keys of
 each record were spelt out wherever a record was made or read: by the stage that wrote it, by the stage
 that read it, and again for each special case. One stage could then write a key another had never heard
-of. That is how a page the extract stage was set not to read came to be scored as all wrong: extract
-marked its record ``skipped``, and neither clean nor evaluate looked for the mark.
+of. That is how a page the extract stage was then set not to read came to be scored as all wrong:
+extract marked its record, and neither clean nor evaluate looked for the mark.
 
 Here each record has one definition, the functions that make it, and the questions asked of it
-(``failed``, ``not_read``). A stage makes a record with these functions and never with a literal of its
+(``failed``). A stage makes a record with these functions and never with a literal of its
 own. A record read back is given its type, so that a key spelt wrongly where it is read is found by the
 type checker, and a test holds every function that makes a record to the record's definition.
 
@@ -46,15 +46,10 @@ class Read(TypedDict):
     document_type: str
     raw_response: str
     processing_time: float
-    # The prompt of the page's type; "error" for a page that could not be read, "skipped" for one the
-    # stage was set not to read.
+    # The prompt of the page's type; "error" for a page that could not be read.
     prompt_used: str
     error: str | None
     gpu_id: NotRequired[int]
-    # A page of a type named in pipeline.extraction.skip_labels, with why.
-    skipped: NotRequired[bool]
-    skip_reason: NotRequired[str]
-    fields: NotRequired[dict[str, str]]
 
 
 class Cleaned(TypedDict):
@@ -68,8 +63,6 @@ class Cleaned(TypedDict):
     extracted_fields_count: int
     processing_time: float
     error: NotRequired[str]
-    skipped: NotRequired[bool]
-    skip_reason: NotRequired[str]
 
 
 # --- what is asked of a record --------------------------------------------------------------------------
@@ -78,11 +71,6 @@ class Cleaned(TypedDict):
 def failed(record: Mapping[str, Any]) -> bool:
     """Whether a record is of a page the stage could not read."""
     return bool(record.get("error"))
-
-
-def not_read(record: Mapping[str, Any]) -> bool:
-    """Whether a record is of a page the extract stage was set not to read."""
-    return bool(record.get("skipped"))
 
 
 # --- a record read back from a file ---------------------------------------------------------------------
@@ -172,23 +160,6 @@ def read(
     return cast(dict[str, Any], record)
 
 
-def left_unread(page: Mapping[str, Any]) -> dict[str, Any]:
-    """The record of a page the extract stage was set not to read, so that every page has a record."""
-    record: Read = {
-        "image_name": page.get("image_name", ""),
-        "image_path": page.get("image_path", ""),
-        "document_type": page.get("document_type", ""),
-        "raw_response": "",
-        "processing_time": 0.0,
-        "prompt_used": "skipped",
-        "error": None,
-        "skipped": True,
-        "skip_reason": page.get("document_type", ""),
-        "fields": {},
-    }
-    return cast(dict[str, Any], record)
-
-
 # --- clean ----------------------------------------------------------------------------------------------
 
 
@@ -223,14 +194,6 @@ def cleaned_but_failed(page: Read) -> dict[str, Any]:
     return cast(dict[str, Any], record)
 
 
-def cleaned_but_unread(page: Read) -> dict[str, Any]:
-    """The record of a page the extract stage was set not to read: no fields, and marked as not read."""
-    record = _cleaned(page, {}, 0, 0)
-    record["skipped"] = True
-    record["skip_reason"] = page.get("skip_reason", page["document_type"])
-    return cast(dict[str, Any], record)
-
-
 # --- evaluate -------------------------------------------------------------------------------------------
 
 
@@ -247,14 +210,4 @@ def scored_but_failed(page: Cleaned) -> dict[str, Any]:
         "error": page.get("error"),
         "overall_accuracy": 0,
         "median_f1": 0,
-    }
-
-
-def scored_but_unread(page: Cleaned) -> dict[str, Any]:
-    """The record of a page the extract stage was set not to read: it is in no score."""
-    return {
-        "image_name": page["image_name"],
-        "document_type": page["document_type"],
-        "skipped": True,
-        "skip_reason": page.get("skip_reason", page["document_type"]),
     }

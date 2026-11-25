@@ -9,28 +9,34 @@
 #
 #     python3 -m stages
 #
-# Which task, which model and which folders are worked out there, in Python
-# (common/stage_settings.py), from the environment first and the settings file second.
+# What is decided at launch is decided here, in bash, where it can be read in one place: that
+# the task has the variables it needs, that each value can be used, that nothing is written
+# beside the code, and which commit of the code this is. A variable that is unset, empty or the
+# word None is not set: a pipeline manifest passes a blank parameter as the text "None".
 #
-# What is decided at launch is decided here, in bash, where it can be read in one place:
-# which settings file is read, that nothing is written beside the code, and which commit
-# of the code this is.
-#
-# The variables a job may set:
+# The variables a job may set. They are the whole of a run's settings:
 #   KFP_TASK                 split, classify, extract, clean or evaluate
-#   model                    a registered model
-#   image_dir                the folder of pages to read
-#   output                   the folder the stages write to
-#   ground_truth             the answer key, for evaluate
-#   dataset                  a dataset of the settings file, whose pages are all of one type
-#   run_config               a settings file of the job's own, read whole in place of config/run_config.yml
-#   CLEAR_PREV_OUTPUT        true = delete the stage's earlier output first; default false
-#   DOC_EXTRACT_LOG_DIR      the folder for the log
+#   model                    a registered model. Needed by split, classify and extract
+#   image_dir                the folder of pages to read. Needed by split, classify and extract
+#   output                   the folder the stages write to. Needed by every task
+#   ground_truth             the answer key, a .jsonl file. Needed by evaluate
+#   document_types           read only the pages whose file name holds one of these, written with
+#                            commas, e.g. receipt,invoice. Unset: every page
+#   max_images               read at most this many pages. Unset: every page
+#   photo_split              true: the split task asks the model where each receipt is, and cuts a
+#                            photograph of several. Unset: false, every photograph is passed through
+#   document_type            every page is of this document type, and classify asks no model.
+#                            Unset: the model is asked
+#   CLEAR_PREV_OUTPUT        true: delete the stage's earlier output first. Unset: false
+#   DOC_EXTRACT_LOG_DIR      the folder for the log. Needed by every task
+#   DOC_EXTRACT_TRACE_FILE   keep what is sent to the model, in this file. Unset: not kept
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
-#   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take
+#   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take.
+#                            Unset: the model's own, in its registration
 #
 # By hand:
-#   KFP_TASK=classify model=gemma4-31b-w4a16-vllm image_dir=<folder> output=<folder> bash entrypoint.sh
+#   KFP_TASK=classify model=gemma4-31b-w4a16-vllm image_dir=<folder> output=<folder> \
+#     DOC_EXTRACT_LOG_DIR=<folder> bash entrypoint.sh
 #
 # =============================================================================
 
@@ -46,29 +52,144 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# ---- How a job that cannot be started is stopped ---- #
+# stop <what is wrong, in a line> <what> <where> <expected> <fix>
+stop() {
+  echo "FATAL: $1"
+  echo "  What:     $2"
+  echo "  Where:    $3"
+  echo "  Expected: $4"
+  echo "  Fix:      $5"
+  exit 1
+}
+IN_THE_JOB="in the environment of this job (the pipeline manifest, or the command that started it)."
+
 # ---- Variables under their old names are refused, not ignored ---- #
 # Until 21 November 2026 this script's own variables began with another prefix. A job that still sets one
 # would otherwise run with the setting silently dropped: its log, for one, written where nobody asked.
 OLD_PREFIX="L""MM_"
 OLD_NAMES="$(env | grep -oE "^${OLD_PREFIX}[A-Z_]+" | tr '\n' ' ' || true)"
 if [[ -n "$OLD_NAMES" ]]; then
-  echo "FATAL: variable(s) set under a prefix this pipeline no longer reads: $OLD_NAMES"
-  echo "  What:     the prefix ${OLD_PREFIX} was replaced by DOC_EXTRACT_; the old names are not read."
-  echo "  Where:    the environment of this job (the pipeline manifest, or the command that started it)."
-  echo "  Expected: DOC_EXTRACT_LOG_DIR, DOC_EXTRACT_CONDA_ENV, DOC_EXTRACT_GPU_MEMORY_UTILIZATION."
-  echo "  Fix:      rename each variable listed above, keeping its value, and start the job again."
-  exit 1
+  stop "variable(s) set under a prefix this pipeline no longer reads: $OLD_NAMES" \
+    "the prefix ${OLD_PREFIX} was replaced by DOC_EXTRACT_; the old names are not read." \
+    "the variables $IN_THE_JOB" \
+    "DOC_EXTRACT_LOG_DIR, DOC_EXTRACT_CONDA_ENV, DOC_EXTRACT_GPU_MEMORY_UTILIZATION." \
+    "rename each variable listed above, keeping its value, and start the job again."
+fi
+
+# ---- A variable that is blank is not set ---- #
+JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images photo_split
+  document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_TRACE_FILE
+  DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+for NAME in $JOB_VARIABLES dataset run_config; do
+  if [[ -z "${!NAME:-}" || "${!NAME}" == "None" ]]; then unset "$NAME"; fi
+done
+
+# ---- Two variables that are no longer read are refused, not ignored ---- #
+# Until 26 November 2026 a run's choices were keys of a settings file, which run_config named, and
+# dataset named a block of it. A job that still sets one would otherwise run with it dropped.
+if [[ -n "${dataset:-}" ]]; then
+  stop "dataset is no longer read: $dataset" \
+    "a set of pages that are all of one type is now two variables, and no block of a settings file." \
+    "the variable dataset $IN_THE_JOB" \
+    "document_type=<the type of every page> image_dir=<the folder of pages>, e.g. document_type=SROIE_RECEIPT" \
+    "set document_type and image_dir in place of dataset."
+fi
+if [[ -n "${run_config:-}" ]]; then
+  stop "run_config is no longer read: $run_config" \
+    "a run has no settings file: its settings are the variables listed at the top of entrypoint.sh." \
+    "the variable run_config $IN_THE_JOB" \
+    "each choice of the run as its own variable, e.g. max_images=12 document_types=receipt photo_split=true" \
+    "set the variables the run needs in place of the file, and unset run_config."
+fi
+
+# ---- The task, and what it needs ---- #
+case "${KFP_TASK:-}" in
+  split | classify | extract) NEEDED="model image_dir output" ;;
+  clean) NEEDED="output" ;;
+  evaluate) NEEDED="output ground_truth" ;;
+  *)
+    stop "KFP_TASK is not a task of this pipeline: ${KFP_TASK:-<not set>}" \
+      "KFP_TASK names the task this job runs." \
+      "the variable KFP_TASK $IN_THE_JOB" \
+      "split, classify, extract, clean or evaluate." \
+      "set it to one of those, e.g. KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh"
+    ;;
+esac
+for NAME in $NEEDED DOC_EXTRACT_LOG_DIR; do
+  if [[ -z "${!NAME:-}" ]]; then
+    stop "the task $KFP_TASK needs $NAME, and it is not set" \
+      "$KFP_TASK cannot run without $NAME. Unset, empty and the word None all count as not set." \
+      "the variable $NAME $IN_THE_JOB" \
+      "what the top of entrypoint.sh says of $NAME, e.g. output=/data/run_20261126" \
+      "set $NAME and start the job again."
+  fi
+done
+if [[ "$NEEDED" == *image_dir* && ! -d "$image_dir" ]]; then
+  stop "the folder of pages does not exist: $image_dir" \
+    "$KFP_TASK reads its pages from the folder image_dir names, and there is no such folder." \
+    "the variable image_dir $IN_THE_JOB" \
+    "a folder that holds the pages to read, e.g. image_dir=/data/pages" \
+    "correct the folder, or create it and put the pages in it."
+fi
+if [[ "$KFP_TASK" == "evaluate" && "$ground_truth" != *.jsonl ]]; then
+  stop "the answer key is not a JSON lines file: $ground_truth" \
+    "JSON lines is the one format read: an answer a line, with the page's file name and its type's fields." \
+    "the variable ground_truth $IN_THE_JOB" \
+    "a file ending .jsonl, e.g. ground_truth=/data/pages/ground_truth.jsonl" \
+    "name the set's ground_truth.jsonl, or write the key out as JSON lines."
+fi
+
+# ---- A run's choices: each value is one that can be used ---- #
+if [[ -n "${max_images:-}" ]] && ! [[ "$max_images" =~ ^[1-9][0-9]*$ ]]; then
+  stop "max_images is not a number of pages: $max_images" \
+    "at most this many pages are read, and it is not a whole number of 1 or more." \
+    "the variable max_images $IN_THE_JOB" \
+    "a whole number such as max_images=12. Unset, every page is read." \
+    "set it to such a number, or leave it unset."
+fi
+if [[ -n "${document_types:-}" ]] && ! [[ "$document_types" =~ [^,[:space:]] ]]; then
+  stop "document_types names no type: '$document_types'" \
+    "only pages whose file name holds one of these are read, and none is named." \
+    "the variable document_types $IN_THE_JOB" \
+    "names written with commas, in either case, e.g. document_types=receipt,invoice. Unset, every page is read." \
+    "name at least one, or leave it unset."
+fi
+# The two that are true or false. A manifest may pass a YAML true as the text "True".
+for NAME in photo_split CLEAR_PREV_OUTPUT; do
+  VALUE="$(echo "${!NAME:-false}" | tr 'A-Z' 'a-z')"
+  if [[ "$VALUE" != "true" && "$VALUE" != "false" ]]; then
+    stop "$NAME is neither true nor false: ${!NAME}" \
+      "photo_split=true has the split task ask the model and cut; CLEAR_PREV_OUTPUT=true deletes the stage's earlier output first." \
+      "the variable $NAME $IN_THE_JOB" \
+      "true or false, e.g. $NAME=true. Unset means false." \
+      "set it to true or false, or leave it unset."
+  fi
+  export "$NAME=$VALUE"
+done
+SHARE="${DOC_EXTRACT_GPU_MEMORY_UTILIZATION:-}"
+if [[ -n "$SHARE" ]] && ! [[ "$SHARE" =~ ^(0?\.[0-9]*[1-9][0-9]*|1(\.0*)?)$ ]]; then
+  stop "DOC_EXTRACT_GPU_MEMORY_UTILIZATION is not a share of a card's memory: $SHARE" \
+    "the engine is given this share of each card's memory, and it is not a number above 0 and at most 1." \
+    "the variable DOC_EXTRACT_GPU_MEMORY_UTILIZATION $IN_THE_JOB" \
+    "a number such as 0.90. Unset, the share is the model's own, in its registration." \
+    "set it to such a number, or leave it unset."
 fi
 
 # ---- Nothing is written beside the code ---- #
 # Under a pipeline this folder is in the job's pod: its storage is not kept, and a job that writes
 # there is stopped. git writes it once, when the job is launched from its commit, and is not used
-# after that. So the folders the job names for its output and its log are refused, further down,
-# if they are inside this folder.
+# after that. So the places the job names to write to are refused if they are inside this folder.
 CODE_DIR="$(pwd -P)"
-beside_the_code() {
-  case "$(realpath -m -- "$1")/" in "$CODE_DIR"/*) return 0 ;; *) return 1 ;; esac
-}
+for WRITTEN in "$DOC_EXTRACT_LOG_DIR" "${output:-}" "${DOC_EXTRACT_TRACE_FILE:-}"; do
+  if [[ -n "$WRITTEN" && "$(realpath -m -- "$WRITTEN")/" == "$CODE_DIR"/* ]]; then
+    stop "the job would write beside the code: $WRITTEN" \
+      "a place the job names for its output, its log or its record of what was sent to the model is inside the code's own folder, $CODE_DIR" \
+      "the variables output, DOC_EXTRACT_LOG_DIR and DOC_EXTRACT_TRACE_FILE $IN_THE_JOB" \
+      "places on the storage mounted for the job's data. The code's folder is in the pod: it is not kept." \
+      "name places outside $CODE_DIR"
+  fi
+done
 
 # ---- The commit this job was launched from ---- #
 # Read from the checkout's own files, since git is not run once the job has started. Each task
@@ -80,32 +201,8 @@ fi
 export DOC_EXTRACT_COMMIT="${HEAD_NOW:0:7}"
 
 # ---- The settings file ---- #
-# config/run_config.yml beside this script, unless the job names its own in run_config. A job
-# changes a setting by naming a file where it can write, never by editing the one in here. The
-# file named is the whole of the settings: nothing is merged from the shipped one.
+# What is left of it: where each model's weights are. A run's choices are the variables above.
 CONFIG_FILE="./config/run_config.yml"
-if [[ -n "${run_config:-}" && "${run_config}" != "None" ]]; then
-  CONFIG_FILE="$run_config"
-fi
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  echo "FATAL: the settings file does not exist: $CONFIG_FILE"
-  echo "  What:     the job names a settings file in run_config, and there is no such file."
-  echo "  Where:    the variable run_config in the environment of this job."
-  echo "  Expected: a whole settings file the job can read, e.g. run_config=/data/run_20261126/run_config.yml"
-  echo "  Fix:      copy config/run_config.yml to the job's storage, change what the run needs, and name the copy; or unset run_config."
-  exit 1
-fi
-
-# ---- The share of a card's memory, if the job sets one ---- #
-SHARE="${DOC_EXTRACT_GPU_MEMORY_UTILIZATION:-}"
-if [[ -n "$SHARE" && "$SHARE" != "None" ]] && ! [[ "$SHARE" =~ ^(0?\.[0-9]*[1-9][0-9]*|1(\.0*)?)$ ]]; then
-  echo "FATAL: DOC_EXTRACT_GPU_MEMORY_UTILIZATION is not a share of a card's memory: $SHARE"
-  echo "  What:     the engine is given this share of each card's memory, and it is not a number above 0 and at most 1."
-  echo "  Where:    the variable DOC_EXTRACT_GPU_MEMORY_UTILIZATION in the environment of this job."
-  echo "  Expected: a number such as 0.90. Unset, the share is the model's gpu_memory_utilization in the settings file."
-  echo "  Fix:      set it to such a number, or leave it unset."
-  exit 1
-fi
 
 # ---- CUDA Environment ---- #
 # Deterministic GPU indexing: ensures cuda:0 always maps to the same physical
@@ -137,49 +234,12 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # and it fails immediately with "unhandled system error".
 
 # ---- Log Configuration ---- #
-# All output (stdout + stderr) is captured to a timestamped log file on EFS,
-# while still being printed to the console (so KFP UI shows it too).
+# All output (stdout + stderr) is captured to a timestamped log file in DOC_EXTRACT_LOG_DIR,
+# while still being printed to the console (so the KFP UI shows it too).
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
-#
-# Priority: DOC_EXTRACT_LOG_DIR env var > bootstrap.logging.log_dir of the settings file > fail
-# No silent fallback: in KFP, pod-local writes are ephemeral/forbidden.
-
-# ---- The conda environment's own python ---- #
-# The log folder has to be known BEFORE output is redirected into the log, and working it out needs
-# PyYAML, which lives only inside the conda environment. So the environment's own interpreter is called
-# by path here, and the environment is activated properly further down.
-#
-# The environment itself cannot be named in run_config.yml, since reading that file needs it.
-# Both models run in vllm_env4 (vLLM 0.29.0). See conda_envs/vllm_env4.yaml.
-CONDA_ENV="${DOC_EXTRACT_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
-CONDA_PY="${CONDA_ENV}/bin/python"
-if [[ ! -x "$CONDA_PY" ]]; then
-  echo "FATAL: bootstrap interpreter not found: $CONDA_PY"
-  echo "  What:  the python used to parse $CONFIG_FILE (it needs PyYAML) is missing."
-  echo "  Where: CONDA_ENV='$CONDA_ENV': from DOC_EXTRACT_CONDA_ENV env var, or the default in entrypoint.sh."
-  echo "  Fix:   point DOC_EXTRACT_CONDA_ENV at a real conda env dir so \$DOC_EXTRACT_CONDA_ENV/bin/python exists, e.g."
-  echo "           export DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
-  exit 1
-fi
-# The log folder: DOC_EXTRACT_LOG_DIR, else bootstrap.logging.log_dir in the settings file, else stop.
-# On failure the command prints the reason, which is then what LOG_DIR holds.
-LOG_DIR="$("$CONDA_PY" -m common.stage_settings "$CONFIG_FILE")" || { echo "$LOG_DIR"; exit 1; }
-
-# The two folders the job writes to are refused if they are beside the code (see the top).
-for WRITTEN in "$LOG_DIR" "${output:-}"; do
-  if [[ -n "$WRITTEN" && "$WRITTEN" != "None" ]] && beside_the_code "$WRITTEN"; then
-    echo "FATAL: the job would write beside the code: $WRITTEN"
-    echo "  What:     a folder the job names for its output or its log is inside the code's own folder, $CODE_DIR"
-    echo "  Where:    the variables output and DOC_EXTRACT_LOG_DIR in the environment of this job."
-    echo "  Expected: folders on the storage mounted for the job's data. The code's folder is in the pod: it is not kept."
-    echo "  Fix:      name folders outside $CODE_DIR"
-    exit 1
-  fi
-done
+LOG_DIR="$DOC_EXTRACT_LOG_DIR"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/entrypoint_$(date +'%Y%m%d_%H%M%S').log"
-# The settings this start was run with are kept beside its log, under the same name.
-cp "$CONFIG_FILE" "${LOG_FILE%.log}_run_config.yml"
 
 # `exec` redirects ALL subsequent output through `tee`, which writes to
 # both the console (for KFP) and the log file (for persistent debugging).
@@ -212,6 +272,11 @@ log "================================================================="
 log "    Document extraction pipeline"
 log "================================================================="
 log ""
+log "What this job set:"
+for NAME in $JOB_VARIABLES; do
+  log "$(printf '  %-36s %s' "$NAME" "${!NAME:-<not set>}")"
+done
+log ""
 
 # ---- Conda Activation ---- #
 # Assumes EFS is mounted via KFP volume spec at /efs/shared/. If the
@@ -221,10 +286,17 @@ log ""
 # KFP containers start with a bare shell. We need to initialise conda
 # (the `eval` line) and then activate our environment which has all
 # the Python dependencies (torch, transformers, etc.) pre-installed.
+# Both models run in vllm_env4 (vLLM 0.29.0). See conda_envs/vllm_env4.yaml.
+CONDA_ENV="${DOC_EXTRACT_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
+if [[ ! -d "$CONDA_ENV" ]]; then
+  stop "the conda environment is not there: $CONDA_ENV" \
+    "the task runs in a conda environment, and this folder does not exist." \
+    "the variable DOC_EXTRACT_CONDA_ENV $IN_THE_JOB Unset, it is the folder written in entrypoint.sh." \
+    "the folder of a conda environment, e.g. DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4" \
+    "point DOC_EXTRACT_CONDA_ENV at the environment's folder."
+fi
 log "Activating conda environment..."
 eval "$(conda shell.bash hook)"
-# CONDA_ENV was bootstrapped (and its python validated) during the YAML
-# resolution above, before the tee redirect.
 log "Conda env: $CONDA_ENV"
 # Temporarily allow unbound variables: conda activation scripts (e.g. MKL)
 # reference variables that may not be set yet.
@@ -304,10 +376,8 @@ fi
 # #############################################################################
 #  THE TASK
 # #############################################################################
-# KFP_TASK names it. Its model and folders are worked out in Python, where a task that is not known, or a
-# setting that is missing, stops the run with a message saying what to set and where.
-log "KFP_TASK: ${KFP_TASK:-<not set>}"
-log "Settings: $CONFIG_FILE"
+# KFP_TASK names it, and it is run with the variables checked above.
+log "KFP_TASK: $KFP_TASK"
 log "Commit:   ${DOC_EXTRACT_COMMIT:-<not a checkout>}"
 log ""
 python3 -m stages "$CONFIG_FILE"

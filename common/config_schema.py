@@ -14,25 +14,7 @@ as a model's name under ``bootstrap.model.default_paths``.
 from pathlib import Path
 from typing import Any
 
-KNOWN_KEYS: frozenset[str] = frozenset(
-    {
-        "bootstrap.logging.log_dir",
-        "bootstrap.model.default_paths.*",
-        "bootstrap.model.type",
-        "inference.tracing.path",
-        "inference.tracing.raw_prompts",
-        # A dataset by any name, each with its two keys.
-        "pipeline.datasets.*.document_type",
-        "pipeline.datasets.*.image_dir",
-        "pipeline.extraction.skip_labels",
-        "pipeline.information_extraction.input.dir",
-        "pipeline.information_extraction.input.document_types",
-        "pipeline.information_extraction.input.ground_truth",
-        "pipeline.information_extraction.input.max_images",
-        "pipeline.information_extraction.output.dir",
-        "pipeline.photo_split.enabled",
-    }
-)
+KNOWN_KEYS: frozenset[str] = frozenset({"bootstrap.model.default_paths.*", "bootstrap.model.type"})
 
 
 class ConfigError(ValueError):

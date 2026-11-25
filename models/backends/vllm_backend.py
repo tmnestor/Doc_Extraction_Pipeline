@@ -13,6 +13,7 @@ chat-template arguments the registration gives.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -33,7 +34,7 @@ class VllmBackend:
         chat_template: str | None = None,
         chat_template_kwargs: dict[str, Any] | None = None,
         default_image_first: bool = False,
-        trace_path: str | None = None,
+        trace_path: Path | None = None,
     ) -> None:
         self.model = engine
         self._model_type_key = model_type_key

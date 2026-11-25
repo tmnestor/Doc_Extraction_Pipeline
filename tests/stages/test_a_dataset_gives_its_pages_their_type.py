@@ -1,11 +1,10 @@
-"""A dataset in the settings file gives its pages their type, and classify then asks no model.
+"""A job that says what type every page is gives its pages that type, and classify then asks no model.
 
 Some sets of pages are all of one type, known beforehand: the receipts of a public dataset, say. Until
 25 November 2026 the one such set the pipeline read had a task of its own, with its own prompt, parser
-and scorer. Now a set of that kind is an entry under ``pipeline.datasets`` in the settings file, which
-names the type of its pages. A job reads it by naming it (``dataset=<name>``): ``classify`` writes each
-page a record of that type without starting an engine, and the stages after it read the pages as they
-read any others.
+and scorer. Now a job reads such a set by naming the type (``document_type=<a document type>``):
+``classify`` writes each page a record of that type without starting an engine, and the stages after it
+read the pages as they read any others.
 
 The pages are blank images made by the bench, and every reply is invented.
 """
@@ -92,3 +91,41 @@ def test_the_stages_after_read_the_dataset_s_pages_as_their_type(bench: Bench, t
     assert {r["prompt_used"] for r in read_jsonl(raw)} == {"receipt"}
     assert bench.processor.calls == [[name for name in bench.names[i : i + 2]] for i in (0, 2, 4)]
     assert len(results) == len(bench.names) and all("median_f1" in r for r in results)
+
+
+def test_a_type_the_schema_file_does_not_have_stops_classify_before_anything_is_written(
+    bench: Bench, tmp_path: Path
+) -> None:
+    from common.config_schema import ConfigError
+    from common.stage_settings import resolve
+
+    job = {
+        "model": ONE_ENGINE,
+        "image_dir": str(bench.pages),
+        "output": str(tmp_path / "out"),
+        "document_type": "LEDGER",
+    }
+
+    with pytest.raises(ConfigError) as refused:
+        classify.check(resolve("classify", job, bench.config))
+
+    message = str(refused.value)
+    assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
+    assert "LEDGER" in message and "document_type" in message and "sroie_receipt" in message
+    assert not (tmp_path / "out").exists() and bench.engines_started == 0
+
+
+@pytest.mark.parametrize("written", ["SROIE_RECEIPT", "sroie_receipt"])
+def test_a_type_of_the_schema_file_in_either_case_passes_the_check(
+    bench: Bench, tmp_path: Path, written: str
+) -> None:
+    from common.stage_settings import resolve
+
+    job = {
+        "model": ONE_ENGINE,
+        "image_dir": str(bench.pages),
+        "output": str(tmp_path / "out"),
+        "document_type": written,
+    }
+
+    assert len(classify.check(resolve("classify", job, bench.config)).images) == len(bench.names)

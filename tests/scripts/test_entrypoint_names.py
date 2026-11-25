@@ -35,12 +35,12 @@ def test_an_old_name_stops_the_run_with_a_full_diagnostic() -> None:
 
 
 def test_the_new_names_get_past_that_check() -> None:
-    """It then stops for want of the conda environment, which is not on this machine, naming the new variable."""
+    """It then stops at the next check: no task is named."""
     result = start({"DOC_EXTRACT_LOG_DIR": "/somewhere/logs"})
 
     assert result.returncode == 1
     assert "no longer reads" not in result.stdout
-    assert "DOC_EXTRACT_CONDA_ENV" in result.stdout
+    assert "KFP_TASK is not a task" in result.stdout
 
 
 def test_the_old_prefix_is_written_nowhere_else() -> None:

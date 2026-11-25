@@ -62,7 +62,7 @@ def _covers(known: str, path: str) -> bool:
 
 
 def test_an_unknown_key_stops_the_run_with_a_full_diagnostic(tmp_path: Path) -> None:
-    path = config_with(tmp_path, lambda raw: raw["pipeline"].update(trust={"enabled": False}))
+    path = config_with(tmp_path, lambda raw: raw.update(pipeline={"trust": {"enabled": False}}))
 
     with pytest.raises(ValueError) as raised:
         read_settings_file(path)
@@ -123,14 +123,14 @@ def test_a_setting_that_nothing_read_is_now_refused(tmp_path: Path, old_key: tup
 
 
 def test_a_misspelt_key_is_named_with_the_known_keys_beside_it(tmp_path: Path) -> None:
-    path = config_with(tmp_path, lambda raw: raw["pipeline"]["extraction"].update(skip_label=[]))
+    path = config_with(tmp_path, lambda raw: raw["bootstrap"]["model"].update(typ="a-model"))
 
     with pytest.raises(ValueError) as raised:
         read_settings_file(path)
 
     message = str(raised.value)
-    assert "pipeline.extraction.skip_label" in message
-    assert "pipeline.extraction.skip_labels" in message
+    assert "bootstrap.model.typ" in message
+    assert "bootstrap.model.type" in message
 
 
 @pytest.mark.parametrize("key", sorted(KNOWN_KEYS))

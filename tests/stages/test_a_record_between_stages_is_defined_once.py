@@ -33,7 +33,6 @@ def made() -> dict[str, tuple[Any, dict[str, Any]]]:
     could_not = records.as_read(
         records.read(PAGE, reply=None, seconds=0.2, prompt="invoice", error="the engine refused it")
     )
-    unread = records.as_read(records.left_unread(PAGE))
     return {
         "classified": (records.Classified, records.classified("/pages/page_1.png", ASKED, 0.4)),
         "classified, not asked": (
@@ -42,13 +41,11 @@ def made() -> dict[str, tuple[Any, dict[str, Any]]]:
         ),
         "read": (records.Read, dict(read)),
         "read, failed": (records.Read, dict(could_not)),
-        "read, left unread": (records.Read, dict(unread)),
         "cleaned": (
             records.Cleaned,
             records.cleaned(read, {"TOTAL_AMOUNT": "$31.07"}, expected=14, found=1),
         ),
         "cleaned, failed": (records.Cleaned, records.cleaned_but_failed(could_not)),
-        "cleaned, left unread": (records.Cleaned, records.cleaned_but_unread(unread)),
     }
 
 
@@ -88,7 +85,6 @@ def test_the_keys_of_each_record_are_in_the_order_the_files_have_always_had() ->
             "error",
         ]
     )
-    assert order["read, left unread"] == [*order["read"], "skipped", "skip_reason", "fields"]
     assert order["cleaned"] == [
         "image_name",
         "image_path",
@@ -99,7 +95,6 @@ def test_the_keys_of_each_record_are_in_the_order_the_files_have_always_had() ->
         "processing_time",
     ]
     assert order["cleaned, failed"] == [*order["cleaned"], "error"]
-    assert order["cleaned, left unread"] == [*order["cleaned"], "skipped", "skip_reason"]
 
 
 def test_a_page_that_could_not_be_read_has_no_reply_and_says_why() -> None:
@@ -110,23 +105,7 @@ def test_a_page_that_could_not_be_read_has_no_reply_and_says_why() -> None:
         "error",
         "the engine refused it",
     )
-    assert records.failed(record) and not records.not_read(record)
-
-
-def test_a_page_left_unread_is_marked_from_extract_to_evaluate() -> None:
-    """The mark one stage writes is the mark the next two look for: all three ask the one question."""
-    unread = records.left_unread(PAGE)
-    cleaned = records.cleaned_but_unread(records.as_read(unread))
-    scored = records.scored_but_unread(records.as_cleaned(cleaned))
-
-    assert records.not_read(unread) and records.not_read(cleaned) and records.not_read(scored)
-    assert not records.failed(unread) and not records.failed(cleaned)
-    assert scored == {
-        "image_name": "page_1.png",
-        "document_type": "INVOICE",
-        "skipped": True,
-        "skip_reason": "INVOICE",
-    }
+    assert records.failed(record)
 
 
 def test_a_page_that_failed_is_marked_from_extract_to_evaluate() -> None:
@@ -164,5 +143,5 @@ def test_no_stage_makes_a_record_between_stages_with_a_literal_of_its_own(stage:
     source = (REPO / "stages" / f"{stage}.py").read_text()
     code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
 
-    assert re.findall(r'"(image_name|image_path|raw_response|extracted_data|skip_reason)":', code) == []
-    assert 'get("skipped")' not in code and 'get("error")' not in code
+    assert re.findall(r'"(image_name|image_path|raw_response|extracted_data)":', code) == []
+    assert 'get("error")' not in code

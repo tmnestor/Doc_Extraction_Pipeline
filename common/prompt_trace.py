@@ -85,26 +85,3 @@ def record(
     line = json.dumps(row, ensure_ascii=False)
     with _lock, _sink_path.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
-
-
-def effective_trace_path(config: Any) -> str | None:
-    """Resolve the trace path for a ``Settings``-like object, or None.
-
-    Returns None when ``trace_raw_prompts`` is false. When enabled, uses
-    ``trace_path`` if set, else ``<output_dir>/raw_prompt_trace.jsonl``.
-    """
-    if not getattr(config, "trace_raw_prompts", False):
-        return None
-    if getattr(config, "trace_path", None):
-        return str(config.trace_path)
-    if getattr(config, "output_dir", None) is None:
-        from common.config_schema import ConfigError
-
-        raise ConfigError(
-            "What: what is sent to the model is to be kept (inference.tracing.raw_prompts is true), "
-            "but no place is named for it and this task has no output folder to put it in.\n"
-            f"Where: {getattr(config, 'config_path', 'config/run_config.yml')} -> inference.tracing.path\n"
-            "Expected: a file to write to, e.g. path: /data/run_20261121/raw_prompt_trace.jsonl\n"
-            "How to fix: give inference.tracing.path a file, or set raw_prompts to false."
-        )
-    return str(Path(config.output_dir) / "raw_prompt_trace.jsonl")

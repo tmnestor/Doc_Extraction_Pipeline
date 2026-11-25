@@ -46,8 +46,9 @@ def task(bench: Bench, name: str, out: Path, model: str = ONE_ENGINE, **more: st
         "model": model,
         "image_dir": str(bench.pages),
         "output": str(out),
-        "DOC_EXTRACT_LOG_DIR": str(out.parent / "logs"),
         "ground_truth": str(out.parent / "ground_truth.jsonl"),
+        # The photo split is on, so that the split task loads a model as the other two do.
+        "photo_split": "true",
         **more,
     }
     return resolve(name, environ, bench.config)
@@ -169,11 +170,6 @@ def test_checking_a_task_writes_nothing(bench: Bench, tmp_path: Path, name: str)
 # --- the settings are checked whole when they are loaded ------------------------------------------------
 
 
-def loaded_with(bench: Bench, change: Any, model: str = ONE_ENGINE) -> Settings:
-    bench.with_settings(change)
-    return Settings.load({"model_type": model}, config_path=bench.config)
-
-
 @pytest.mark.parametrize("model", [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD])
 def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: str) -> None:
     """Until 26 November 2026 they were keys of the settings file, and one left out was a ``KeyError`` as
@@ -184,17 +180,6 @@ def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: s
     assert {"max_model_len", "max_num_seqs", "gpu_memory_utilization"} <= read
     assert all(hasattr(get_model(model), name) for name in read)
     assert "tuning[" not in loader and "get_vllm_config" not in loader
-
-
-def test_a_tracing_block_left_out_is_not_taken_for_off(bench: Bench) -> None:
-    def left_out(settings: dict[str, Any]) -> None:
-        del settings["inference"]["tracing"]
-
-    with pytest.raises(ConfigError) as refused:
-        loaded_with(bench, left_out)
-
-    message = str(refused.value)
-    assert all(part in message for part in PARTS) and "inference.tracing" in message
 
 
 # --- the settings file is read once to work a task out --------------------------------------------------

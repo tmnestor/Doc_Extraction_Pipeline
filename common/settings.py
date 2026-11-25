@@ -1,10 +1,10 @@
 """The run's settings: one object, read once from ``config/run_config.yml``.
 
-    settings = Settings.load({"model_type": ..., "output_dir": ...})
+    settings = Settings.load({"model_type": ...})
 
-A stage that reads pages loads its settings here and hands them to whatever needs them. The model a task
-is started with may be given to ``load`` and then stands in place of the file's. Everything else comes
-from the file.
+A stage that reads pages loads its settings here and hands them to whatever needs them. A run's choices
+are the job's variables, handed to ``load`` (``common.stage_settings``). What comes from the file is
+where each model's weights are.
 
 The folders a task reads and writes are not here. They are worked out once, when the task starts
 (``common.stage_settings``), and handed to the stage. Until 25 November 2026 this object worked the
@@ -72,10 +72,6 @@ def _need(raw: dict[str, Any], key: str, path: Path, example: str) -> Any:
     return value
 
 
-def _is_none(value: Any) -> bool:
-    return value is None or str(value).strip().lower() in {"none", "null", ""}
-
-
 class Settings:
     """The run's settings. Nothing in it is changed after loading."""
 
@@ -84,20 +80,14 @@ class Settings:
     # What a task is started with.
     model_type: str
     model_path: Path
-    # The folder the stage writes to, when it gave one: only to place the record of what was sent to
-    # the model, when that is kept and no place is named for it.
-    output_dir: Path | None
-    # The share of each card's memory the job sets (DOC_EXTRACT_GPU_MEMORY_UTILIZATION), checked when
-    # the task was worked out. None: the model's own, in its registration.
+    # The share of each card's memory the job sets (DOC_EXTRACT_GPU_MEMORY_UTILIZATION). None: the
+    # model's own, in its registration.
     gpu_memory_utilization: float | None
-    # Which pages of the folder are read.
+    # Which pages of the folder are read: the job's max_images and document_types. None: every page.
     max_images: int | None
-    document_types: list[str] | None
-    # Whether what is sent to the model is kept, and where.
-    trace_raw_prompts: bool
-    trace_path: str | None
-    # The document types whose pages are not read.
-    extraction_skip_labels: list[str]
+    document_types: tuple[str, ...] | None
+    # The file that what is sent to the model is kept in (DOC_EXTRACT_TRACE_FILE). None: not kept.
+    trace_file: Path | None
 
     @classmethod
     def load(
@@ -110,8 +100,8 @@ class Settings:
         """Read and check the settings.
 
         Args:
-            overrides: ``model_type``, to stand in place of the file's; ``output_dir``, the folder the stage writes to; and ``gpu_memory_utilization``, the
-                share of each card's memory the job sets. A value of None is taken as not given.
+            overrides: What the job's variables give: ``model_type``, ``gpu_memory_utilization``,
+                ``max_images``, ``document_types`` and ``trace_file``. One left out, or None, is not set.
             config_path: The settings file, or None for the shipped one.
             raw: What that file holds, when it has been read already (``read_settings_file``): a task
                 is worked out from one reading of its settings file. None reads the file.
@@ -128,30 +118,18 @@ class Settings:
         self = object.__new__(cls)
         self.config_path, self.raw = path, raw
 
-        unknown = sorted(set(given) - {"model_type", "output_dir", "gpu_memory_utilization"})
+        choices = ("gpu_memory_utilization", "max_images", "document_types", "trace_file")
+        unknown = sorted(set(given) - {"model_type", *choices})
         if unknown:
             raise TypeError(f"Settings.load does not take {', '.join(unknown)}")
-        folders = "pipeline.information_extraction"
-        self.output_dir = Path(given["output_dir"]) if "output_dir" in given else None
-        self.gpu_memory_utilization = given.get("gpu_memory_utilization")
-        self.max_images = _need(
-            raw, f"{folders}.input.max_images", path, "null for every page, or a number"
-        )
-        self.document_types = _need(
-            raw, f"{folders}.input.document_types", path, "null for every type, or a list such as [RECEIPT]"
-        )
+        for name in choices:
+            setattr(self, name, given.get(name))
 
         model = "bootstrap.model"
         self.model_type = given.get("model_type") or _need(
             raw, f"{model}.type", path, "a registered model, e.g. type: gemma4-31b-w4a16-vllm"
         )
         self.model_path = cls._model_folder(raw, path, self.model_type)
-
-        self.trace_raw_prompts, self.trace_path = cls._tracing(raw, path)
-
-        self.extraction_skip_labels = cls._list_of_text(
-            raw, path, "pipeline.extraction.skip_labels", "skip_labels: []", empty_if_null=True
-        )
         return self
 
     # -- how each part is read ------------------------------------------------------------------------
@@ -171,34 +149,3 @@ class Settings:
                 f"How to fix: give that key the model's folder."
             )
         return Path(listed)
-
-    @staticmethod
-    def _tracing(raw: dict[str, Any], path: Path) -> tuple[bool, str | None]:
-        """Whether what is sent to the model is kept, and where. The block must be there: one left out
-        is not taken for 'off'. Until 26 November 2026 it was."""
-        tracing = raw.get("inference", {}).get("tracing")
-        enabled = tracing.get("raw_prompts") if isinstance(tracing, dict) else None
-        if not isinstance(enabled, bool) or "path" not in tracing:
-            raise ConfigError(
-                "What: the 'tracing' block needs 'raw_prompts' (true or false) and 'path'.\n"
-                f"Where: {path} -> inference.tracing\n"
-                "Expected:\n  inference:\n    tracing:\n      raw_prompts: false\n      path: none\n"
-                "How to fix: give both keys under 'inference.tracing'."
-            )
-        return enabled, None if _is_none(tracing["path"]) else str(tracing["path"])
-
-    @staticmethod
-    def _list_of_text(
-        raw: dict[str, Any], path: Path, key: str, example: str, *, empty_if_null: bool = False
-    ) -> list[str]:
-        value = _need(raw, key, path, f"a list of text, e.g.\n{example}")
-        if value is None and empty_if_null:
-            return []
-        if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
-            raise ConfigError(
-                f"What: {key} is {value!r}, not a list of text.\n"
-                f"Where: {path} -> {key}\n"
-                f"Expected: a list of text, e.g.\n{example}\n"
-                f"How to fix: write {key} as a YAML list of names."
-            )
-        return list(value)

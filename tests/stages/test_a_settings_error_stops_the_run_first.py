@@ -102,23 +102,8 @@ def test_a_page_given_a_type_with_no_block_stops_extract_before_an_engine_starts
     message = str(refused.value)
     assert all(part in message for part in PARTS)
     assert "PAYSLIP" in message and "config/field_definitions.yaml" in message
-    assert "pipeline.extraction.skip_labels" in message
     assert bench.engines_started == 0
     assert not (out / "raw_extractions.jsonl").exists()
-
-
-def test_a_type_with_no_block_is_not_refused_when_its_pages_are_not_to_be_read(
-    bench: Bench, tmp_path: Path
-) -> None:
-    bench.with_settings(lambda settings: settings["pipeline"]["extraction"].update(skip_labels=["payslip"]))
-    out = tmp_path / "out"
-    classifications = classified(bench, out, {bench.names[0]: "PAYSLIP"})
-
-    bench.extract(classifications, out / "raw_extractions.jsonl")
-
-    records = {record["image_name"]: record for record in read_jsonl(out / "raw_extractions.jsonl")}
-    assert records[bench.names[0]]["skipped"] is True
-    assert len(records) == len(bench.names)
 
 
 def test_a_prompt_file_that_cannot_be_read_is_a_settings_error_and_not_an_exit(

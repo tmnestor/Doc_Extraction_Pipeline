@@ -39,7 +39,7 @@ is how one task finds what another wrote.
 run, give the later tasks `image_dir=<output>/split/images`.
 
 A set of pages that are all of one type, known beforehand, is read by the same tasks: see
-[Reading a dataset whose pages are all of one type](#reading-a-dataset-whose-pages-are-all-of-one-type).
+[Reading pages that are all of one type](#reading-pages-that-are-all-of-one-type).
 
 A task carries on from where an earlier run stopped: pages already read are not read again. Set
 `CLEAR_PREV_OUTPUT=true` to delete that task's earlier output and start it afresh.
@@ -77,7 +77,7 @@ alike. Each choice below is a well-known pattern, used for the reason given.
 | **Atomic write** | `write_jsonl` and `in_the_order` in `stages/io.py` write beside the file and rename it into place. They are the only two ways a task's output is written | A reader finds the old file or the new one, never half of one |
 | **Retry, then stop** | `common/engine_calls.py`: a failed engine call is tried again one page at a time, and a task stops when request after request fails | One bad page costs one page. An engine that has stopped answering costs seconds, not a file of failures |
 | **Registry** | `models/registry.py` | A model is one entry there, with whether it fits an engine on each card. No task's code depends on which model it is given |
-| **Settings as data, checked first** | `config/run_config.yml` and `config/field_definitions.yaml` hold every setting, field and threshold. Nothing is defaulted in Python | What a run is set to do can be read from two files. A mistake stops the run before an engine starts, with what is wrong, where, what is expected and the fix |
+| **Settings checked first** | A run's choices are the job's variables, checked in bash at the top of `entrypoint.sh`. `config/field_definitions.yaml` and `prompts/` hold every field, threshold and prompt | What a run is set to do can be read from the top of its log. A mistake stops the run before an engine starts, with what is wrong, where, what is expected and the fix |
 | **Recorded-result tests** | `tests/replay/` and `tests/reference/` | A change that alters a score, or what the model is sent, fails a test by a byte |
 
 How the engines are arranged is kept apart from all of this. `common/vllm_dp.py` starts one engine
@@ -93,8 +93,8 @@ A task stands alone:
    runner knows no more. `check` reads everything the task will use, writes nothing and gives what it
    worked out, and the runner calls it before the note of what made the folder is written and before a
    task started afresh deletes its earlier output: a task that cannot start leaves the folder as it
-   found it. `start` is handed what `check` gave, so a task is worked out once: its settings file is
-   read once, and nothing that was read to be checked is read again to be used.
+   found it. `start` is handed what `check` gave, so a task is worked out once: nothing that was read
+   to be checked is read again to be used.
 2. It reads its settings and the file the task before it wrote, and writes its own file. It imports no
    other task.
 3. A record handed from one task to the next is made by `stages/records.py` and by nothing else.
@@ -116,12 +116,12 @@ there is no base class to inherit from: a task's `run` is still the place to rea
 
 `clean` and `evaluate` use no cards and take seconds, so each is rebuilt whole on every run.
 
-## Reading a dataset whose pages are all of one type
+## Reading pages that are all of one type
 
 Some sets of pages are all of one document type, known beforehand: the receipts of a public dataset,
-say. Such a set is described in the YAML files and read by the five tasks. There is no code for it.
+say. Such a set is read by the five tasks, with one variable more. There is no code for it.
 
-A dataset is four entries. The receipts of the public SROIE test split are the one shipped:
+The type is described as any type is. The receipts of the public SROIE test split are the one shipped:
 
 ```yaml
 # config/field_definitions.yaml: the type and its fields, each of a kind the pipeline cleans and scores
@@ -135,38 +135,29 @@ prompts:
   sroie_receipt:
     prompt: |
       Read this scanned receipt and report four fields. ...
-
-# config/run_config.yml: how many of its pages go to the engine in one call, and the dataset itself
-pipeline:
-  batching:
-    sroie_receipt: 64
-  datasets:
-    sroie:
-      document_type: SROIE_RECEIPT
-      image_dir: /data/sroie/test/img    # or null, for the job to name
 ```
 
-A job reads it by naming it:
+A job reads such a set by saying what type its pages are:
 
 ```bash
 for task in classify extract clean; do
-  KFP_TASK=$task dataset=sroie model=gemma4-31b-w4a16-vllm output=/data/run_sroie \
+  KFP_TASK=$task document_type=SROIE_RECEIPT image_dir=/data/sroie/test/img \
+    model=gemma4-31b-w4a16-vllm output=/data/run_sroie \
     DOC_EXTRACT_LOG_DIR=/data/run_sroie/logs bash entrypoint.sh
 done
 ```
 
-- `classify` gives every page the dataset's type and asks no model: it starts no engine. Each record
-  says so, with `type_from: dataset`.
+- `classify` gives every page that type and asks no model: it starts no engine. Each record says so,
+  with `type_from: dataset`. A `document_type` the schema file does not have stops the task before
+  anything is written.
 - `extract`, `clean` and `evaluate` read the pages as they read any others: by the type's prompt, its
-  fields and their kinds. A run of a dataset keeps the model's replies, carries on from where it
-  stopped and reads a failed page again, like any run.
-- The job's own `image_dir` stands in place of the dataset's when it is set.
+  fields and their kinds. Such a run keeps the model's replies, carries on from where it stopped and
+  reads a failed page again, like any run.
 - `evaluate` wants an answer key in the pipeline's form: JSON lines, a line a page, with the page's file
   name and the type's fields.
 
-Every dataset in the file is checked when a task starts, whichever the job names. One that is not its
-two keys, or whose type the schema file does not have, stops the run and says how to mend it. With no
-dataset at all, write `datasets: {}`.
+Until 26 November 2026 such a set was a block of a settings file, named by a variable `dataset`. A job
+that still sets `dataset` is refused and told the two variables to set.
 
 Until 25 November 2026 the SROIE receipts had a task of their own, with its own prompt, parser, scorer
 and report, and two scores of its own. They are scored now as every other page is, so a figure from this
@@ -339,33 +330,36 @@ done
 
 ## What a job may set
 
-Each setting is taken from the environment if it is set there, and otherwise from the settings file:
-`config/run_config.yml`, or the file the job names in `run_config`.
-A variable that is unset, empty or the word `None` counts as not set. A setting a task needs that is in
-neither place stops the run before any work is done, with a message that says what is missing, where to put
-it, what it should look like and how to mend it.
+The job's variables are the whole of a run's settings. `entrypoint.sh` lists them at its top and checks
+them, in bash, before anything is started: that the task has the variables it needs, and that each value
+can be used. A job that cannot be started is stopped there, before anything is written, with a message
+that says what is wrong, where, what is expected and how to mend it. Every variable is then written at
+the top of the log, as the job set it.
 
-The four folders (`image_dir`, `output`, `ground_truth` and `DOC_EXTRACT_LOG_DIR`) are null in the settings
-file as shipped, so a job names each folder its task needs. A folder written into the file would be one
-machine's, and a run that forgot to name its own would read it, or write into it, without a word. A task
-is asked only for the folders it uses: `clean` and `evaluate` for no folder of pages.
+A variable that is unset, empty or the word `None` is not set: a pipeline manifest passes a blank
+parameter as the text "None".
 
-| Variable | Meaning | Needed by | Key in `run_config.yml` when unset | Name before 21 November 2026 |
-|---|---|---|---|---|
-| `KFP_TASK` | The task to run | every start | none: it must be set | unchanged |
-| `model` | A registered model | every task | `bootstrap.model.type` | unchanged |
-| `image_dir` | The folder of pages | `split`, `classify`, `extract` | `pipeline.information_extraction.input.dir` | unchanged |
-| `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
-| `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
-| `dataset` | A dataset of the settings file, whose pages are all of one type: `classify` gives each page that type and asks no model, and the dataset's folder of pages is read unless `image_dir` is set | optional | a block under `pipeline.datasets` | new |
-| `run_config` | A settings file of the job's own, read whole in place of `config/run_config.yml` | optional | none: unset, the shipped file is read | new |
-| `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
-| `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |
-| `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | none: the default is in `entrypoint.sh` | `LMM_CONDA_ENV` |
-| `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | none: the model's own share, in its registration | `LMM_GPU_MEMORY_UTILIZATION` |
+| Variable | Meaning | Needed by | When it is not set |
+|---|---|---|---|
+| `KFP_TASK` | The task to run | every start | the job is stopped |
+| `model` | A registered model | `split`, `classify`, `extract` | the job is stopped |
+| `image_dir` | The folder of pages, which must exist | `split`, `classify`, `extract` | the job is stopped |
+| `output` | The folder the tasks write to | every task | the job is stopped |
+| `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | the job is stopped |
+| `document_types` | Read only the pages whose file name holds one of these, written with commas and in either case: `receipt,invoice` | optional | every page is read |
+| `max_images` | Read at most this many pages: a whole number of 1 or more | optional | every page is read |
+| `photo_split` | `true`: the `split` task asks the model where each receipt is, and cuts a photograph of several | optional | `false`: every photograph is passed through, and no model is asked |
+| `document_type` | Every page is of this document type, and `classify` asks no model | optional | the model is asked |
+| `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional | `false`: the task carries on |
+| `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | the job is stopped |
+| `DOC_EXTRACT_TRACE_FILE` | Keep everything sent to the model, and its replies, in this file | optional | it is not kept |
+| `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | the folder written in `entrypoint.sh` |
+| `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | the model's own share, in its registration |
 
-A job that still sets a variable under the old `LMM_` prefix is refused with a message naming the new
-variables. It is not run with the setting silently dropped.
+Three kinds of variable that are no longer read are refused by name, and not run with the setting
+silently dropped: one under the old `LMM_` prefix (replaced by `DOC_EXTRACT_` on 21 November 2026),
+`dataset`, and `run_config`. Until 26 November 2026 a run's choices were keys of a settings file, which
+`run_config` named.
 
 The number of cards is not a variable or a setting. They are counted: those named in
 `CUDA_VISIBLE_DEVICES` if that is set, else those `nvidia-smi` lists.
@@ -376,10 +370,10 @@ Under a pipeline the code's folder is in the job's pod. That storage is not kept
 there is stopped part way. A job is launched from a commit: git writes the code's folder then, and is
 not used once the pipeline has started. After that nothing is written beside the code:
 
-- **Every file a task writes is under a folder the job names**: `output`, `DOC_EXTRACT_LOG_DIR`, and
-  `inference.tracing.path` when what is sent to the model is kept. `entrypoint.sh` stops a job whose
-  `output` or log folder is the code's folder, or inside it, before either is made.
-- **A setting is changed in a file of the job's own** (`run_config`, below), never in the shipped file.
+- **Every file a task writes is in a place the job names**: `output`, `DOC_EXTRACT_LOG_DIR`, and
+  `DOC_EXTRACT_TRACE_FILE` when what is sent to the model is kept. `entrypoint.sh` stops a job that
+  names one of them in the code's folder, before anything is made.
+- **A run's choices are its variables.** No file in the code's folder is edited or copied for a run.
 - **No task runs git.** `entrypoint.sh` reads the commit from the files the checkout left (`.git/HEAD`
   and the reference it names), and each task notes it in `run_manifest.json`. Whether files differed
   from that commit cannot be told that way, and is noted as unknown.
@@ -399,34 +393,15 @@ temporary folder) is not the pipeline's and is not covered by this.
 
 ## The settings file
 
-`config/run_config.yml` holds every setting that is not one of the variables above: the engine's limits for
-each model, the completion budgets, the classification and extraction rules, batch sizes. Two rules hold
-throughout:
+`config/run_config.yml` holds what is left once a run's choices are variables: the folder of each
+model's weights. A key the code does not know is refused, so a misspelt key cannot sit in the file doing
+nothing.
 
-- **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
-- **A key the code does not know is refused.** A misspelt key cannot sit in the file doing nothing.
+Nothing else that shapes a run is in a file to be edited for it:
 
-### A run with settings of its own
-
-The shipped file is in the code's folder, and a job often cannot write there: under a pipeline the code is
-read-only, and the storage a job can write to is mounted beside it. So a setting is never changed by editing
-the shipped file in place. Copy it to storage the job can read, change what the run needs changed, and name
-the copy:
-
-```bash
-cp config/run_config.yml /data/run_20261126/run_config.yml
-# edit /data/run_20261126/run_config.yml
-KFP_TASK=classify run_config=/data/run_20261126/run_config.yml model=gemma4-31b-w4a16-vllm \
-  image_dir=/data/pages output=/data/run_20261126 DOC_EXTRACT_LOG_DIR=/data/run_20261126/logs \
-  bash entrypoint.sh
-```
-
-- **The file named is the whole of the settings.** Nothing is merged from the shipped file. It is read and
-  checked exactly as the shipped file is, so a key it leaves out is missing and a key the code does not know
-  is refused. What a run was set to do can be read from that one file.
-- **Every task of a run names the same file.** Each start keeps a copy of the settings it was run with
-  beside its log, under the log's own name: `entrypoint_<time>_run_config.yml`.
-- **The log folder comes from the same file**, when the job does not set `DOC_EXTRACT_LOG_DIR`.
+- the values the code was tuned to (how many pages go to an engine call, the completion budgets, the
+  photo split's rules) are named constants beside the code that uses them, changed by a commit;
+- what an engine is started with is in the model's registration, `models/registry.py`.
 
 The document types, their fields and the prompts are not settings of a run: they are part of the code, in
 `config/field_definitions.yaml` and `prompts/`, and are named by the commit.
@@ -444,7 +419,7 @@ and, to score it, an answer key.
 | The type's prompt | `prompts/extraction_prompts.yaml`, under `prompts` | always |
 | A rule that recognises it | `prompts/document_type_detection.yaml`, under `classification_evidence.rules` | to have pages classified as it |
 | A question that tells it apart | the same file, under `classification.questions` | only if no question asked already does |
-| Its batch size and its place in the order | `config/run_config.yml` | optional |
+| Its place in the reading order | `config/field_definitions.yaml`, under `read_in_this_order` | optional |
 | Its answers | the answer key, a JSON lines file | to score it |
 
 The steps below add a payslip. Every name and value in them is made up.
@@ -615,8 +590,7 @@ these stops it, and stops a run in the same way, with a message that says which 
 - a type with no prompt, or a prompt with no type;
 - a field a type names that has no entry, or an entry missing one of its three parts;
 - a key in a block or an entry that the pipeline does not know;
-- a rule for a type that has no block, or one that uses a column role or a question nobody defined;
-- a batch size in the settings file for a name that is no type.
+- a rule for a type that has no block, or one that uses a column role or a question nobody defined.
 
 Then run the tests (see below). If a question was added, the tests that hold the classification prompt
 and its recorded replies fixed will fail, as they are meant to: what the model is sent has changed. Their

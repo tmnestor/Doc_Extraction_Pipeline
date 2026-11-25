@@ -29,7 +29,7 @@ from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import in_the_order, read_completed_images, read_jsonl, start_afresh
+from .io import in_the_order, read_completed_images, read_input, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -148,13 +148,10 @@ def checked(classifications_path: Path, settings: Settings) -> Checked:
         settings: The run's settings.
 
     Raises:
-        FileNotFoundError: If the classifications file holds no record.
-        ConfigError: With what is wrong, where, what is expected and how to mend it.
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A
+            classifications file that is not there, or cannot be read, is one such.
     """
-    classifications = read_jsonl(classifications_path)
-    if not classifications:
-        msg = f"No classifications found in {classifications_path}"
-        raise FileNotFoundError(msg)
+    classifications = read_input(classifications_path, written_by="classify")
     logger.info("Read %d classifications from %s", len(classifications), classifications_path)
     check_settings(settings, classifications)
     return Checked(settings, classifications)

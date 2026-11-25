@@ -18,6 +18,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from .config_schema import ConfigError
 from .field_schema import NOT_FOUND, Table, get_field_schema
 from .reply_fields import IDENTIFIER_LABEL
 
@@ -36,21 +37,30 @@ def load_answer_key(path: Path) -> dict[str, dict[str, Any]]:
     document type's fields. A page is scored on exactly the fields its answer carries.
 
     Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If it is not a ``.jsonl`` file, or holds no answers.
+        ConfigError: If the file is not there, is not a ``.jsonl`` file, has a line that cannot be
+            read, or holds no answer. Each is the job's to mend, and is said in the four parts every
+            such fault is said in: until 26 November 2026 each ended the task with a traceback.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"Ground truth file not found: {path}")
+
+    def refuse(problem: str) -> ConfigError:
+        return ConfigError(
+            f"What: the answer key {problem}.\n"
+            f"Where: {path}, which the job names in ground_truth.\n"
+            f"Expected: a file ending .jsonl with one answer a line, each holding the page's file name "
+            f"(filename) and its own document type's fields.\n"
+            f"How to fix: name the ground_truth.jsonl of the set of pages that was read."
+        )
+
+    if not path.is_file():
+        raise refuse("is not there")
     if path.suffix != ".jsonl":
-        raise ValueError(
-            f"The answer key {path} is not a JSON lines file. Expected a file ending .jsonl with one "
-            f"answer a line; name the set's ground_truth.jsonl in ground_truth."
-        )
-    answers = _load_jsonl(path)
+        raise refuse("is not a JSON lines file")
+    try:
+        answers = _load_jsonl(path)
+    except (json.JSONDecodeError, AttributeError) as err:
+        raise refuse(f"has a line that cannot be read as an answer ({err})") from None
     if not answers:
-        raise ValueError(
-            f"Ground truth loaded from {path} but contains 0 records. Check file format and contents."
-        )
+        raise refuse("holds no answer with a page's file name")
     names_the_type = get_field_schema().document_type_field or ""
     kinds = Counter(answer.get(names_the_type, "UNKNOWN") for answer in answers.values())
     logger.info("Answer key: %d pages from %s (%s)", len(answers), path, dict(sorted(kinds.items())))

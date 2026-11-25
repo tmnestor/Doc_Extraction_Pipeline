@@ -158,7 +158,7 @@ def cases() -> list[dict[str, Any]]:
     with tempfile.TemporaryDirectory() as folder:
         source = Path(folder) / "raw_extractions.jsonl"
         source.write_text("".join(json.dumps(record) + "\n" for record in raw))
-        cleaned = clean.run(source, Path(folder) / "cleaned_extractions.jsonl")
+        cleaned = clean.run(clean.checked(source), Path(folder) / "cleaned_extractions.jsonl")
         return [json.loads(line) for line in cleaned.read_text().splitlines()]
 
 

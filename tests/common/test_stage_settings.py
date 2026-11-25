@@ -379,7 +379,7 @@ def test_classify_is_given_its_folders_and_says_how_long_it_took(
         starter.run_task(settings)
 
     # What the stage's check gave is what its run is handed: nothing is worked out a second time.
-    assert stage.args == (settings.image_dir, settings.classifications, CHECKED)
+    assert stage.args == (settings.classifications, CHECKED)
     # No dataset is named, so no type is given: the model is asked.
     assert stage.kwargs == {"given_type": None}
     assert any("Classification complete (" in record.getMessage() for record in caplog.records)
@@ -402,19 +402,16 @@ def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called
 
     starter.run_task(settings)
 
-    assert stage.args == (settings.cleaned_extractions, settings.ground_truth, settings.evaluation_dir)
+    assert stage.args == (CHECKED, settings.evaluation_dir)
     assert stage.kwargs == {}
 
 
 def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) -> None:
     starter.run_task(settings_for("split", tmp_path))
-    assert stage.args[1] == tmp_path / "out" / "split"
+    assert stage.args == (tmp_path / "out" / "split", CHECKED)
 
     starter.run_task(settings_for("clean", tmp_path))
-    assert stage.args == (
-        tmp_path / "out" / "raw_extractions.jsonl",
-        tmp_path / "out" / "cleaned_extractions.jsonl",
-    )
+    assert stage.args == (CHECKED, tmp_path / "out" / "cleaned_extractions.jsonl")
 
 
 def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads(

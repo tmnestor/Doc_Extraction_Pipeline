@@ -256,7 +256,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
     bench.processor.stop_at_call = 3
 
     with pytest.raises(Stopped):
-        split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
+        split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
 
     # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
     # the journal, their images are written, and the stage's own file is not yet there.
@@ -267,7 +267,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
 
     bench.processor.stop_at_call = None
     bench.processor.calls.clear()
-    split.run(bench.pages, output, split_checked(ONE_ENGINE, bench.config))
+    split.run(output, split_checked(ONE_ENGINE, bench.config, bench.pages))
 
     assert bench.processor.calls == [["2 photographs"]]
     assert names_in(output / "splits.jsonl") == bench.names

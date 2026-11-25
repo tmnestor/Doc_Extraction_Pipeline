@@ -10,6 +10,7 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 import logging
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +24,12 @@ from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import discover_images, in_the_order, read_completed_images, start_afresh
+from .io import discover_images, in_the_order, no_pages_in, read_completed_images, start_afresh
 
 logger = logging.getLogger(__name__)
 
 
-def run(image_dir: Path, output_path: Path, app_cfg: Settings, *, given_type: str | None = None) -> Path:
+def run(output_path: Path, checked: "Checked", *, given_type: str | None = None) -> Path:
     """Detect document types for all images, write classifications.jsonl.
 
     When the pages are of a dataset that says what they are (``pipeline.datasets``), each is given that
@@ -39,30 +40,15 @@ def run(image_dir: Path, output_path: Path, app_cfg: Settings, *, given_type: st
     pages' order however the run went. A run with nothing left starts no engine.
 
     Args:
-        image_dir: Directory containing images.
         output_path: Path to write classifications.jsonl.
-        app_cfg: The run's settings as the stage loads its engine with them, checked: what
-            ``checked`` gave.
+        checked: The run's settings as the stage loads its engine with them, and the pages to
+            classify: what ``checked`` gave.
         given_type: The document type the pages' dataset gives them, or None to ask the model.
 
     Returns:
         Path to the written classifications.jsonl.
     """
-    # Both filters are config-driven and MUST be passed: calling with the
-    # directory alone silently ignored max_images and document_types, so a
-    # 12-image request processed all 165 (fixed 2026-09-21).
-    images = list(
-        discover_images(
-            image_dir,
-            document_types=app_cfg.document_types,
-            max_images=app_cfg.max_images,
-        )
-    )
-    if not images:
-        msg = f"No images found in {image_dir}"
-        raise FileNotFoundError(msg)
-
-    logger.info("Found %d images in %s", len(images), image_dir)
+    app_cfg, images = checked.settings, checked.images
     if given_type is not None:
         _give_the_type(images, output_path, given_type)
         return output_path
@@ -160,32 +146,64 @@ def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
         )
 
 
-def checked(settings: Settings) -> Settings:
-    """The run's settings as classify loads its engine with them, with what classifying reads checked.
+@dataclass(frozen=True)
+class Checked:
+    """What the stage is run with, read and checked."""
 
-    The one place the stage works its settings out. What it gives is what ``run`` is handed: nothing
-    is worked out a second time.
+    # The run's settings as classify loads its engine with them.
+    settings: Settings
+    # The pages to classify: those of the folder the settings select, in the order of their names.
+    images: list[Path]
+
+
+def checked(image_dir: Path, settings: Settings) -> Checked:
+    """The run's settings as classify loads its engine with them, and the pages, each read and checked.
+
+    The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
+    nothing is read or worked out a second time.
 
     Args:
+        image_dir: The folder of pages.
         settings: The run's settings.
 
     Raises:
-        ConfigError: With what is wrong, where, what is expected and how to mend it.
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A folder with no
+            page to read is one such: until 26 November 2026 it ended the task with a traceback.
     """
     staged = settings.for_stage("classify")
     check_settings(staged)
-    return staged
+    # Both filters are config-driven and MUST be passed: calling with the
+    # directory alone silently ignored max_images and document_types, so a
+    # 12-image request processed all 165 (fixed 2026-09-21).
+    images = list(
+        discover_images(
+            image_dir,
+            document_types=staged.document_types,
+            max_images=staged.max_images,
+        )
+    )
+    if not images:
+        selected = (
+            f" of the types the settings select ({', '.join(staged.document_types)}, under "
+            f"pipeline.information_extraction.input.document_types in {staged.config_path})"
+            if staged.document_types
+            else ""
+        )
+        raise no_pages_in(image_dir, selected)
+    logger.info("Found %d images in %s", len(images), image_dir)
+    return Checked(staged, images)
 
 
-def check(task: StageSettings) -> Settings:
+def check(task: StageSettings) -> Checked:
     """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    settings = checked(run_settings(task))
-    check_processor(settings)
-    return settings
+    assert task.image_dir is not None
+    found = checked(task.image_dir, run_settings(task))
+    check_processor(found.settings)
+    return found
 
 
 def check_settings(app_config: Any) -> None:
@@ -327,10 +345,9 @@ def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
 BANNER = "Stage 1: classify, the document type of each page (GPU)"
 
 
-def start(task: StageSettings, checked: Settings) -> str:
+def start(task: StageSettings, checked: Checked) -> str:
     """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
-    assert task.image_dir is not None
     start_afresh(task.clear_previous_output, task.classifications)
     started = time.time()
-    run(task.image_dir, task.classifications, checked, given_type=task.given_type)
+    run(task.classifications, checked, given_type=task.given_type)
     return f"Classification complete ({int(time.time() - started)}s)."

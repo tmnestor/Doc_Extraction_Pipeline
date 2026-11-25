@@ -29,7 +29,7 @@ TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [
 
 
 def run(bench: Bench, output: Path, model: str) -> Path:
-    return split.run(bench.pages, output, split_checked(model, bench.config))
+    return split.run(output, split_checked(model, bench.config, bench.pages))
 
 
 def names_in(path: Path) -> list[str]:
@@ -183,11 +183,11 @@ def test_split_carries_on_though_a_photograph_it_had_finished_has_gone(
     shutil.copytree(bench.pages, photographs)
     bench.processor.stop_at_call = 2
     with pytest.raises(Stopped):
-        split.run(photographs, output, split_checked(ONE_ENGINE, bench.config))
+        split.run(output, split_checked(ONE_ENGINE, bench.config, photographs))
     bench.processor.stop_at_call = None
     (photographs / bench.names[0]).unlink()
 
-    split.run(photographs, output, split_checked(ONE_ENGINE, bench.config))
+    split.run(output, split_checked(ONE_ENGINE, bench.config, photographs))
 
     # Its record is kept, after those of the photographs that are still there, and so is its image.
     assert names_in(output / "splits.jsonl") == [*bench.names[1:], bench.names[0]]
@@ -300,9 +300,8 @@ def test_with_an_engine_on_each_card_the_stage_stops_when_the_engine_stops_answe
 
 def test_a_run_of_split_given_the_runs_folder_notes_a_row_of_its_time(bench: Bench, tmp_path: Path) -> None:
     split.run(
-        bench.pages,
         tmp_path / "out" / "split",
-        split_checked(ONE_ENGINE, bench.config),
+        split_checked(ONE_ENGINE, bench.config, bench.pages),
         timing=tmp_path / "out",
     )
 

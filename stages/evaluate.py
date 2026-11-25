@@ -24,7 +24,7 @@ from common.stage_settings import StageSettings
 from common.stage_timing import RunTime, read_stage_timings, run_time
 
 from . import records as records_of
-from .io import read_jsonl, start_afresh, write_jsonl
+from .io import read_input, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +85,7 @@ def headline(
     )
 
 
-def run(
-    cleaned_extractions_path: Path,
-    ground_truth: Path,
-    output_dir: Path,
-) -> Path:
+def run(checked: "Checked", output_dir: Path) -> Path:
     """Evaluate cleaned extractions against ground truth.
 
     For each record in cleaned_extractions.jsonl:
@@ -98,26 +94,13 @@ def run(
       3. Write per-image evaluation results to evaluation_results.jsonl
 
     Args:
-        cleaned_extractions_path: Path to cleaned_extractions.jsonl from Stage 3.
-        ground_truth: The answer key, a JSON lines file.
+        checked: The cleaned records of Stage 3 and the answer key, read: what ``checked`` gave.
         output_dir: Directory for evaluation output files.
 
     Returns:
         Path to the written evaluation_results.jsonl.
     """
-    # Read cleaned extractions
-    records = read_jsonl(cleaned_extractions_path)
-    if not records:
-        msg = f"No records found in {cleaned_extractions_path}"
-        raise FileNotFoundError(msg)
-
-    logger.info(
-        "Read %d cleaned extractions from %s",
-        len(records),
-        cleaned_extractions_path,
-    )
-
-    answers = scoring.load_answer_key(Path(ground_truth))
+    records, answers, ground_truth = checked.records, checked.answers, checked.ground_truth
 
     # Evaluate each record
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -322,20 +305,46 @@ def _print_summary_table(
 BANNER = "Stage 4: evaluate, the fields scored against the answer key (CPU)"
 
 
-def check(task: StageSettings) -> None:
-    """Read and check everything the stage will use: the schema file, with its thresholds. Nothing is
-    written.
+@dataclass(frozen=True)
+class Checked:
+    """What the stage is run with, read and checked."""
+
+    # The cleaned records, as the clean stage left them.
+    records: list[dict[str, Any]]
+    # The answer key: a page's file name to its answer.
+    answers: dict[str, dict[str, Any]]
+    ground_truth: Path
+
+
+def checked(cleaned_extractions_path: Path, ground_truth: Path) -> Checked:
+    """The cleaned records and the answer key, read, and the schema file with its thresholds checked.
+
+    The one place the stage reads what it is run with. What it gives is what ``run`` is handed.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A file of
+            cleaned records, or an answer key, that is not there or cannot be read is one such: until
+            26 November 2026 each ended the task with a traceback.
+    """
+    get_field_schema()
+    records = read_input(cleaned_extractions_path, written_by="clean")
+    logger.info("Read %d cleaned extractions from %s", len(records), cleaned_extractions_path)
+    return Checked(records, scoring.load_answer_key(Path(ground_truth)), Path(ground_truth))
+
+
+def check(task: StageSettings) -> Checked:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
-    get_field_schema()
-
-
-def start(task: StageSettings, checked: None) -> str:
-    """Run the stage for a task, and give the line that says it is done."""
     assert task.ground_truth is not None
+    return checked(task.cleaned_extractions, task.ground_truth)
+
+
+def start(task: StageSettings, checked: Checked) -> str:
+    """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
     task.evaluation_dir.mkdir(parents=True, exist_ok=True)
     start_afresh(task.clear_previous_output, task.evaluation_dir / "evaluation_results.jsonl")
-    run(task.cleaned_extractions, task.ground_truth, task.evaluation_dir)
+    run(checked, task.evaluation_dir)
     return "Evaluation complete."

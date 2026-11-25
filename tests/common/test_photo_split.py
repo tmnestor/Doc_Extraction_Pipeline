@@ -55,7 +55,7 @@ def run(image_dir: Path, output_dir: Path) -> Path:
     def never() -> Any:
         raise AssertionError("with the photo split off the run's settings are not asked for")
 
-    return run_the_stage(image_dir, output_dir, checked(RAW, RUN_CONFIG, never))
+    return run_the_stage(output_dir, checked(RAW, RUN_CONFIG, never, image_dir))
 
 
 def reply_for(*boxes: list[int]) -> str:

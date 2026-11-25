@@ -38,7 +38,7 @@ def run_on(tmp_path: Path, records: list[dict], answered: list[str]) -> Path:
     extractions.write_text("".join(json.dumps(record) + "\n" for record in records))
     key = tmp_path / "ground_truth.jsonl"
     key.write_text("".join(json.dumps({"filename": name, **GOOD}) + "\n" for name in answered))
-    return evaluate.run(extractions, key, tmp_path / "evaluation")
+    return evaluate.run(evaluate.checked(extractions, key), tmp_path / "evaluation")
 
 
 def test_a_run_with_every_page_scored_has_no_row_for_pages_left_out() -> None:

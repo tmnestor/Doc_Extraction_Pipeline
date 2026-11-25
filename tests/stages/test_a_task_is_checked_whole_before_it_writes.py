@@ -145,8 +145,8 @@ def test_the_runner_checks_a_task_before_it_notes_it_and_starts_it(
 def test_checking_a_task_writes_nothing(bench: Bench, tmp_path: Path, name: str) -> None:
     out = tmp_path / "out"
     for earlier in TASKS[1 : max(TASKS.index(name), 1)]:
-        if earlier in ("classify", "extract"):
-            starter.run_task(task(bench, earlier, out))
+        starter.run_task(task(bench, earlier, out))
+    bench.answer_key(tmp_path / "ground_truth.jsonl")
     before = {path: path.read_bytes() for path in out.rglob("*") if path.is_file()} if out.is_dir() else {}
     engines = bench.engines_started
 

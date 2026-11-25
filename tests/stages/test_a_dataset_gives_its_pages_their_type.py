@@ -23,7 +23,7 @@ from stages.io import read_jsonl
 
 def given(bench: Bench, output: Path, kind: str, model: str = ONE_ENGINE) -> Path:
     return classify.run(
-        bench.pages, output, classify.checked(run_settings(model, bench.config)), given_type=kind
+        output, classify.checked(bench.pages, run_settings(model, bench.config)), given_type=kind
     )
 
 

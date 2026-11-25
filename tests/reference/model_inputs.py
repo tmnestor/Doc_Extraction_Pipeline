@@ -231,12 +231,14 @@ def run_settings(model: str, config: Path) -> Any:
     return Settings.load({"model_type": model}, config_path=config)
 
 
-def split_checked(model: str, config: Path) -> Any:
-    """What the split stage's check gives for a model and a settings file."""
+def split_checked(model: str, config: Path, photographs: Path) -> Any:
+    """What the split stage's check gives for a model, a settings file and a folder of photographs."""
     from common.settings import read_settings_file
     from stages import split
 
-    return split.checked(read_settings_file(config), config, lambda: run_settings(model, config))
+    return split.checked(
+        read_settings_file(config), config, lambda: run_settings(model, config), photographs
+    )
 
 
 def test_config(folder: Path) -> Path:
@@ -305,19 +307,18 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
     with recording(recorder, folder / "model"):
         recorder.stage = "classify"
         settings = run_settings(model, config)
-        classifications = classify.run(pages, output / "classifications.jsonl", classify.checked(settings))
+        classifications = classify.run(output / "classifications.jsonl", classify.checked(pages, settings))
         recorder.stage = "extract"
         extract.run(output / "raw_extractions.jsonl", extract.checked(classifications, settings))
         recorder.stage = "split"
-        split.run(pages, output / "split", split_checked(model, config))
+        split.run(output / "split", split_checked(model, config, pages))
         # A dataset whose pages are all of one type: given their type by classify, which asks no
         # model, and read by extract by the prompt of that type.
         receipts = folder / "receipts"
         recorder.stage = "dataset_sroie_classify"
         given = classify.run(
-            receipts,
             output / "dataset" / "classifications.jsonl",
-            classify.checked(settings),
+            classify.checked(receipts, settings),
             given_type="SROIE_RECEIPT",
         )
         recorder.stage = "dataset_sroie"

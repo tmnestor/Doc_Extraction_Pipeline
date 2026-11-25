@@ -45,8 +45,8 @@ def replay(run: str, into: Path) -> None:
         into: Empty folder to write `cleaned_extractions.jsonl` and `evaluation_results.jsonl` into.
     """
     raw = REFERENCE / run / "raw_extractions.jsonl"
-    cleaned = clean.run(raw, into / "cleaned_extractions.jsonl")
-    evaluate.run(cleaned, RUNS[run], into)
+    cleaned = clean.run(clean.checked(raw), into / "cleaned_extractions.jsonl")
+    evaluate.run(evaluate.checked(cleaned, RUNS[run]), into)
 
 
 def comparable(path: Path) -> list[dict[str, Any]]:

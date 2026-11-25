@@ -42,7 +42,7 @@ from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
-from .io import Journal, in_the_order, read_completed_images, take_out
+from .io import Journal, discover_images, in_the_order, no_pages_in, read_completed_images, take_out
 from .records import failed
 
 logger = logging.getLogger(__name__)
@@ -273,10 +273,16 @@ class Checked:
     finder: Any | None
     # The run's settings. None when the photo split is off: no model is asked, and none is looked for.
     settings: Settings | None
+    # Every image of the folder, in the order of their names. The selection the later stages apply
+    # (document types, a limit on the number of images) is theirs to apply, to what this stage writes.
+    photographs: list[Path]
 
 
-def checked(raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Settings]) -> Checked:
-    """The photo split settings, the sheet finder's, and the run's settings, each read and checked.
+def checked(
+    raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Settings], image_dir: Path
+) -> Checked:
+    """The photo split settings, the sheet finder's, the run's settings and the photographs, each read
+    and checked.
 
     The one place the stage works its settings out. What it gives is what ``run`` is handed: nothing
     is read or worked out a second time.
@@ -286,6 +292,7 @@ def checked(raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Se
         config_path: That file, named in each error.
         settings_of: Gives the run's settings. Called only when the photo split is on: with it off no
             model is asked, and a model's folder that is not there must not stop the stage.
+        image_dir: The folder of photographs.
 
     Raises:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
@@ -293,8 +300,12 @@ def checked(raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Se
     from common.photo_split import photo_split_config_from
 
     split_config = photo_split_config_from(raw, config_path=config_path)
+    photographs = list(discover_images(image_dir))
+    if not photographs:
+        raise no_pages_in(image_dir, "")
+    logger.info("Found %d photographs in %s", len(photographs), image_dir)
     if not split_config.enabled:
-        return Checked(split_config, None, None)
+        return Checked(split_config, None, None, photographs)
     settings = settings_of()
     finder = None
     if split_config.straighten:
@@ -302,7 +313,7 @@ def checked(raw: dict[str, Any], config_path: Path, settings_of: Callable[[], Se
 
         finder_section = raw.get("pipeline", {}).get("photo_split", {}).get("finder")
         finder = finder_params_from(finder_section, config_path=config_path)
-    return Checked(split_config, finder, settings)
+    return Checked(split_config, finder, settings, photographs)
 
 
 def check(task: StageSettings) -> Checked:
@@ -312,13 +323,14 @@ def check(task: StageSettings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     raw = task.raw if task.raw is not None else read_settings_file(task.config_path)
-    found = checked(raw, task.config_path, lambda: run_settings(task))
+    assert task.image_dir is not None
+    found = checked(raw, task.config_path, lambda: run_settings(task), task.image_dir)
     if found.settings is not None:
         check_processor(found.settings)
     return found
 
 
-def run(image_dir: Path, output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Path:
+def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Path:
     """Split every photograph in a directory, writing images/ and splits.jsonl.
 
     A run carries on from what an earlier one left (``stages.carry_on``): photographs already dealt with
@@ -328,29 +340,16 @@ def run(image_dir: Path, output_dir: Path, checked: Checked, *, timing: Path | N
     that stops part way keeps both, and the next run has nothing to do about those photographs again.
 
     Args:
-        image_dir: Directory containing the photographs.
         output_dir: Directory to write images/ and splits.jsonl into.
-        checked: The photo split settings, the finder's and the run's, checked: what ``checked`` gave.
+        checked: The photo split settings, the finder's and the run's, and the photographs: what
+            ``checked`` gave.
         timing: The run's output folder, to note a row of the stage's time in. None: no row.
 
     Returns:
         The directory the later stages read their images from.
-
-    Raises:
-        FileNotFoundError: The directory holds no images.
-        common.photo_split.PhotoSplitConfigError: The photo split settings are missing or malformed.
     """
-    from stages.io import discover_images
-
     split_config, finder, app_cfg = checked.split_config, checked.finder, checked.settings
-
-    # Every image in the directory is examined. The selection the later stages apply (document types, a
-    # limit on the number of images) is theirs to apply, to what this stage writes.
-    photographs = list(discover_images(image_dir))
-    if not photographs:
-        msg = f"No images found in {image_dir}"
-        raise FileNotFoundError(msg)
-    logger.info("Found %d photographs in %s", len(photographs), image_dir)
+    photographs = checked.photographs
 
     images_dir = output_dir / IMAGES_DIR
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -458,10 +457,8 @@ def start(task: StageSettings, checked: Checked) -> str:
 
     The split stage has no earlier output deleted for it: a photograph already dealt with is passed over.
     """
-    assert task.image_dir is not None
     task.split_dir.mkdir(parents=True, exist_ok=True)
     images = run(
-        task.image_dir,
         task.split_dir,
         checked,
         # The row of the stage's time goes with the other stages', in the run's output folder.

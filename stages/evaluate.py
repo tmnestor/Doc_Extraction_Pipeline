@@ -266,11 +266,13 @@ def _print_summary_table(
 
     num = len(eval_results)
     total_processing = sum(r.get("processing_time", 0.0) for r in cleaned_records)
-    # The stages' rows of time cover the pages that were read, which a page left unread is not among.
+    # Each stage's row of time is judged by what that stage dealt with: classify every page, extract
+    # the pages that were read, which a page left unread is not among.
     time = run_time(
         read_stage_timings(output_dir.parent),
         per_image_total=total_processing,
-        images=num - scores.not_read,
+        pages=num,
+        read=num - scores.not_read,
     )
 
     doc_types: dict[str, int] = {}

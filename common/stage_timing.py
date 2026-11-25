@@ -175,8 +175,11 @@ class RunTime:
     # The model's time over the stages, or None if nothing was recorded. Never 0.0.
     model_seconds: float | None
     source: str
-    # The stages' own rows, when they are what the time is from; empty otherwise.
+    # The rows of the stages that read pages, when they are what the time is from; empty otherwise.
     stages: tuple[StageTiming, ...]
+    # The rows of any other stage, such as split, which reads photographs. They are in no figure above:
+    # a photograph is not a page, and a rate of pages a minute is of the stages that read pages.
+    others: tuple[StageTiming, ...] = ()
 
     @property
     def wall_clock(self) -> float:
@@ -195,12 +198,16 @@ class RunTime:
         return ", ".join(f"{t.stage}={t.execution_mode}" for t in self.stages)
 
 
-def run_time(timings: list[StageTiming], *, per_image_total: float, images: int) -> RunTime:
+def run_time(timings: list[StageTiming], *, per_image_total: float, pages: int, read: int) -> RunTime:
     """A run's time on the cards, from the best record there is.
 
     1. **The stages' own rows.** The model's time, apart from engine start, and right for either
-       arrangement of engines. Set aside as stale when the rows cover another number of pages than is
-       being scored, which is what an output folder scored again after a part run would give.
+       arrangement of engines. Set aside as stale when a row covers another number of pages than its
+       own stage dealt with, which is what an output folder scored again after a part run would give.
+       Each row is judged by itself: ``classify`` gives every page a type, and ``extract`` reads those
+       the settings do not say to leave. Until 25 November 2026 the mean of the two rows was set beside
+       the pages read, so two pages left unread made the rows of a whole run stale. A row of any other
+       stage is judged by nothing here and kept apart (``RunTime.others``).
     2. **The sum of the pages' own times.** With an engine on each card this is the work done and not
        the time taken, so it understates the rate by about the number of cards. It is labelled so.
 
@@ -209,19 +216,28 @@ def run_time(timings: list[StageTiming], *, per_image_total: float, images: int)
     Args:
         timings: The rows of the run's output folder.
         per_image_total: The sum of the scored pages' own times.
-        images: How many pages are being scored.
+        pages: How many pages the run has a record of: what ``classify`` dealt with.
+        read: How many of them were read: what ``extract`` dealt with.
     """
-    if timings and sum(t.inference_seconds for t in timings) > 0:
-        covered = sum(t.images for t in timings) // len(timings)
-        if covered == images:
+    covers = {"classify": pages, "extract": read}
+    of_the_pages = [t for t in timings if t.stage in covers]
+    others = tuple(t for t in timings if t.stage not in covers)
+    if of_the_pages and sum(t.inference_seconds for t in of_the_pages) > 0:
+        wrong = [t for t in of_the_pages if t.images != covers[t.stage]]
+        if not wrong:
             return RunTime(
-                sum(t.inference_seconds for t in timings), "stage timing (this run)", tuple(timings)
+                sum(t.inference_seconds for t in of_the_pages),
+                "stage timing (this run)",
+                tuple(of_the_pages),
+                others,
             )
         logger.warning(
-            "Stage timing covers %d images but %d are being evaluated: treating it as stale",
-            covered,
-            images,
+            "Stage timing is stale and is set aside: %s",
+            "; ".join(
+                f"the row of {t.stage} covers {t.images} images where {covers[t.stage]} are being evaluated"
+                for t in wrong
+            ),
         )
     if per_image_total > 0:
-        return RunTime(per_image_total, "per-image sum (unreliable under data parallelism)", ())
-    return RunTime(None, "not recorded", ())
+        return RunTime(per_image_total, "per-image sum (unreliable under data parallelism)", (), others)
+    return RunTime(None, "not recorded", (), others)

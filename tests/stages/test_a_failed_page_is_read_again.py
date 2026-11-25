@@ -435,8 +435,10 @@ def test_split_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Pat
     with pytest.raises(StageStopped):
         split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
 
-    # The first call's two photographs were dealt with and are kept.
-    assert sorted(records_by_name(output / "splits.jsonl")) == bench.names[:2]
+    # The first call's two photographs were dealt with and are kept: the model's replies in the
+    # stage's journal, and the images written.
+    assert sorted(records_by_name(output / "splits.jsonl.journal")) == bench.names[:2]
+    assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:2]
 
 
 # --- the setting ----------------------------------------------------------------------------------------

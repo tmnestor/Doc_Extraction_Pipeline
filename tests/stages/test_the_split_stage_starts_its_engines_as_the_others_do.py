@@ -10,7 +10,7 @@ them by one function, whichever way the engines are arranged, and each reply is 
 The photographs are blank images made by the bench, and every reply is invented.
 """
 
-import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,7 @@ from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
 from common.engine_calls import StageStopped
 from common.settings import Settings
 from stages import split
-from stages.io import read_jsonl
+from stages.io import Journal, read_jsonl
 
 TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [0, 520, 1000, 1000], "label": "receipt"}]'
 
@@ -92,26 +92,86 @@ def test_the_records_are_in_the_photographs_order_whatever_order_the_cards_answe
     assert not list(output.glob("*.rewriting"))
 
 
-def test_a_file_already_in_the_photographs_order_is_left_as_it_is(tmp_path: Path) -> None:
-    records = tmp_path / "splits.jsonl"
-    # Written with spacing of its own, which a rewrite would not keep.
-    records.write_text('{"image_name":   "a.png"}\n{"image_name": "b.png"}\n')
-    before = records.read_text()
+def test_a_file_an_earlier_version_left_half_written_is_carried_on_from(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """Before 25 November 2026 the stage wrote each record straight to its file, with no journal, in
+    the order the cards answered.
+    """
+    whole = tmp_path / "whole"
+    run(bench, whole, ONE_ENGINE)
+    lines = (whole / "splits.jsonl").read_text().splitlines(keepends=True)
+    output = tmp_path / "split"
+    (output / "images").mkdir(parents=True)
+    (output / "splits.jsonl").write_text(lines[3] + lines[0])
+    for name in (bench.names[3], bench.names[0]):
+        shutil.copy2(whole / "images" / name, output / "images" / name)
+    bench.processor.calls.clear()
 
-    split._in_the_photographs_order(records, [tmp_path / "a.png", tmp_path / "b.png"])
+    run(bench, output, ONE_ENGINE)
 
-    assert records.read_text() == before
+    assert bench.processor.calls == [["2 photographs"], ["2 photographs"]]
+    assert (output / "splits.jsonl").read_text() == (whole / "splits.jsonl").read_text()
+    assert images_in(output / "images") == bench.names
 
 
-def test_records_out_of_order_are_put_in_order_with_nothing_lost(tmp_path: Path) -> None:
-    records = tmp_path / "splits.jsonl"
-    lines = [{"image_name": name, "action": "pass_through"} for name in ("c.png", "a.png", "b.png")]
-    records.write_text("".join(json.dumps(line) + "\n" for line in lines))
+def two_receipts_in_each(bench: Bench) -> None:
+    """Every photograph is answered as holding two receipts, by a call the bench still counts."""
 
-    split._in_the_photographs_order(records, [tmp_path / name for name in ("a.png", "b.png", "c.png")])
+    def replies(images: list[Any], prompts: list[str], max_tokens: int) -> list[str]:
+        bench.processor._called([f"{len(images)} photographs"])
+        return [TWO_RECEIPTS] * len(images)
 
-    assert names_in(records) == ["a.png", "b.png", "c.png"]
-    assert sorted(read_jsonl(records), key=str) == sorted(lines, key=str)
+    bench.processor.ask = replies  # type: ignore[method-assign]
+
+
+def same_records_and_images(stopped: Path, straight: Path) -> None:
+    assert (stopped / "splits.jsonl").read_text() == (straight / "splits.jsonl").read_text()
+    assert images_in(stopped / "images") == images_in(straight / "images")
+    for image in sorted((straight / "images").iterdir()):
+        assert (stopped / "images" / image.name).read_bytes() == image.read_bytes()
+    assert not (stopped / "splits.jsonl.journal").exists()
+
+
+def test_split_stopped_and_carried_on_writes_the_records_and_images_of_a_straight_run(
+    bench: Bench, tmp_path: Path
+) -> None:
+    two_receipts_in_each(bench)
+    straight, stopped = tmp_path / "straight", tmp_path / "stopped"
+    run(bench, straight, ONE_ENGINE)
+    bench.processor.stop_at_call = len(bench.processor.calls) + 2
+    with pytest.raises(Stopped):
+        run(bench, stopped, ONE_ENGINE)
+    bench.processor.stop_at_call = None
+
+    run(bench, stopped, ONE_ENGINE)
+
+    same_records_and_images(stopped, straight)
+
+
+def test_replies_one_card_had_given_are_acted_on_when_the_stage_carries_on(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """A stop between the cards: card 0's replies are in the journal.
+
+    The bench runs a worker inside the test's own process, so a run killed between the cards cannot be
+    staged by stopping it. What such a stop leaves is put there instead, by the stage's own function.
+    None of card 0's images are there, so this also shows that a reply recovered is acted on again.
+    """
+    two_receipts_in_each(bench)
+    straight, stopped = tmp_path / "straight", tmp_path / "stopped"
+    run(bench, straight, AN_ENGINE_ON_EACH_CARD)
+    settings = Settings.load({"model_type": AN_ENGINE_ON_EACH_CARD}, config_path=bench.config)
+    photographs = [bench.pages / name for name in bench.names]
+    stopped.mkdir()
+    with Journal(stopped / "splits.jsonl") as journal:
+        split.ask_about_photographs(bench.processor, photographs[0::2], settings, sink=journal)
+    bench.processor.calls.clear()
+
+    run(bench, stopped, AN_ENGINE_ON_EACH_CARD)
+
+    assert len(bench.processor.calls) == 2  # the three photographs left, dealt to the two cards
+    same_records_and_images(stopped, straight)
 
 
 # --- asking is apart from acting ------------------------------------------------------------------------
@@ -173,13 +233,20 @@ def test_with_an_engine_on_each_card_the_stage_stops_when_the_engine_stops_answe
     with pytest.raises(StageStopped, match="2 requests in a row failed"):
         run(bench, output, AN_ENGINE_ON_EACH_CARD)
 
-    # What was answered before the engine stopped was acted on, and is kept.
-    kept = read_jsonl(output / "splits.jsonl")
+    # What was answered before the engine stopped was acted on, and is kept: the replies in the
+    # stage's journal, which the card's worker handed its parent before the stop, and the images.
+    kept = read_jsonl(output / "splits.jsonl.journal")
     assert kept and not any(record.get("error") for record in kept[:2])
+    assert set(images_in(output / "images")) >= {record["image_name"] for record in kept[:2]}
 
     bench.processor.dead_from_attempt = None
+    bench.processor.calls.clear()
     run(bench, output, AN_ENGINE_ON_EACH_CARD)
 
     records = read_jsonl(output / "splits.jsonl")
     assert [record["image_name"] for record in records] == bench.names
     assert not any(record.get("error") for record in records)
+    assert not (output / "splits.jsonl.journal").exists()
+    # The photographs answered about before the stop were not asked about again.
+    asked_again = sum(int(call[0].split()[0]) for call in bench.processor.calls)
+    assert asked_again == len(bench.names) - sum(1 for record in kept if not record.get("error"))

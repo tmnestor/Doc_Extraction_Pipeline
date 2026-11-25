@@ -258,8 +258,11 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
     with pytest.raises(Stopped):
         split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
 
-    # Two calls of two photographs were asked, dealt with and written before the run stopped.
-    assert names_in(output / "splits.jsonl") == bench.names[:4]
+    # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
+    # the journal, their images are written, and the stage's own file is not yet there.
+    assert not (output / "splits.jsonl").exists()
+    assert names_in(output / "splits.jsonl.journal") == bench.names[:4]
+    assert "raw_response" in read_jsonl(output / "splits.jsonl.journal")[0]
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:4]
 
     bench.processor.stop_at_call = None
@@ -268,6 +271,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
 
     assert bench.processor.calls == [["2 photographs"]]
     assert names_in(output / "splits.jsonl") == bench.names
+    assert not (output / "splits.jsonl.journal").exists()
 
 
 # --- starting afresh ----------------------------------------------------------------------------------

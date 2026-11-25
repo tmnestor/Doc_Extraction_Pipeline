@@ -6,7 +6,8 @@ code, skips every page the first one finished and reports a score that is partly
 in the result shows it.
 
 So each of those stages writes down, in ``run_manifest.json`` in the output folder, what it was run with:
-the model, the folder of pages, and the commit of the code. A stage that finds its own earlier note, and
+the model, the folder of pages, the commit of the code, and the settings file with the SHA-256 of its
+contents. A stage that finds its own earlier note, and
 is about to carry on from that run's output, checks that it is the same run. If it is not, it stops
 before any work and says what differs.
 
@@ -17,6 +18,7 @@ checks nothing and writes its note anew. The clean and evaluate stages write ove
 and may be run again anywhere, so they leave no note and check none; they say what the notes hold.
 """
 
+import hashlib
 import json
 import logging
 import subprocess
@@ -49,6 +51,11 @@ class StageNote:
     uncommitted_changes: bool | None
     started: str
     last_run: str
+    # The settings file the stage read, and the SHA-256 of its contents. The commit says what the
+    # shipped file held, and a job may name a file of its own (``run_config``), which no commit does.
+    # None in a note written before 26 November 2026.
+    settings_file: str | None = None
+    settings_sha256: str | None = None
 
 
 def code_version(repository: Path) -> tuple[str, bool | None]:
@@ -75,6 +82,16 @@ def code_version(repository: Path) -> tuple[str, bool | None]:
         return UNKNOWN, None
     changed = git("status", "--porcelain", "--untracked-files=no")
     return commit, None if changed is None else bool(changed)
+
+
+def _sha256(file: Path | None) -> str | None:
+    """The SHA-256 of a file's contents; None if no file is given or it cannot be read."""
+    if file is None:
+        return None
+    try:
+        return hashlib.sha256(file.read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def read(output: Path) -> dict[str, StageNote]:
@@ -114,6 +131,7 @@ def check_and_note(
     image_dir: Path | str,
     repository: Path,
     starting_afresh: bool,
+    settings_file: Path | None = None,
     now: datetime | None = None,
 ) -> StageNote:
     """Check that a stage about to carry on in an output folder is the run that began there, and note it.
@@ -123,6 +141,8 @@ def check_and_note(
         stage: The stage, one of ``STAGES``.
         model: The model the stage is run with.
         image_dir: The folder of pages it reads.
+        settings_file: The settings file it reads, noted with the SHA-256 of its contents. A stage
+            that carries on with another file, or the same file changed, is allowed and says so.
         repository: The code's own folder, for its commit.
         starting_afresh: Whether the stage's earlier output has been deleted. Nothing is checked then.
         now: The time to note, or None for the present.
@@ -144,6 +164,8 @@ def check_and_note(
         uncommitted_changes=changed,
         started=moment,
         last_run=moment,
+        settings_file=None if settings_file is None else str(settings_file),
+        settings_sha256=_sha256(settings_file),
     )
     earlier = None if starting_afresh else notes.get(stage)
     if earlier is not None:
@@ -170,6 +192,17 @@ def check_and_note(
                 f"model={earlier.model}, image_dir={earlier.image_dir}, commit {earlier.commit}.\n"
                 f"How to fix: give this run a folder of its own in `output`. To replace the earlier "
                 f"{stage} output with this run's, {afresh}."
+            )
+        before, now_held = earlier.settings_sha256, this.settings_sha256
+        if before is not None and now_held is not None and before != now_held:
+            logger.warning(
+                "%s carries on with settings that are not the ones it began with: the settings file was "
+                "%s (SHA-256 %s) and is now %s (SHA-256 %s). The output is then of two sets of settings.",
+                stage,
+                earlier.settings_file,
+                before[:12],
+                this.settings_file,
+                now_held[:12],
             )
         this = StageNote(**{**asdict(this), "started": earlier.started})
     notes[stage] = this
@@ -213,5 +246,6 @@ def describe(output: Path) -> list[str]:
     return [
         f"{stage}: {note.model}, pages from {note.image_dir}, commit {note.commit}"
         f"{' with uncommitted changes' if note.uncommitted_changes else ''}, last run {note.last_run}"
+        f"{f', settings {note.settings_file} (SHA-256 {note.settings_sha256[:12]})' if note.settings_sha256 else ''}"
         for stage, note in read(output).items()
     ]

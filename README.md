@@ -337,7 +337,8 @@ done
 
 ## What a job may set
 
-Each setting is taken from the environment if it is set there, and otherwise from `config/run_config.yml`.
+Each setting is taken from the environment if it is set there, and otherwise from the settings file:
+`config/run_config.yml`, or the file the job names in `run_config`.
 A variable that is unset, empty or the word `None` counts as not set. A setting a task needs that is in
 neither place stops the run before any work is done, with a message that says what is missing, where to put
 it, what it should look like and how to mend it.
@@ -355,6 +356,7 @@ is asked only for the folders it uses: `clean` and `evaluate` for no folder of p
 | `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
 | `dataset` | A dataset of the settings file, whose pages are all of one type: `classify` gives each page that type and asks no model, and the dataset's folder of pages is read unless `image_dir` is set | optional | a block under `pipeline.datasets` | new |
+| `run_config` | A settings file of the job's own, read whole in place of `config/run_config.yml` | optional | none: unset, the shipped file is read | new |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | none: the default is in `entrypoint.sh` | `LMM_CONDA_ENV` |
@@ -373,6 +375,32 @@ throughout:
 
 - **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
 - **A key the code does not know is refused.** A misspelt key cannot sit in the file doing nothing.
+
+### A run with settings of its own
+
+The shipped file is in the code's folder, and a job often cannot write there: under a pipeline the code is
+read-only, and the storage a job can write to is mounted beside it. So a setting is never changed by editing
+the shipped file in place. Copy it to storage the job can read, change what the run needs changed, and name
+the copy:
+
+```bash
+cp config/run_config.yml /data/run_20261126/run_config.yml
+# edit /data/run_20261126/run_config.yml
+KFP_TASK=classify run_config=/data/run_20261126/run_config.yml model=gemma4-31b-w4a16-vllm \
+  image_dir=/data/pages output=/data/run_20261126 DOC_EXTRACT_LOG_DIR=/data/run_20261126/logs \
+  bash entrypoint.sh
+```
+
+- **The file named is the whole of the settings.** Nothing is merged from the shipped file. It is read and
+  checked exactly as the shipped file is, so a key it leaves out is missing and a key the code does not know
+  is refused. What a run was set to do can be read from that one file.
+- **Every task of a run names the same file.** Each task that uses the cards notes the file it read, and
+  the SHA-256 of its contents, in `run_manifest.json`. A task that carries on with other settings than it
+  began with is allowed, and says so.
+- **The log folder comes from the same file**, when the job does not set `DOC_EXTRACT_LOG_DIR`.
+
+The document types, their fields and the prompts are not settings of a run: they are part of the code, in
+`config/field_definitions.yaml` and `prompts/`, and are named by the commit.
 
 ## Adding a New Document Class
 

@@ -62,6 +62,9 @@ def test_a_stage_notes_what_it_was_run_with(tmp_path: Path, commit: dict[str, An
                 "uncommitted_changes": False,
                 "started": "2031-02-09T10:15:00",
                 "last_run": "2031-02-09T10:15:00",
+                # No settings file was given to note here: tests/common/test_a_job_names_its_settings_file.py.
+                "settings_file": None,
+                "settings_sha256": None,
             }
         }
     }

@@ -10,8 +10,10 @@
 #     python3 -m stages
 #
 # Which task, which model and which folders are worked out there, in Python
-# (common/stage_settings.py), from the environment first and config/run_config.yml
-# second. This script decides none of it.
+# (common/stage_settings.py), from the environment first and the settings file second.
+# The settings file is config/run_config.yml beside this script, unless the job names its
+# own in run_config: this folder may be read-only, and a job changes a setting by naming a
+# file where it can write, not by editing this one. This script decides none of it.
 #
 # The variables a job may set:
 #   KFP_TASK                 split, classify, extract, clean or evaluate
@@ -20,6 +22,7 @@
 #   output                   the folder the stages write to
 #   ground_truth             the answer key, for evaluate
 #   dataset                  a dataset of the settings file, whose pages are all of one type
+#   run_config               a settings file of the job's own, read whole in place of config/run_config.yml
 #   CLEAR_PREV_OUTPUT        true = delete the stage's earlier output first; default false
 #   DOC_EXTRACT_LOG_DIR      the folder for the log
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
@@ -82,8 +85,10 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # while still being printed to the console (so KFP UI shows it too).
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
 #
-# Priority: DOC_EXTRACT_LOG_DIR env var > run_config.yml bootstrap.logging.log_dir > fail
+# Priority: DOC_EXTRACT_LOG_DIR env var > bootstrap.logging.log_dir of the settings file > fail
 # No silent fallback: in KFP, pod-local writes are ephemeral/forbidden.
+# CONFIG_FILE is the shipped settings file. The job's own, if run_config names one, is read in
+# its place by the Python below and by the task: this script does not choose between them.
 CONFIG_FILE="./config/run_config.yml"
 
 # ---- The conda environment's own python ---- #
@@ -103,7 +108,8 @@ if [[ ! -x "$CONDA_PY" ]]; then
   echo "           export DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4"
   exit 1
 fi
-# The log folder: DOC_EXTRACT_LOG_DIR, else bootstrap.logging.log_dir in the settings file, else stop.
+# The log folder: DOC_EXTRACT_LOG_DIR, else bootstrap.logging.log_dir in the settings file (the job's
+# own if it names one, else the shipped one), else stop.
 # On failure the command prints the reason, which is then what LOG_DIR holds.
 LOG_DIR="$("$CONDA_PY" -m common.stage_settings "$CONFIG_FILE")" || { echo "$LOG_DIR"; exit 1; }
 mkdir -p "$LOG_DIR"

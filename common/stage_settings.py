@@ -8,6 +8,9 @@ should look like and how to mend it.
 A variable that is unset, empty, or the word ``None`` counts as not set: a pipeline manifest passes a blank
 parameter as the text "None".
 
+The settings file is the shipped one, ``config/run_config.yml``, unless the job names its own in the
+variable ``run_config`` (``settings_file``).
+
 Run as a module it prints the log folder, which the entry script needs before it starts anything else:
 
     python -m common.stage_settings config/run_config.yml
@@ -182,6 +185,45 @@ def _refuse_old_names(environ: Mapping[str, str]) -> None:
 
 
 _MEMORY_SHARE = "DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+# The variable by which a job names its own settings file.
+SETTINGS_FILE = "run_config"
+
+
+def settings_file(environ: Mapping[str, str], shipped: Path) -> Path:
+    """The settings file a task is worked out from: the one the job names, else the shipped one.
+
+    The shipped file is in the code's own folder, and a job cannot write there: under a pipeline the
+    code is read-only, and storage a job can write to is mounted beside it. Until 26 November 2026
+    that file was the only one read, so any setting that is not one of the job's variables could be
+    changed only by editing the code's folder. A job now names a settings file of its own, anywhere it
+    can read, in the variable ``run_config``.
+
+    The file named is the whole of the settings and stands in the shipped file's place. Nothing is
+    merged from the shipped file: it is read and checked exactly as the shipped file is, so a key it
+    leaves out is missing, and what a run was set to do can be read from that one file.
+
+    Args:
+        environ: The job's environment.
+        shipped: The settings file in the code's folder, read when the job names none.
+
+    Raises:
+        ConfigError: If the job names a file that is not there.
+    """
+    named = _set(environ, SETTINGS_FILE)
+    if named is None:
+        return shipped
+    path = Path(named)
+    if not path.is_file():
+        raise ConfigError(
+            f"What: the settings file the job names does not exist, or is not a file: {named}\n"
+            f"Where: the environment variable {SETTINGS_FILE}.\n"
+            f"Expected: a whole settings file the job can read, with every key the shipped file has, "
+            f"e.g. {SETTINGS_FILE}=/data/run_20261126/run_config.yml. Unset, the shipped file is read: "
+            f"{shipped}\n"
+            f"How to fix: copy the shipped file to storage the job can read, change what the run needs "
+            f"changed, and name the copy in {SETTINGS_FILE}; or leave {SETTINGS_FILE} unset."
+        )
+    return path
 
 
 def _check_memory_share(environ: Mapping[str, str]) -> None:
@@ -354,12 +396,16 @@ def _start_afresh(environ: Mapping[str, str]) -> bool:
 
 
 def main() -> int:
-    """Print the log folder, or the reason it cannot be worked out."""
+    """Print the log folder, or the reason it cannot be worked out.
+
+    The file given is the shipped settings file. The job's own, if it names one, is read in its place
+    here, as it is when the task is worked out: the entry script decides neither.
+    """
     if len(sys.argv) != 2:
-        print("usage: python -m common.stage_settings <settings file>")
+        print("usage: python -m common.stage_settings <the shipped settings file>")
         return 2
     try:
-        print(log_dir(os.environ, Path(sys.argv[1])))
+        print(log_dir(os.environ, settings_file(os.environ, Path(sys.argv[1]))))
     except ConfigError as err:
         print(f"FATAL: the log folder cannot be worked out.\n{err}")
         return 1

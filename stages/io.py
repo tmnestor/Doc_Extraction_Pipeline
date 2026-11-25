@@ -7,7 +7,7 @@ so that partial output survives crashes (critical at 10K images).
 import json
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -15,14 +15,28 @@ from typing import Any
 logger = logging.getLogger("stages")
 
 
-def write_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
-    """Write records to a JSONL file (atomic: writes all at once).
+def _put_in_place(path: Path, lines: Iterable[str]) -> None:
+    """Write a file beside itself and move it into place whole.
 
-    Returns number of records written.
+    A reader finds the file as it was or as it is to be, and never half of it: a run stopped while
+    writing leaves the earlier file untouched.
     """
-    with path.open("w") as f:
-        for record in records:
-            f.write(json.dumps(record, default=str) + "\n")
+    rewritten = path.with_name(path.name + ".rewriting")
+    with rewritten.open("w") as f:
+        for line in lines:
+            f.write(line)
+    os.replace(rewritten, path)
+
+
+def write_jsonl(path: Path, records: list[dict[str, Any]]) -> int:
+    """Write a stage's records as its output, in the place of any earlier output.
+
+    The file is put in place whole. Until 25 November 2026 it was written where it stood, so a run
+    stopped while writing left half a file under the name the next stage reads.
+
+    Returns the number of records written.
+    """
+    _put_in_place(path, (json.dumps(record, default=str) + "\n" for record in records))
     return len(records)
 
 
@@ -99,6 +113,10 @@ def start_afresh(asked_for: bool, *files: Path) -> None:
                 logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
 
 
+# In a journal's line, the record a stage made of the reply the line holds.
+_RECORD_MADE = "record_made"
+
+
 class Journal:
     """A stage's records, kept beside its output as each is made, until the stage has written its output.
 
@@ -111,8 +129,11 @@ class Journal:
     ``recover`` adds those records to the output, in the pages' own order, and the stage then carries on
     from them like any other earlier output.
 
-    The output itself is never written out of order: the order of its pages decides how a later stage
-    groups them into engine calls, which must not depend on which card finished first.
+    The output itself is never left out of order: the order of its pages decides how a later stage
+    groups them into engine calls, which must not depend on which card finished first, nor on whether
+    the run was stopped on its way. ``stages.carry_on`` is the one place a journal is used: it adds a
+    run's records to the output and puts the whole in order (``in_the_order``) before it removes the
+    journal.
     """
 
     def __init__(self, output_path: Path) -> None:
@@ -123,12 +144,18 @@ class Journal:
     def recover(self, order: list[str]) -> list[dict[str, Any]]:
         """Add what an interrupted run had read to the output, and remove the journal.
 
+        What is added for a line is the record the stage made of it, where the line holds one
+        (``write``), and otherwise the line itself. Nothing is done a second time about a reply, and
+        nothing the reply was about need still be there.
+
+        The output is put in place whole, with what is recovered in it and in the pages' order.
+
         Args:
-            order: The names of the stage's pages, in the stage's own order. The recovered records are
-                added in that order, whatever order they were made in.
+            order: The names of the stage's pages, in the stage's own order.
 
         Returns:
-            The records added. Empty when there is no journal.
+            What the journal kept of each record recovered, without the record made of it: the reply
+            and its time. Empty when there is no journal.
         """
         if not self.path.is_file():
             return []
@@ -144,11 +171,18 @@ class Journal:
                 kept.setdefault(name, record)
         place = {name: position for position, name in enumerate(order)}
         records = sorted(kept.values(), key=lambda record: place.get(record["image_name"], len(place)))
+        kept_of_each = [{k: v for k, v in record.items() if k != _RECORD_MADE} for record in records]
         if records:
-            self.output.parent.mkdir(parents=True, exist_ok=True)
-            append_jsonl(self.output, records)
+            in_the_order(
+                self.output,
+                order,
+                adding=[
+                    record.get(_RECORD_MADE, kept)
+                    for record, kept in zip(records, kept_of_each, strict=True)
+                ],
+            )
         self.path.unlink()
-        return records
+        return kept_of_each
 
     def __enter__(self) -> "Journal":
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,12 +195,20 @@ class Journal:
             self._file.close()
             self._file = None
 
-    def write(self, record: dict[str, Any]) -> None:
-        """Keep one record, on disk before this returns."""
+    def write(self, record: dict[str, Any], made: dict[str, Any] | None = None) -> None:
+        """Keep one record, on disk before this returns.
+
+        Args:
+            record: What the stage's reading function gave: for most stages the stage's own record.
+            made: The record the stage made of it, for a stage whose output holds what was done about
+                a reply and not the reply. It is kept beside the reply, so that ``recover`` adds it
+                to the output without anything being done again.
+        """
         if self._file is None:
             msg = "Journal not open. Use as context manager."
             raise RuntimeError(msg)
-        self._file.write(json.dumps(record, default=str) + "\n")
+        line = record if made is None else {**record, _RECORD_MADE: made}
+        self._file.write(json.dumps(line, default=str) + "\n")
         self._file.flush()
 
     def discard(self) -> None:
@@ -210,11 +252,77 @@ def take_out(path: Path, read_again: Callable[[dict[str, Any]], bool]) -> list[d
             taken.append(record)
         else:
             kept.append(line)
+    if spoilt:
+        _say_lines_dropped(spoilt, path)
     if taken or spoilt:
-        rewritten = path.with_name(path.name + ".rewriting")
-        rewritten.write_text("".join(line + "\n" for line in kept))
-        os.replace(rewritten, path)
+        _put_in_place(path, (line + "\n" for line in kept))
     return taken
+
+
+def _say_lines_dropped(count: int, path: Path) -> None:
+    logger.warning(
+        "%d line%s that could not be read %s dropped from %s",
+        count,
+        "" if count == 1 else "s",
+        "was" if count == 1 else "were",
+        path,
+    )
+
+
+def in_the_order(path: Path, order: list[str], *, adding: Sequence[dict[str, Any]] = ()) -> None:
+    """Put a stage's records in the order of its pages, with any that are to be added.
+
+    A stage has records an earlier run left, records it reads, and records it reads again. Its file is
+    left in the one order a run straight through would have left it in, so that the same pages give
+    the same file however the run went. The order of a file decides how the next stage groups its
+    pages into engine calls.
+
+    This is the one way a record is added to a stage's output. The whole file is written beside itself
+    and moved into place: nothing is added to a file where it stands, so a run stopped at any moment
+    leaves the file as it was or as it is to be, and never half a line under the name the next stage
+    reads. Until 25 November 2026 records were added to the end of the file as it stood.
+
+    Each line is kept as the text it is. A record of a page that is not among ``order`` is kept, after
+    those that are, in the place it had among its like: the folder or the selection of pages may have
+    changed since it was made. Lines of one page stay together. A line that cannot be read, which a
+    run stopped while writing leaves, is dropped and said. A file already in order is not touched.
+
+    Args:
+        path: The stage's output. Nothing is done if it is not there and there is nothing to add.
+        order: The names of the stage's pages, in the order the output is to hold them.
+        adding: Records to add. Each takes its page's place; among lines of one page it comes last.
+    """
+    if not path.is_file() and not adding:
+        return
+    place = {name: position for position, name in enumerate(order)}
+    as_it_is = path.read_text() if path.is_file() else ""
+    placed: list[tuple[int, str]] = []
+    spoilt = 0
+    for line in as_it_is.splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            spoilt += 1
+            continue
+        name = record.get("image_name") if isinstance(record, dict) else None
+        placed.append((place.get(name, len(place)) if isinstance(name, str) else len(place), line))
+    for record in adding:
+        name = record.get("image_name")
+        placed.append(
+            (
+                place.get(name, len(place)) if isinstance(name, str) else len(place),
+                json.dumps(record, default=str),
+            )
+        )
+    if spoilt:
+        _say_lines_dropped(spoilt, path)
+    # A stable sort: lines with the same place keep the order they had.
+    in_order = "".join(line + "\n" for _, line in sorted(placed, key=lambda entry: entry[0]))
+    if in_order != as_it_is:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _put_in_place(path, [in_order])
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:

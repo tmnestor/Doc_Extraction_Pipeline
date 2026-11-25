@@ -21,31 +21,10 @@ from common.extraction_batching import read_classify_batch_size
 from common.stage_settings import StageSettings
 
 from . import records as records_of
-from .io import (
-    Journal,
-    append_jsonl,
-    read_completed_images,
-    start_afresh,
-    take_out,
-    write_jsonl,
-)
+from .carry_on import Work, carry_on
+from .io import start_afresh
 
 logger = logging.getLogger(__name__)
-
-
-def _filter_already_classified(images: list[Path], output_path: Path) -> tuple[list[Path], int]:
-    """Drop images already present in *output_path* (resume support).
-
-    Mirrors the extract stage: a prior (possibly crashed) run's partial
-    classifications.jsonl is read for its ``image_name`` set, and those images
-    are skipped. Returns ``(remaining_images, completed_count)``; when the output
-    is absent or empty, returns the input unchanged with a count of 0.
-    """
-    completed = read_completed_images(output_path)
-    if not completed:
-        return images, 0
-    remaining = [img for img in images if img.name not in completed]
-    return remaining, len(completed)
 
 
 def run(
@@ -56,6 +35,10 @@ def run(
     config_path: Path | None = None,
 ) -> Path:
     """Detect document types for all images, write classifications.jsonl.
+
+    A run carries on from what an earlier one left (``stages.carry_on``): pages already classified are
+    not asked about again, a page an earlier run could not classify is, and the file is left in the
+    pages' order however the run went. A run with nothing left starts no engine.
 
     Args:
         image_dir: Directory containing images.
@@ -75,16 +58,14 @@ def run(
 
     app_cfg = Settings.load(cli_args, config_path=config_path).for_stage("classify")
     check_settings(app_cfg)
-    config = app_cfg
-    # Discover images
     # Both filters are config-driven and MUST be passed: calling with the
     # directory alone silently ignored max_images and document_types, so a
     # 12-image request processed all 165 (fixed 2026-09-21).
     images = list(
         discover_images(
             image_dir,
-            document_types=config.document_types,
-            max_images=config.max_images,
+            document_types=app_cfg.document_types,
+            max_images=app_cfg.max_images,
         )
     )
     if not images:
@@ -93,76 +74,34 @@ def run(
 
     logger.info("Found %d images in %s", len(images), image_dir)
 
-    # Resume: skip images already classified in a prior (possibly crashed) run,
-    # and APPEND below instead of truncating. A clean-slate re-run is the opt-in
-    # (clear the output first: the entrypoint does this for full re-runs). This
-    # mirrors the extract stage and runs BEFORE the model load, so a fully
-    # resumed run skips the GPU entirely.
-    # What an earlier run had classified before it stopped is added to the output first, and is then
-    # carried on from like any other earlier output.
-    journal = Journal(output_path)
-    recovered = journal.recover([image.name for image in images])
-    if recovered:
-        logger.info("Recovered %d page(s) an earlier run had classified before it stopped", len(recovered))
-        from common.stage_timing import note_recovered
-
-        note_recovered(output_path.parent, stage="classify", records=recovered)
-    # A page an earlier run could not classify is asked about again: its record is taken out of the
-    # output, so that it is not among the pages already done.
-    read_again = take_out(output_path, records_of.failed)
-    if read_again:
-        logger.info(
-            "%d page(s) an earlier run could not classify will be asked about again", len(read_again)
-        )
-    original_total = len(images)
-    images, completed_count = _filter_already_classified(images, output_path)
-    resuming = completed_count > 0
-    if resuming:
-        logger.info(
-            "Resuming: %d already done, %d remaining (of %d total)",
-            completed_count,
-            len(images),
-            original_total,
-        )
-    if not images:
-        logger.info("All images already classified -- nothing to do")
-        return output_path
+    def taken_out(records: list[dict[str, Any]]) -> None:
+        logger.info("%d page(s) an earlier run could not classify will be asked about again", len(records))
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by classify_pages; only where the engine is started differs.
-    from common.stage_timing import inference_seconds_from_records, note_stage_timing
-    from common.vllm_dp import read_on_the_cards
+    carried = carry_on(
+        app_cfg,
+        Work(
+            stage="classify",
+            output=output_path,
+            items=images,
+            name_of=lambda page: page.name,
+            read=classify_pages,
+            taken_out=taken_out,
+            timing=output_path.parent,
+        ),
+    )
+    if carried.arrangement is None:
+        return output_path
 
-    started = time.time()
-    # Each record is kept in the journal as it is made; the output is written below, in the pages' order.
-    with journal:
-        read = read_on_the_cards(app_cfg, images, classify_pages, sink=journal)
-    records = read.records
-    wall_clock = time.time() - started
-
-    elapsed = inference_seconds_from_records(records, fallback=wall_clock)
+    records = carried.records
     logger.info(
         "Classification complete: %d images in %.1fs (%.2fs/image)",
         len(records),
-        elapsed,
-        elapsed / len(records) if records else 0,
+        carried.model_seconds,
+        carried.model_seconds / len(records) if records else 0,
     )
-
-    # Write output (append when resuming so prior records are preserved)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    write_fn = append_jsonl if resuming else write_jsonl
-    count = write_fn(output_path, records)
-    journal.discard()
-    logger.info("Wrote %d classifications to %s", count, output_path)
-    note_stage_timing(
-        output_path.parent,
-        stage="classify",
-        records=records,
-        wall_clock=wall_clock,
-        execution_mode=read.arrangement,
-        carried_on=resuming,
-        read_again=len(read_again),
-    )
+    logger.info("Wrote %d classifications to %s", len(records), output_path)
     _say_how_the_types_were_reached(records)
     could_not = sum(1 for record in records if records_of.failed(record))
     if could_not:

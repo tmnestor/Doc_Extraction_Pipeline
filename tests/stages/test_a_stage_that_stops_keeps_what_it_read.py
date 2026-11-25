@@ -173,6 +173,37 @@ def test_with_an_engine_on_each_card_the_output_is_in_the_pages_order(bench: Ben
     assert not Journal(output).path.exists()
 
 
+def extract_calls(bench: Bench, classifications: Path, into: Path) -> list[list[str]]:
+    """The engine calls extract makes of a classifications file, each as the pages it held."""
+    before = len(bench.processor.calls)
+    bench.extract(classifications, into / "raw_extractions.jsonl", model=AN_ENGINE_ON_EACH_CARD)
+    return bench.processor.calls[before:]
+
+
+def test_classify_stopped_between_its_cards_leaves_the_file_a_straight_run_leaves(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """Card 0 had finished and card 1 had not. Until 25 November 2026 the file came out as pages 0, 2,
+    4, 1, 3, 5, and extract then put an invoice on the other card than a run straight through would.
+
+    The bench runs a worker inside the test's own process, so a run killed between the cards cannot be
+    staged by stopping it. What such a stop leaves is put there instead: card 0's share in the journal.
+    """
+    straight = bench.classify(tmp_path / "straight" / "classifications.jsonl", model=AN_ENGINE_ON_EACH_CARD)
+    output = tmp_path / "stopped" / "classifications.jsonl"
+    output.parent.mkdir()
+    with Journal(output) as journal:
+        for record in read_jsonl(straight)[0::2]:
+            journal.write(record)
+    bench.processor.calls.clear()
+
+    bench.classify(output, model=AN_ENGINE_ON_EACH_CARD)
+
+    assert sorted(bench.processor.asked_about) == sorted(bench.names[1::2])
+    assert names_in(output) == bench.names
+    assert extract_calls(bench, output, tmp_path / "b") == extract_calls(bench, straight, tmp_path / "a")
+
+
 def read_and_then_fall_over(
     processor: Any, pages: list[Path], settings: Any, *, sink: Any = None
 ) -> list[dict[str, Any]]:
@@ -227,8 +258,11 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
     with pytest.raises(Stopped):
         split.run(bench.pages, output, model_type=ONE_ENGINE, config_path=bench.config)
 
-    # Two calls of two photographs were asked, dealt with and written before the run stopped.
-    assert names_in(output / "splits.jsonl") == bench.names[:4]
+    # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
+    # the journal, their images are written, and the stage's own file is not yet there.
+    assert not (output / "splits.jsonl").exists()
+    assert names_in(output / "splits.jsonl.journal") == bench.names[:4]
+    assert "raw_response" in read_jsonl(output / "splits.jsonl.journal")[0]
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:4]
 
     bench.processor.stop_at_call = None
@@ -237,6 +271,7 @@ def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Ben
 
     assert bench.processor.calls == [["2 photographs"]]
     assert names_in(output / "splits.jsonl") == bench.names
+    assert not (output / "splits.jsonl.journal").exists()
 
 
 # --- starting afresh ----------------------------------------------------------------------------------

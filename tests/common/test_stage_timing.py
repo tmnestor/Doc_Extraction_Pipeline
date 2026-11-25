@@ -292,3 +292,29 @@ def test_a_run_with_no_time_recorded_shows_none_and_no_rate() -> None:
         "Throughput": "not recorded",
         "Timing Source": "not recorded",
     }
+
+
+def test_the_summary_shows_splits_time_on_a_row_of_its_own_and_not_in_the_rate() -> None:
+    """A photograph is not a page: the rate is of the stages that read pages, as it was for every
+    recorded run.
+    """
+    rows = [
+        StageTiming("split", 90.0, 21.0, "data-parallel (2 GPUs)", 57),
+        StageTiming("classify", 100.0, 30.0, "single-engine", 165),
+        StageTiming("extract", 300.0, 200.0, "single-engine", 165),
+    ]
+
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=165, read=165), 165))
+
+    assert shown["Split, model time (57 photographs, not in the rate)"] == "21.0s"
+    assert shown["Model Time (classify + extract)"] == "230.0s"
+    assert shown["Throughput"] == "43.04 images/min"
+    assert shown["Total Wall Clock"] == "400.0s"
+
+
+def test_a_run_with_no_row_of_split_shows_none() -> None:
+    rows = [StageTiming("classify", 100.0, 30.0, "x", 60), StageTiming("extract", 300.0, 90.0, "x", 60)]
+
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60, read=60), 60))
+
+    assert not [label for label in shown if label.startswith("Split")]

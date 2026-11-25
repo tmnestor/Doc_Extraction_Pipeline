@@ -50,8 +50,9 @@ A page that cannot be read does not end a task, and is read again by the task's 
 
 A task that is stopped part way keeps what it had read. Each record goes into a journal beside the
 task's output the moment it is made (`<output file>.journal`), however the engines are arranged, and the
-next run adds the journal to the output before it carries on. What a run adds to the output is in the
-order of the pages, never the order the cards finished them in.
+next run adds the journal to the output before it carries on. A task's output is in the order of its
+pages however the run went: straight through, stopped and started again, or with failed pages read
+again. It is never in the order the cards finished them in.
 
 Because a task carries on from what its output folder holds, a folder belongs to one run. `split`,
 `classify` and `extract` each note in `<output>/run_manifest.json` the model, the folder of pages and the
@@ -59,6 +60,59 @@ commit of the code they were run with. A task that finds its own earlier note fr
 of pages or commit stops before any work and says what differs: give the run a folder of its own, or
 start the task afresh. `clean` and `evaluate` print what the notes hold, so that a score carries the model
 and the commit that produced it.
+
+## The design
+
+Five tasks make the pipeline: `split`, `classify`, `extract`, `clean` and `evaluate`. They are built to
+be modular, so that any one can be run, tested or replaced alone, and cohesive, so that all five behave
+alike. Each choice below is a well-known pattern, used for the reason given.
+
+### The patterns
+
+| Pattern | Where it is | Why it is used |
+|---|---|---|
+| **Pipes and filters** | Each task is a filter and each file under `output` is a pipe: `classifications.jsonl` carries `classify`'s work to `extract`, and so on | A task knows only the file it reads and the file it writes. Any task can be run again on files an earlier run left, on another machine, without the tasks before it |
+| **Strategy** | `stages/carry_on.py` is one fixed sequence. Each task that uses the cards hands it the part that differs: how that task asks the model (`classify_pages`, `extract_pages`, `ask_about_photographs`) | Carrying on from an earlier run is written once, not once a task. A fix to it is one fix |
+| **Write-ahead journal** | `<output file>.journal`, written by `Journal` in `stages/io.py` | Each record is on disk the moment the model gives it. A run stopped at page 100 of 165 loses nothing |
+| **Checkpoint and restart** | `carry_on`: recover the journal, take out the failed records, read only what is left | A run that carries on ends with the records, in the order, that a run straight through would have written |
+| **Atomic write** | `write_jsonl` and `in_the_order` in `stages/io.py` write beside the file and rename it into place. They are the only two ways a task's output is written | A reader finds the old file or the new one, never half of one |
+| **Retry, then stop** | `common/engine_calls.py`: a failed engine call is tried again one page at a time, and a task stops when request after request fails | One bad page costs one page. An engine that has stopped answering costs seconds, not a file of failures |
+| **Registry** | `models/registry.py` | A model is one entry there, with whether it fits an engine on each card. No task's code depends on which model it is given |
+| **Settings as data, checked first** | `config/run_config.yml` and `config/field_definitions.yaml` hold every setting, field and threshold. Nothing is defaulted in Python | What a run is set to do can be read from two files. A mistake stops the run before an engine starts, with what is wrong, where, what is expected and the fix |
+| **Recorded-result tests** | `tests/replay/` and `tests/reference/` | A change that alters a score, or what the model is sent, fails a test by a byte |
+
+How the engines are arranged is kept apart from all of this. `common/vllm_dp.py` starts one engine
+across the cards or one on each card, and the task's reading function is the same either way.
+
+### What every task keeps to
+
+Seven rules, which `tests/stages/test_every_stage_keeps_the_contract.py` holds.
+
+A task stands alone:
+
+1. It is one module of `stages/` with a `BANNER` and a `start(task)`. The runner knows no more.
+2. It reads its settings and the file the task before it wrote, and writes its own file. It imports no
+   other task.
+3. A record handed from one task to the next is made by `stages/records.py` and by nothing else.
+
+The five behave alike:
+
+4. A task's output holds one record for each item of its input, in the task's own order.
+5. That output holds the same records in the same order whether the run went straight through, was
+   stopped and started again, or had failed pages read again. Only a page's time, and the card that
+   read it, can differ.
+6. An output file is put in place whole, by `stages/io.py` and by no task itself. Nothing is added to
+   a file where it stands: a run stopped at any moment leaves the file as it was or as it is to be.
+7. A task that uses the cards carries on by `stages/carry_on.py`, and notes a row of its time in
+   `<output>/.stage_timing.jsonl`.
+
+What the tasks share is three modules of functions that a task calls: `stages/io.py` for files,
+`stages/records.py` for records and `stages/carry_on.py` for carrying on. None of them calls a task, and
+there is no base class to inherit from: a task's `run` is still the place to read what that task does.
+
+`clean` and `evaluate` use no cards and take seconds, so each is rebuilt whole on every run. `sroie` is a
+benchmark beside the pipeline: it is started the same way and imports no task, and is otherwise left to
+itself. It writes over its two files on every run.
 
 ## How a failed page is tried again
 
@@ -131,14 +185,17 @@ that output, so that those pages are read again with any that are new:
   document type since it was read, whose record is of the wrong fields. A page `classify` got right the
   second time is therefore read again under its own type;
 - `split` asks again about each photograph it could not ask about, and removes the image it had passed
-  through in the photograph's place.
+  through in the photograph's place. Its journal keeps each reply with the record of what was done about
+  it, and `splits.jsonl` is written when it has finished: a run that carries on does nothing a second
+  time about a photograph an earlier run had finished.
 
 Three things follow:
 
 - A page that can never be read is tried on every run. A run with nothing new to read but one such page
   starts an engine to try it. No setting leaves such a page out.
 - A run with no failed page and nothing new starts no engine.
-- A page read again is added at the end of the output, after the pages read before it.
+- A page read again is put back in its place among the others. The output is then the file a run
+  with no failed page would have written.
 
 `CLEAR_PREV_OUTPUT=true` reads every page again, failed or not.
 
@@ -498,7 +555,7 @@ when that change is intended.
 
 | Folder | Holds |
 |---|---|
-| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that. `records.py` defines each record one task hands another, and the functions that make it |
+| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
 | `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder, the SROIE benchmark |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
 | `config/` | `run_config.yml` and `field_definitions.yaml` |

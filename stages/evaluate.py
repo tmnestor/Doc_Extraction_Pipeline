@@ -232,13 +232,26 @@ def _some(names: list[str], most: int = 10) -> str:
     return shown if len(names) <= most else f"{shown} and {len(names) - most} more"
 
 
+# What a stage that does not read pages reads, for its row of time.
+_READS = {"split": "photographs"}
+
+
 def time_rows(time: RunTime, pages: int) -> list[tuple[str, str]]:
     """The summary table's rows of time. Every figure says which stages it is of, and where it is from.
 
     The model's time is given for each stage and for the stages together, and the rate is of the stages
     together: pages a minute through every stage that used the cards.
     """
-    rows = [(f"{t.stage.capitalize()}, model time", f"{t.inference_seconds:.1f}s") for t in time.stages]
+    # A stage that does not read pages, such as split, has a row of its own and is in no figure below
+    # it: the rate is of pages, and a photograph is not a page.
+    rows = [
+        (
+            f"{t.stage.capitalize()}, model time ({t.images} {_READS.get(t.stage, 'items')}, not in the rate)",
+            f"{t.inference_seconds:.1f}s",
+        )
+        for t in time.others
+    ]
+    rows += [(f"{t.stage.capitalize()}, model time", f"{t.inference_seconds:.1f}s") for t in time.stages]
     of = " + ".join(t.stage for t in time.stages)
     # "not recorded" beats 0.0s: a rate made from nothing reads as a measurement.
     seconds = time.model_seconds

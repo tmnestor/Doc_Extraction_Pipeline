@@ -28,9 +28,7 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 """
 
 import logging
-import os
 import shutil
-import time
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +38,8 @@ from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
-from .io import append_jsonl, read_completed_images, take_out
+from .carry_on import Work, carry_on
+from .io import Journal, in_the_order, read_completed_images, take_out
 from .records import failed
 
 logger = logging.getLogger(__name__)
@@ -248,58 +247,16 @@ def ask_about_photographs(
     return asked
 
 
-class _ActedOn:
-    """Acts on each photograph's reply as it arrives: cuts or copies the image, and writes its record.
+def _remove_the_images_of(records: list[dict[str, Any]], images_dir: Path) -> None:
+    """Remove the images earlier records name, of photographs that are to be asked about again.
 
-    A photograph is dealt with, and its record written, as soon as the model has answered about it,
-    whichever card answered: a run that stops part way keeps every photograph it had finished, and
-    carries on from there.
+    A photograph the model could not be asked about was passed through as it is. Cut into several this
+    time, it would otherwise leave that image beside the cuts.
     """
-
-    def __init__(self, images_dir: Path, records_path: Path, config: Any, finder: Any, total: int) -> None:
-        self.records: list[dict[str, Any]] = []
-        self._images_dir, self._records_path = images_dir, records_path
-        self._config, self._finder, self._total = config, finder, total
-
-    def write(self, asked: dict[str, Any]) -> None:
-        photograph = Path(asked["image_path"])
-        record = apply_reply(
-            photograph, asked["raw_response"], self._images_dir, self._config, self._finder
-        )
-        if asked.get("error"):
-            # The model could not be asked about this photograph, in a shared call or alone. It is
-            # treated as one the model said nothing clear about, and says why.
-            record["reason"] = f"the model could not be asked: {asked['error']}"
-            record["error"] = asked["error"]
-        append_jsonl(self._records_path, [record])
-        self.records.append(record)
-        logger.info(
-            "[%d/%d] %s -> %s (%s)",
-            len(self.records),
-            self._total,
-            photograph.name,
-            record["action"],
-            record["reason"],
-        )
-
-
-def _in_the_photographs_order(records_path: Path, photographs: list[Path]) -> None:
-    """Put the records in the order of the photographs, whatever order their replies arrived in.
-
-    With an engine on each card the replies arrive as the cards give them. The file is written again in
-    the photographs' order and put in place whole, so that two runs of the same photographs write the
-    same file. A file already in that order is not touched.
-    """
-    from stages.io import read_jsonl, write_jsonl
-
-    place = {photograph.name: position for position, photograph in enumerate(photographs)}
-    records = read_jsonl(records_path)
-    in_order = sorted(records, key=lambda record: place.get(record.get("image_name", ""), len(place)))
-    if in_order == records:
-        return
-    rewritten = records_path.with_name(records_path.name + ".rewriting")
-    write_jsonl(rewritten, in_order)
-    os.replace(rewritten, records_path)
+    for record in records:
+        for name in record.get("outputs", []):
+            if Path(name).name == name:
+                (images_dir / name).unlink(missing_ok=True)
 
 
 def run(
@@ -308,14 +265,22 @@ def run(
     *,
     model_type: str | None = None,
     config_path: Path | None = None,
+    timing: Path | None = None,
 ) -> Path:
     """Split every photograph in a directory, writing images/ and splits.jsonl.
+
+    A run carries on from what an earlier one left (``stages.carry_on``): photographs already dealt with
+    are not asked about again, a photograph an earlier run could not ask about is, and splits.jsonl is
+    left in the photographs' order however the run went. The model's reply about each photograph goes
+    with the record of what was done about it into a journal, the moment it has been acted on: a run
+    that stops part way keeps both, and the next run has nothing to do about those photographs again.
 
     Args:
         image_dir: Directory containing the photographs.
         output_dir: Directory to write images/ and splits.jsonl into.
         model_type: Model type (e.g. "gemma4-31b-w4a16-vllm"). None = from the run config.
         config_path: Optional path to run_config.yml.
+        timing: The run's output folder, to note a row of the stage's time in. None: no row.
 
     Returns:
         The directory the later stages read their images from.
@@ -338,50 +303,46 @@ def run(
     if not photographs:
         msg = f"No images found in {image_dir}"
         raise FileNotFoundError(msg)
+    logger.info("Found %d photographs in %s", len(photographs), image_dir)
 
     images_dir = output_dir / IMAGES_DIR
     images_dir.mkdir(parents=True, exist_ok=True)
     records_path = output_dir / RECORDS_FILE
+    order = [photograph.name for photograph in photographs]
 
-    # A photograph the model could not be asked about by an earlier run is asked about again. Its
-    # record is taken out, and with it the image that run passed through in its place, which a
-    # photograph cut into several this time would otherwise leave beside the cuts.
-    asked_again = take_out(records_path, failed)
-    for record in asked_again:
-        for name in record.get("outputs", []):
-            if Path(name).name == name:
-                (images_dir / name).unlink(missing_ok=True)
-    if asked_again:
+    def asked_again(records: list[dict[str, Any]]) -> None:
+        _remove_the_images_of(records, images_dir)
         logger.info(
-            "%d photograph(s) an earlier run could not ask about will be asked about again",
-            len(asked_again),
+            "%d photograph(s) an earlier run could not ask about will be asked about again", len(records)
         )
 
-    # Resume: photographs already recorded by an earlier, interrupted run are not asked about again.
-    done = read_completed_images(records_path)
-    todo = [p for p in photographs if p.name not in done]
-    logger.info("Found %d photographs in %s (%d already done)", len(photographs), image_dir, len(done))
-    if not todo:
-        logger.info("All photographs already split -- nothing to do")
-        return images_dir
-
     if not split_config.enabled:
-        records = []
-        for photograph in todo:
+        # Every photograph is copied through, and no engine is started. What a run with the photo
+        # split on had done before it stopped is kept as that run left it.
+        Journal(records_path).recover(order)
+        of_this_run = set(order)
+        taken = take_out(
+            records_path, lambda record: record.get("image_name") in of_this_run and failed(record)
+        )
+        if taken:
+            asked_again(taken)
+        done = read_completed_images(records_path)
+        copied = []
+        for photograph in photographs:
+            if photograph.name in done:
+                continue
             shutil.copy2(photograph, images_dir / photograph.name)
             reason = "photo_split is not enabled"
-            records.append(
+            copied.append(
                 _record(
                     photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None]
                 )
             )
-        append_jsonl(records_path, records)
-        logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(records))
+        in_the_order(records_path, order, adding=copied)
+        logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(copied))
         return images_dir
 
     from common.settings import Settings
-    from common.stage_timing import inference_seconds_from_records
-    from common.vllm_dp import read_on_the_cards
 
     cli_args: dict[str, Any] = {"output_dir": str(output_dir)}
     if model_type is not None:
@@ -396,23 +357,49 @@ def run(
         finder_section = raw_config.get("pipeline", {}).get("photo_split", {}).get("finder")
         finder = finder_params_from(finder_section, config_path=resolved_config)
 
+    acted_on = 0
+
+    def act_on(asked: dict[str, Any]) -> dict[str, Any]:
+        """Act on the model's reply about one photograph, and give the stage's record of it."""
+        nonlocal acted_on
+        photograph = Path(asked["image_path"])
+        record = apply_reply(photograph, asked["raw_response"], images_dir, split_config, finder)
+        if asked.get("error"):
+            # The model could not be asked about this photograph, in a shared call or alone. It is
+            # treated as one the model said nothing clear about, and says why.
+            record["reason"] = f"the model could not be asked: {asked['error']}"
+            record["error"] = asked["error"]
+        acted_on += 1
+        logger.info("[%d] %s -> %s (%s)", acted_on, photograph.name, record["action"], record["reason"])
+        return record
+
     # One engine on each card where the model allows it, else one engine across the cards, as for every
-    # other stage that uses the model. Until 25 November 2026 this stage started one engine across the
-    # cards whatever the model: for a model that fits on one card, half the engines it could have had.
-    # Either way the photographs are asked about by ask_about_photographs, and each reply is acted on
-    # here as it arrives.
-    started = time.time()
-    acted_on = _ActedOn(images_dir, records_path, split_config, finder, len(todo))
-    asked = read_on_the_cards(app_cfg, todo, ask_about_photographs, sink=acted_on)
-    records = acted_on.records
-    _in_the_photographs_order(records_path, photographs)
-    model_seconds = inference_seconds_from_records(asked.records, fallback=time.time() - started)
-    logger.info("Engines: %s", asked.arrangement)
+    # other stage that uses the model. Either way the photographs are asked about by
+    # ask_about_photographs, and each reply is acted on as it arrives, from whichever card.
+    carried = carry_on(
+        app_cfg,
+        Work(
+            stage="split",
+            output=records_path,
+            items=photographs,
+            name_of=lambda photograph: photograph.name,
+            read=ask_about_photographs,
+            taken_out=asked_again,
+            made_of=act_on,
+            timing=timing,
+            thing="photograph",
+        ),
+    )
+    if carried.arrangement is None:
+        return images_dir
+
+    records = carried.records
+    logger.info("Engines: %s", carried.arrangement)
     logger.info(
         "Split questions complete: %d photographs in %.1fs (%.2fs/photograph)",
-        len(todo),
-        model_seconds,
-        model_seconds / len(todo),
+        len(records),
+        carried.model_seconds,
+        carried.model_seconds / len(records),
     )
     cut_up = sum(record["action"] == "split" for record in records)
     written = sum(len(record["outputs"]) for record in records)
@@ -440,5 +427,12 @@ def start(task: StageSettings) -> str:
     """
     assert task.image_dir is not None
     task.split_dir.mkdir(parents=True, exist_ok=True)
-    images = run(task.image_dir, task.split_dir, model_type=task.model, config_path=task.config_path)
+    images = run(
+        task.image_dir,
+        task.split_dir,
+        model_type=task.model,
+        config_path=task.config_path,
+        # The row of the stage's time goes with the other stages', in the run's output folder.
+        timing=task.output,
+    )
     return f"Split complete. Later stages read their images from: {images}"

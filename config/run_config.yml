@@ -156,6 +156,7 @@ pipeline:
     # A statement is one independent request, like any other page, and shares a call with others. The
     # size is several times max_num_seqs, so that the engine stays full as the short statements finish.
     bank_statement: 64
+    sroie_receipt: 8           # the receipts of the SROIE dataset: four short fields each
     default: 10                # a type with no size of its own
 
   processing:

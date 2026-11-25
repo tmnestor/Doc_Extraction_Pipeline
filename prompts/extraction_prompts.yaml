@@ -329,6 +329,42 @@ prompts:
       - Use " | " separator for all list fields
       - Use NOT_FOUND only if information is genuinely not visible
 
+  # ============================================================================
+  # SROIE RECEIPT - 4 Fields
+  # ============================================================================
+  # The receipts of the public SROIE test split. One prompt for every model.
+  #
+  # Wording history: read before "tidying" this text.
+  #
+  # * 2026-08-14: the total line said "write the total as a plain number, without a currency symbol",
+  #   with no example. InternVL3.5 read "plain number" as "no punctuation" and wrote 490 for 4.90 on
+  #   196 of 347 receipts (every digit correct, the decimal point dropped), taking the total's F1 from
+  #   0.95 to 0.58. The worked example is doing real work here; do not remove it.
+  #
+  # * 2026-08-14: the company line said "business name printed at the top", which settles neither of
+  #   the two questions a Malaysian receipt raises: brand or registered entity, and whether to include
+  #   the registration number. Gemma 4 appended "(519537-X)" on 34 of its 120 company misses;
+  #   InternVL3.5 did it once in 46. Both readings are defensible, so the field was partly scoring
+  #   which convention a model happens to prefer and not whether it read the receipt.
+  sroie_receipt:
+    name: "SROIE Receipt Extraction"
+    description: "Extract the 4 fields of a SROIE receipt"
+    prompt: |
+      Read this scanned receipt and report four fields.
+
+      Write each field on its own line, in this order and this format:
+
+      company: <registered business name, e.g. ACME TRADING SDN BHD>
+      date: <date printed on the receipt>
+      address: <full street address of the business>
+      total: <final total amount paid, e.g. 4.95>
+
+      Give the registered company name, not a brand or outlet name.
+      Do not include the company registration number printed in brackets.
+      Write the date exactly as the receipt prints it.
+      Write the total with its decimal point and no currency symbol, e.g. 4.95.
+      Write NOT_FOUND as the value of any field the receipt does not show.
+
 # Configuration
 settings:
   temperature: 0.0

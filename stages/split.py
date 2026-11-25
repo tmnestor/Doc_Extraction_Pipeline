@@ -42,7 +42,7 @@ from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
-from .io import Journal, discover_images, in_the_order, no_pages_in, read_completed_images, take_out
+from .io import discover_images, no_pages_in
 from .records import failed
 
 logger = logging.getLogger(__name__)
@@ -363,29 +363,31 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
         )
 
     if not split_config.enabled:
-        # Every photograph is copied through, and no engine is started. What a run with the photo
-        # split on had done before it stopped is kept as that run left it.
-        Journal(records_path).recover(order)
-        of_this_run = set(order)
-        taken = take_out(
-            records_path, lambda record: record.get("image_name") in of_this_run and failed(record)
-        )
-        if taken:
-            asked_again(taken)
-        done = read_completed_images(records_path)
-        copied = []
-        for photograph in photographs:
-            if photograph.name in done:
-                continue
+        # Every photograph is copied through, and no engine is started. The stage carries on the one
+        # way all the same: what a run with the photo split on had done before it stopped is kept as
+        # that run left it, and a photograph such a run could not ask about is passed through.
+        def copy_through(photograph: Path) -> dict[str, Any]:
             shutil.copy2(photograph, images_dir / photograph.name)
             reason = "photo_split is not enabled"
-            copied.append(
-                _record(
-                    photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None]
-                )
+            return _record(
+                photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None]
             )
-        in_the_order(records_path, order, adding=copied)
-        logger.info("photo_split is not enabled: copied %d photographs through unchanged", len(copied))
+
+        copied = carry_on(
+            None,
+            Work(
+                stage="split",
+                output=records_path,
+                items=photographs,
+                name_of=lambda photograph: photograph.name,
+                tell=copy_through,
+                taken_out=asked_again,
+                thing="photograph",
+            ),
+        )
+        logger.info(
+            "photo_split is not enabled: copied %d photographs through unchanged", len(copied.records)
+        )
         return images_dir
 
     assert app_cfg is not None

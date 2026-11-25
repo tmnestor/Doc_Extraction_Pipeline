@@ -46,8 +46,15 @@ class Work:
     items: list[Any]
     # An item's name: the ``image_name`` of its record.
     name_of: Callable[[Any], str]
-    # The stage's reading function, at the top of its module (``common.vllm_dp.Reading``).
-    read: Reading
+    # How an item's record is come by: exactly one of these two.
+    # The stage's reading function, at the top of its module (``common.vllm_dp.Reading``): the items
+    # are read on the cards.
+    read: Reading | None = None
+    # Makes an item's record with no model asked, for a stage that can say what an item is without
+    # one: a page whose dataset gives its type, a photograph that is passed through. No engine is
+    # started, and there is no time on the cards to note. Until 26 November 2026 each such stage
+    # wrote its own carrying on, and one of them kept the record of a page an earlier run had failed.
+    tell: Callable[[Any], dict[str, Any]] | None = None
     # Every name the output may hold, in order, when that is more than the items' names: extract's
     # output holds a record for each page it was set not to read. None: the items' names.
     order: list[str] | None = None
@@ -73,7 +80,8 @@ class Carried:
     records: list[dict[str, Any]]
     # What the reading function gave for them: the same, unless the stage makes its record of a reply.
     read: list[dict[str, Any]]
-    # How the engines were arranged. None when nothing was left to read, and no engine was started.
+    # How the engines were arranged. None when no engine was started: nothing was left to read, or
+    # the stage's records are made with no model asked (``Work.tell``).
     arrangement: str | None
     # The model's time, apart from starting the engine, and the whole time of the reading.
     model_seconds: float
@@ -105,7 +113,7 @@ class _Kept:
         self.made.append(record if made is None else made)
 
 
-def carry_on(settings: Settings, work: Work) -> Carried:
+def carry_on(settings: Settings | None, work: Work) -> Carried:
     """Read what a stage has left to read, and leave its output as a run straight through would.
 
     In this order:
@@ -115,6 +123,8 @@ def carry_on(settings: Settings, work: Work) -> Carried:
     3. The items whose names the output does not hold are what is left to read.
     4. With nothing left, the output is put in order and no engine is started.
     5. Otherwise they are read on the cards. Each record goes into the journal the moment it is made.
+       A stage whose records are made with no model asked (``Work.tell``) has each of them made
+       here instead: no engine, no journal, and no time to note.
     6. The output is put in place whole, with the records added and in the stage's order, and only
        then is the journal removed: a run stopped anywhere before leaves the earlier output as it
        was and the next run able to recover.
@@ -122,7 +132,7 @@ def carry_on(settings: Settings, work: Work) -> Carried:
 
     Args:
         settings: The run's settings; for a stage with its own engine settings, the copy made by
-            ``for_stage``.
+            ``for_stage``. None is allowed only for work whose records are made with no model asked.
         work: What the stage has to read, and where its records go.
 
     Returns:
@@ -130,7 +140,14 @@ def carry_on(settings: Settings, work: Work) -> Carried:
 
     Raises:
         ConfigError, StageStopped: As ``read_on_the_cards`` raises them. The journal is kept.
+        ValueError: If the work gives both a reading function and a way to make a record without
+            one, or neither.
     """
+    if (work.read is None) == (work.tell is None):
+        msg = (
+            "Work takes exactly one of read (the items are read on the cards) and tell (no model is asked)"
+        )
+        raise ValueError(msg)
     order = work.order if work.order is not None else [work.name_of(item) for item in work.items]
     journal = Journal(work.output)
 
@@ -161,6 +178,12 @@ def carry_on(settings: Settings, work: Work) -> Carried:
         in_the_order(work.output, order)
         logger.info("Every %s is already done: nothing to do", work.thing)
         return Carried([], [], None, 0.0, 0.0, len(done), len(recovered), len(taken))
+
+    if work.tell is not None:
+        told = [work.tell(item) for item in left]
+        in_the_order(work.output, order, adding=told)
+        return Carried(told, [], None, 0.0, 0.0, len(done), len(recovered), len(taken))
+    assert work.read is not None and settings is not None
 
     kept = _Kept(journal, work.made_of)
     started = time.time()

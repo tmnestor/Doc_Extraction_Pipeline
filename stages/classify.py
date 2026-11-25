@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from common.classification import BY_THE_DATASET
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
 from common.extraction_batching import read_classify_batch_size
@@ -24,7 +25,7 @@ from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import discover_images, in_the_order, no_pages_in, read_completed_images, start_afresh
+from .io import discover_images, no_pages_in, start_afresh
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +50,37 @@ def run(output_path: Path, checked: "Checked", *, given_type: str | None = None)
         Path to the written classifications.jsonl.
     """
     app_cfg, images = checked.settings, checked.images
-    if given_type is not None:
-        _give_the_type(images, output_path, given_type)
-        return output_path
 
     def taken_out(records: list[dict[str, Any]]) -> None:
-        logger.info("%d page(s) an earlier run could not classify will be asked about again", len(records))
+        logger.info(
+            "%d page(s) an earlier run could not classify will be %s",
+            len(records),
+            "asked about again" if given_type is None else "given their type",
+        )
+
+    if given_type is not None:
+        # The pages' dataset says what they are. No model is asked, and the stage carries on the one
+        # way: a page the output holds keeps its record, a page an earlier run could not classify is
+        # given its type, and the file is left in the pages' order. The record is the one a page the
+        # model was asked about has, with nothing for a reply, so that every stage after this reads
+        # it as it reads any other.
+        given = carry_on(
+            app_cfg,
+            Work(
+                stage="classify",
+                output=output_path,
+                items=images,
+                name_of=lambda page: page.name,
+                tell=lambda page: records_of.given_its_type(str(page), given_type, BY_THE_DATASET),
+                taken_out=taken_out,
+            ),
+        )
+        logger.info(
+            "%d page(s) given the type %s by the dataset: the model is not asked",
+            len(given.records),
+            given_type,
+        )
+        return output_path
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by classify_pages; only where the engine is started differs.
@@ -92,27 +118,6 @@ def run(output_path: Path, checked: "Checked", *, given_type: str | None = None)
         )
 
     return output_path
-
-
-def _give_the_type(images: list[Path], output_path: Path, given_type: str) -> None:
-    """Give each page the type its dataset says its pages are. No model is asked.
-
-    The stage carries on as ever: a page the output holds keeps its record, and the file is left in
-    the pages' order. The record is the one a page the model was asked about has, with nothing for a
-    reply, so that every stage after this reads it as it reads any other.
-    """
-    from common.classification import BY_THE_DATASET
-
-    held = read_completed_images(output_path)
-    told = [
-        records_of.given_its_type(str(page), given_type, BY_THE_DATASET)
-        for page in images
-        if page.name not in held
-    ]
-    in_the_order(output_path, [page.name for page in images], adding=told)
-    logger.info(
-        "%d page(s) given the type %s by the dataset: the model is not asked", len(told), given_type
-    )
 
 
 def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:

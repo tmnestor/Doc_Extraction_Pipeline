@@ -54,8 +54,8 @@ inference:
     #   max_model_len            the longest request and reply together, in tokens
     #   gpu_memory_utilization   the share of each card's memory the engine may take
     #   limit_mm_per_prompt      images in a request. Always 1: a page is one image
-    #   max_num_seqs             requests the engine runs at once. It is the ceiling on what the batch
-    #                            sizes under pipeline.batching can achieve: raise both or neither moves
+    #   max_num_seqs             requests the engine runs at once. A call under pipeline.batching may
+    #                            hold more: the engine queues the rest, and stays full while it does
     #   enable_prefix_caching    reuse the engine's work on the part of a prompt shared with the last
     #   mm_processor_kwargs      the image token budget asked of the model's processor. Gemma 4 takes
     #                            70, 140, 280, 560 or 1120; 560 is the measured best for both models
@@ -140,7 +140,7 @@ pipeline:
     # One folder for each model: the task does not resume, and writes over its two files every time.
     output_dir: /home/jovyan/nfs_share/tod_2026/data/sroie/output_gemma4
     max_new_tokens: 256        # the longest reply: four short fields
-    batch_size: 8              # receipts to an engine call; the ceiling is the model's max_num_seqs
+    batch_size: 64             # receipts to an engine call, as pipeline.batching gives every type
 
   # Sets of pages that are all of one document type, known beforehand. A job reads one by naming it
   # (dataset=sroie). classify then gives every page that type and asks no model, and the stages after
@@ -159,18 +159,22 @@ pipeline:
     fallback_type: UNIVERSAL     # the type of a page whose classification reply cannot be read
 
   # How many pages go to the engine in one call. A page is one independent request, so the engine runs
-  # up to the model's max_num_seqs of a call's pages at once; a size of 1 is one call a page. A call
-  # holds pages of one document type, since a type has its own prompt and completion budget. A call
-  # that fails is tried again one page at a time, so a size too large costs time and never a result.
+  # up to the model's max_num_seqs of a call's pages at once and queues the rest; a size of 1 is one
+  # call a page. A call holds pages of one document type, since a type has its own prompt and
+  # completion budget. A call that fails is tried again one page at a time, so a size too large costs
+  # time and never a result.
+  #
+  # Every size is several times max_num_seqs, so that the engine stays full as a call's short pages
+  # finish: a call no larger than that ends with a few slow pages running alone, and the next call
+  # waits for them. Measured on 55 statements with 8 in flight: 16 to a call took 484 s, one call of
+  # 55 took 418 s.
   batching:
     classify: 64               # pages to a classify call. Not a document type
-    receipt: 10
-    invoice: 10
-    # A statement is one independent request, like any other page, and shares a call with others. The
-    # size is several times max_num_seqs, so that the engine stays full as the short statements finish.
+    receipt: 64
+    invoice: 64
     bank_statement: 64
-    sroie_receipt: 8           # the receipts of the SROIE dataset: four short fields each
-    default: 10                # a type with no size of its own
+    sroie_receipt: 64          # the receipts of the SROIE dataset: four short fields each
+    default: 64                # a type with no size of its own
 
   processing:
     verbose: false             # true = the classify stage prints each page's type as it is detected

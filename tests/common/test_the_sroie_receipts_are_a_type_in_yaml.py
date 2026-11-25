@@ -63,10 +63,13 @@ def test_the_dataset_s_type_is_four_fields_of_kinds_the_pipeline_has_with_a_fixe
     }
 
 
-def test_the_receipts_go_eight_to_an_engine_call_as_the_old_task_sent_them() -> None:
-    settings = yaml.safe_load(DEFAULT_CONFIG.read_text())
+def test_the_receipts_have_a_size_of_engine_call_as_every_type_has() -> None:
+    """The size is every type's (tests/config/test_every_engine_call_fills_the_engine.py). Until
+    25 November 2026 it was 8, the old task's, which left half an engine's places empty.
+    """
+    sizes = yaml.safe_load(DEFAULT_CONFIG.read_text())["pipeline"]["batching"]
 
-    assert settings["pipeline"]["batching"][TYPE] == 8
+    assert sizes[TYPE] == sizes["bank_statement"]
 
 
 # --- a reply in the dataset's form, read by the pipeline's parser and cleaners ---------------------------

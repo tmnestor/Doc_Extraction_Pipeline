@@ -309,7 +309,10 @@ def test_the_shipped_bank_batch_size_is_stated_and_explained():
 
     assert sizes["bank_statement"] >= 1
     assert "it is NOT in effect today" not in text
-    assert "one independent" in text.split("batching:")[1].split("processing:")[0]
+    # The reason for the sizes is written above them: a page is one request, and a call is several
+    # times what an engine runs at once.
+    reason = text.split("# How many pages go to the engine in one call")[1].split("processing:")[0]
+    assert "one independent" in reason and "several times max_num_seqs" in reason
 
 
 def test_an_image_with_transparency_is_put_on_white_and_an_rgb_image_is_left_as_it_is():

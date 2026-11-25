@@ -8,6 +8,9 @@ should look like and how to mend it.
 A variable that is unset, empty, or the word ``None`` counts as not set: a pipeline manifest passes a blank
 parameter as the text "None".
 
+The settings file is the one ``entrypoint.sh`` hands over: the shipped ``config/run_config.yml``, or the
+job's own if it names one in ``run_config``. Which it is is decided there, in bash.
+
 Run as a module it prints the log folder, which the entry script needs before it starts anything else:
 
     python -m common.stage_settings config/run_config.yml
@@ -16,11 +19,11 @@ Run as a module it prints the log folder, which the entry script needs before it
 import os
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from common.settings import ConfigError, read_settings_file, value_at
+from common.settings import ConfigError, Settings, read_settings_file, value_at
 
 TASKS = ("split", "classify", "extract", "clean", "evaluate")
 
@@ -54,6 +57,11 @@ class StageSettings:
     # The dataset the job names, if it names one, and the document type that dataset gives its pages.
     dataset: str | None = None
     given_type: str | None = None
+    # The share of each card's memory the job sets, or None for the settings file's.
+    gpu_memory_utilization: float | None = None
+    # What the settings file holds, as it was read to work these out. A stage that reads more of the
+    # file reads this, so that one start of a task reads its settings file once.
+    raw: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
     # Every file a stage writes is under the output folder, so that one stage finds what another wrote.
 
@@ -181,12 +189,49 @@ def _refuse_old_names(environ: Mapping[str, str]) -> None:
         )
 
 
+_MEMORY_SHARE = "DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+
+
+def _memory_share(environ: Mapping[str, str]) -> float | None:
+    """The share of each card's memory the job sets, or None if it sets none.
+
+    entrypoint.sh has checked that it is a share. It is read here, with the job's other variables,
+    and handed to the engine loader with the run's settings.
+    """
+    given = _set(environ, _MEMORY_SHARE)
+    return None if given is None else float(given)
+
+
+def run_settings(task: StageSettings) -> Settings:
+    """The run's settings for a task that uses the cards, from what the task was worked out from.
+
+    The settings file is not read again: the task holds what it held. The model's folder is looked
+    for here, so this is asked only for a task that loads a model.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    return Settings.load(
+        {
+            "model_type": task.model,
+            "output_dir": str(task.output),
+            "gpu_memory_utilization": task.gpu_memory_utilization,
+        },
+        config_path=task.config_path,
+        raw=task.raw,
+    )
+
+
 def log_dir(environ: Mapping[str, str], config_path: Path) -> Path:
     """The folder the run's log is written to."""
     _refuse_old_names(environ)
+    return _log_dir(environ, read_settings_file(config_path), config_path)
+
+
+def _log_dir(environ: Mapping[str, str], raw: Mapping[str, Any], config_path: Path) -> Path:
     found = _value(
         environ,
-        read_settings_file(config_path),
+        raw,
         config_path,
         _LOG_DIR,
         needed_by="every task",
@@ -212,6 +257,7 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
             value cannot be read.
     """
     _refuse_old_names(environ)
+    memory_share = _memory_share(environ)
     if task not in TASKS:
         raise ConfigError(
             f"What: KFP_TASK is {task!r}, which is not a task of this pipeline.\n"
@@ -273,11 +319,13 @@ def resolve(task: str, environ: Mapping[str, str], config_path: Path) -> StageSe
         image_dir=Path(image_dir) if image_dir else None,
         output=Path(output),
         ground_truth=Path(ground_truth) if ground_truth else None,
-        log_dir=log_dir(environ, config_path),
+        log_dir=_log_dir(environ, raw, config_path),
         clear_previous_output=_start_afresh(environ),
         config_path=config_path,
         dataset=dataset,
         given_type=given_type,
+        gpu_memory_utilization=memory_share,
+        raw=raw,
     )
 
 

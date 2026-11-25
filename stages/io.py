@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
+from common.config_schema import ConfigError
 
 logger = logging.getLogger("stages")
 
@@ -325,6 +326,51 @@ def in_the_order(path: Path, order: list[str], *, adding: Sequence[dict[str, Any
         _put_in_place(path, [in_order])
 
 
+def read_input(path: Path, *, written_by: str) -> list[dict[str, Any]]:
+    """The records of a file an earlier task wrote, or the reason the task cannot start.
+
+    The one way a task reads its input. A file that is not there, holds no record or has a line that
+    cannot be read is the job's to mend, and is said in the four parts every such fault is said in.
+    Until 26 November 2026 each ended the task with a traceback: a missing file as the reading
+    function's own error, a spoilt line as the JSON parser's.
+
+    Args:
+        path: The file, in the run's output folder.
+        written_by: The task that writes it, named in the message.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+
+    def refuse(problem: str, fix: str) -> ConfigError:
+        return ConfigError(
+            f"What: the task reads {path.name}, which {problem}.\n"
+            f"Where: {path.resolve()}, in the folder the job names in output.\n"
+            f"Expected: the file the {written_by} task writes there, one record a line.\n"
+            f"How to fix: {fix}"
+        )
+
+    again = f"run the {written_by} task with the same output, and then this task"
+    if not path.is_file():
+        raise refuse("is not there", f"{again}; or correct output, if the run's folder is another.")
+    records: list[dict[str, Any]] = []
+    for number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as err:
+            raise refuse(
+                f"cannot be read at line {number} ({err})", f"{again}: it writes its file whole."
+            ) from None
+        if not isinstance(record, dict):
+            raise refuse(f"holds, at line {number}, what is not a record", f"{again}.")
+        records.append(record)
+    if not records:
+        raise refuse("holds no record", f"{again}.")
+    return records
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read all records from a JSONL file."""
     records: list[dict[str, Any]] = []
@@ -359,6 +405,16 @@ def read_completed_images(path: Path) -> set[str]:
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp"}
+
+
+def no_pages_in(image_dir: Path, selection: str) -> ConfigError:
+    """The fault of a folder of pages with no image in it for the task to read."""
+    return ConfigError(
+        f"What: the folder of pages holds no image{selection}.\n"
+        f"Where: {image_dir}, which the job names in image_dir.\n"
+        f"Expected: the pages to read, as image files ({', '.join(sorted(IMAGE_EXTENSIONS))}).\n"
+        f"How to fix: correct image_dir, or put the pages in that folder."
+    )
 
 
 def discover_images(

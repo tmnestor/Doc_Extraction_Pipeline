@@ -340,6 +340,9 @@ def settings_for(task: str, folder: Path, **changes: Any) -> StageSettings:
     return resolve(task, environ, RUN_CONFIG)
 
 
+CHECKED = object()
+
+
 class Called:
     """Stands in for a stage's ``run``: notes what it was given."""
 
@@ -350,6 +353,12 @@ class Called:
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         self.args, self.kwargs = args, kwargs
 
+    def check(self, task: StageSettings) -> Any:
+        """Stands in for a stage's ``check``: notes the task it was given, and gives a mark that a
+        card stage's ``run`` must then be handed."""
+        self.checked = task
+        return CHECKED
+
 
 @pytest.fixture
 def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
@@ -357,6 +366,7 @@ def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
     for task in TASKS:
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
+        monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "check", called.check)
     return called
 
 
@@ -368,13 +378,10 @@ def test_classify_is_given_its_folders_and_says_how_long_it_took(
     with caplog.at_level(logging.INFO):
         starter.run_task(settings)
 
-    assert stage.args == (settings.image_dir, settings.classifications)
+    # What the stage's check gave is what its run is handed: nothing is worked out a second time.
+    assert stage.args == (settings.classifications, CHECKED)
     # No dataset is named, so no type is given: the model is asked.
-    assert stage.kwargs == {
-        "model_type": "gemma4-31b-w4a16-vllm",
-        "config_path": RUN_CONFIG,
-        "given_type": None,
-    }
+    assert stage.kwargs == {"given_type": None}
     assert any("Classification complete (" in record.getMessage() for record in caplog.records)
     # The runner keeps no time of its own: a stage notes what it spent (tests/common/test_stage_timing.py).
     assert not (settings.output / ".inference_elapsed").exists()
@@ -385,8 +392,8 @@ def test_extract_is_given_its_folders(tmp_path: Path, stage: Called) -> None:
 
     starter.run_task(settings)
 
-    assert stage.args == (settings.classifications, settings.image_dir, settings.raw_extractions)
-    assert stage.kwargs == {"model_type": "gemma4-31b-w4a16-vllm", "config_path": RUN_CONFIG}
+    assert stage.args == (settings.raw_extractions, CHECKED)
+    assert stage.kwargs == {}
 
 
 def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called) -> None:
@@ -395,19 +402,16 @@ def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called
 
     starter.run_task(settings)
 
-    assert stage.args == (settings.cleaned_extractions, settings.ground_truth, settings.evaluation_dir)
+    assert stage.args == (CHECKED, settings.evaluation_dir)
     assert stage.kwargs == {}
 
 
 def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) -> None:
     starter.run_task(settings_for("split", tmp_path))
-    assert stage.args[1] == tmp_path / "out" / "split"
+    assert stage.args == (tmp_path / "out" / "split", CHECKED)
 
     starter.run_task(settings_for("clean", tmp_path))
-    assert stage.args == (
-        tmp_path / "out" / "raw_extractions.jsonl",
-        tmp_path / "out" / "cleaned_extractions.jsonl",
-    )
+    assert stage.args == (CHECKED, tmp_path / "out" / "cleaned_extractions.jsonl")
 
 
 def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads(
@@ -425,17 +429,20 @@ def test_the_settings_file_a_task_was_worked_out_from_is_the_one_its_stage_reads
     starter.run_task(settings)
 
     assert settings.config_path == another != RUN_CONFIG
-    assert stage.kwargs["config_path"] == another
+    # The stage's check is given the task, which holds that file and what it held when it was read.
+    assert stage.checked.config_path == another
+    assert stage.checked.raw == yaml.safe_load(another.read_text())
 
 
 @pytest.mark.parametrize("task", TASKS)
 def test_every_stage_has_a_banner_and_is_started_the_one_way(task: str) -> None:
-    """The runner knows no stage by name: it asks each for these two, and nothing else."""
+    """The runner knows no stage by name: it asks each for these three, and nothing else."""
     module = importlib.import_module(f"stages.{task}")
     parameters = list(inspect.signature(module.start).parameters)
 
     assert isinstance(module.BANNER, str) and task in module.BANNER.lower()
-    assert parameters == ["task"]
+    assert parameters == ["task", "checked"]
+    assert list(inspect.signature(module.check).parameters) == ["task"]
     assert inspect.signature(module.start).return_annotation is str
 
 

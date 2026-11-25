@@ -16,30 +16,25 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, in_engine_calls
+from common.pipeline_ops import check_processor
+from common.settings import Settings
+from common.stage_settings import StageSettings, run_settings
 from common.vllm_dp import RecordSink
-
-from common.stage_settings import StageSettings
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import in_the_order, read_completed_images, read_jsonl, start_afresh
+from .io import in_the_order, read_completed_images, read_input, start_afresh
 
 logger = logging.getLogger(__name__)
 
 
-def run(
-    classifications_path: Path,
-    image_dir: Path,
-    output_path: Path,
-    *,
-    model_type: str | None = None,
-    config_path: Path | None = None,
-) -> Path:
+def run(output_path: Path, checked: "Checked") -> Path:
     """Extract fields from classified images, write raw_extractions.jsonl.
 
     Writes the **raw model response string** per image, not parsed/cleaned
@@ -50,32 +45,15 @@ def run(
     since. The file is left in the order pages are read in, however the run went.
 
     Args:
-        classifications_path: Path to classifications.jsonl from Stage 1.
-        image_dir: Directory containing the original images.
         output_path: Path to write raw_extractions.jsonl.
-        model_type: A registered model.
-        config_path: Optional path to run_config.yml.
+        checked: The run's settings and the pages' classifications, checked: what ``checked`` gave.
 
     Returns:
         Path to the written raw_extractions.jsonl.
     """
-    from common.settings import Settings
     from common.extraction_sort import filter_skip_labels, sort_for_extraction
 
-    # Read classifications
-    classifications = read_jsonl(classifications_path)
-    if not classifications:
-        msg = f"No classifications found in {classifications_path}"
-        raise FileNotFoundError(msg)
-
-    logger.info("Read %d classifications from %s", len(classifications), classifications_path)
-
-    cli_args: dict[str, Any] = {"output_dir": str(output_path.parent)}
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-
-    app_cfg = Settings.load(cli_args, config_path=config_path)
-    check_settings(app_cfg, classifications)
+    app_cfg, classifications = checked.settings, checked.classifications
 
     # Pages of a type the settings say not to read are set apart. The rest are put one document type
     # after another, so that the engine reuses its work on a type's prompt.
@@ -148,6 +126,46 @@ def run(
             len(records),
         )
     return output_path
+
+
+@dataclass(frozen=True)
+class Checked:
+    """What the stage is run with, read and checked."""
+
+    settings: Settings
+    # The pages' classification records, as the classify stage left them.
+    classifications: list[dict[str, Any]]
+
+
+def checked(classifications_path: Path, settings: Settings) -> Checked:
+    """The run's settings and the pages' classifications, with what reading the fields depends on checked.
+
+    The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
+    nothing is read or worked out a second time.
+
+    Args:
+        classifications_path: Path to classifications.jsonl from Stage 1.
+        settings: The run's settings.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A
+            classifications file that is not there, or cannot be read, is one such.
+    """
+    classifications = read_input(classifications_path, written_by="classify")
+    logger.info("Read %d classifications from %s", len(classifications), classifications_path)
+    check_settings(settings, classifications)
+    return Checked(settings, classifications)
+
+
+def check(task: StageSettings) -> Checked:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    found = checked(task.classifications, run_settings(task))
+    check_processor(found.settings)
+    return found
 
 
 def check_settings(app_config: Any, classifications: list[dict[str, Any]]) -> None:
@@ -299,16 +317,9 @@ def _plan_batches(classifications: list[dict[str, Any]], app_config: Any) -> lis
 BANNER = "Stage 2: extract, the fields of each page (GPU)"
 
 
-def start(task: StageSettings) -> str:
-    """Run the stage for a task, and give the line that says it is done."""
-    assert task.image_dir is not None
+def start(task: StageSettings, checked: Checked) -> str:
+    """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
     start_afresh(task.clear_previous_output, task.raw_extractions)
     started = time.time()
-    run(
-        task.classifications,
-        task.image_dir,
-        task.raw_extractions,
-        model_type=task.model,
-        config_path=task.config_path,
-    )
+    run(task.raw_extractions, checked)
     return f"Extraction complete ({int(time.time() - started)}s)."

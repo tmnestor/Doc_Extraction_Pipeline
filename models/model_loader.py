@@ -48,8 +48,10 @@ def load_engine(spec: VllmSpec, settings: Settings) -> Iterator[Any]:
         cards = cards_to_use(settings)
         tuning = settings.get_vllm_config(spec.model_type)
 
-        # The share of each card's memory: the environment's, else the settings file's.
-        from_environment = os.environ.get("DOC_EXTRACT_GPU_MEMORY_UTILIZATION")
+        # The share of each card's memory: the job's, else the settings file's. The job's is read
+        # and checked once, with the job's other variables (common.stage_settings), and comes here
+        # with the settings: until 26 November 2026 it was read here from the environment.
+        from_environment = settings.gpu_memory_utilization
         memory_share = float(from_environment or tuning["gpu_memory_utilization"])
 
         # max_num_seqs is printed because it is the ceiling on concurrency and there is otherwise no

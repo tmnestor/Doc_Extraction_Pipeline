@@ -10,8 +10,11 @@
 #     python3 -m stages
 #
 # Which task, which model and which folders are worked out there, in Python
-# (common/stage_settings.py), from the environment first and config/run_config.yml
-# second. This script decides none of it.
+# (common/stage_settings.py), from the environment first and the settings file second.
+#
+# What is decided at launch is decided here, in bash, where it can be read in one place:
+# which settings file is read, that nothing is written beside the code, and which commit
+# of the code this is.
 #
 # The variables a job may set:
 #   KFP_TASK                 split, classify, extract, clean or evaluate
@@ -20,6 +23,7 @@
 #   output                   the folder the stages write to
 #   ground_truth             the answer key, for evaluate
 #   dataset                  a dataset of the settings file, whose pages are all of one type
+#   run_config               a settings file of the job's own, read whole in place of config/run_config.yml
 #   CLEAR_PREV_OUTPUT        true = delete the stage's earlier output first; default false
 #   DOC_EXTRACT_LOG_DIR      the folder for the log
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
@@ -56,6 +60,53 @@ if [[ -n "$OLD_NAMES" ]]; then
   exit 1
 fi
 
+# ---- Nothing is written beside the code ---- #
+# Under a pipeline this folder is in the job's pod: its storage is not kept, and a job that writes
+# there is stopped. git writes it once, when the job is launched from its commit, and is not used
+# after that. So the folders the job names for its output and its log are refused, further down,
+# if they are inside this folder.
+CODE_DIR="$(pwd -P)"
+beside_the_code() {
+  case "$(realpath -m -- "$1")/" in "$CODE_DIR"/*) return 0 ;; *) return 1 ;; esac
+}
+
+# ---- The commit this job was launched from ---- #
+# Read from the checkout's own files, since git is not run once the job has started. Each task
+# that uses the cards notes it in <output>/run_manifest.json. Empty if this folder is no checkout.
+HEAD_NOW="$(cat .git/HEAD 2>/dev/null || true)"
+if [[ "$HEAD_NOW" == "ref: "* ]]; then
+  HEAD_NOW="$(cat ".git/${HEAD_NOW#ref: }" 2>/dev/null || true)"
+fi
+export DOC_EXTRACT_COMMIT="${HEAD_NOW:0:7}"
+
+# ---- The settings file ---- #
+# config/run_config.yml beside this script, unless the job names its own in run_config. A job
+# changes a setting by naming a file where it can write, never by editing the one in here. The
+# file named is the whole of the settings: nothing is merged from the shipped one.
+CONFIG_FILE="./config/run_config.yml"
+if [[ -n "${run_config:-}" && "${run_config}" != "None" ]]; then
+  CONFIG_FILE="$run_config"
+fi
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "FATAL: the settings file does not exist: $CONFIG_FILE"
+  echo "  What:     the job names a settings file in run_config, and there is no such file."
+  echo "  Where:    the variable run_config in the environment of this job."
+  echo "  Expected: a whole settings file the job can read, e.g. run_config=/data/run_20261126/run_config.yml"
+  echo "  Fix:      copy config/run_config.yml to the job's storage, change what the run needs, and name the copy; or unset run_config."
+  exit 1
+fi
+
+# ---- The share of a card's memory, if the job sets one ---- #
+SHARE="${DOC_EXTRACT_GPU_MEMORY_UTILIZATION:-}"
+if [[ -n "$SHARE" && "$SHARE" != "None" ]] && ! [[ "$SHARE" =~ ^(0?\.[0-9]*[1-9][0-9]*|1(\.0*)?)$ ]]; then
+  echo "FATAL: DOC_EXTRACT_GPU_MEMORY_UTILIZATION is not a share of a card's memory: $SHARE"
+  echo "  What:     the engine is given this share of each card's memory, and it is not a number above 0 and at most 1."
+  echo "  Where:    the variable DOC_EXTRACT_GPU_MEMORY_UTILIZATION in the environment of this job."
+  echo "  Expected: a number such as 0.90. Unset, the share is the model's gpu_memory_utilization in the settings file."
+  echo "  Fix:      set it to such a number, or leave it unset."
+  exit 1
+fi
+
 # ---- CUDA Environment ---- #
 # Deterministic GPU indexing: ensures cuda:0 always maps to the same physical
 # GPU regardless of driver enumeration order. Critical for multi-GPU so that
@@ -68,6 +119,14 @@ export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
 
 # Suppress vLLM usage telemetry (avoids TLS cert errors in air-gapped envs).
 export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
+
+# vLLM's compile cache: both lines are off, and vLLM is left to do as it does. It keeps what
+# torch.compile makes under ~/.cache/vllm/torch_compile_cache, which is in the pod (6 files in a run
+# of both models on the sandbox, 26 November 2026). If a pod refuses that write, uncomment ONE:
+#   the first moves vLLM's cache folder to storage the job can write to (name a real folder);
+#   the second keeps no compile cache at all, so every engine start compiles again.
+# export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-/data/vllm_cache}"
+# export VLLM_DISABLE_COMPILE_CACHE="${VLLM_DISABLE_COMPILE_CACHE:-1}"
 
 # NCCL shared memory: KFP pods may default /dev/shm to 64 MB, which is
 # too small for NCCL's SHM transport under tensor parallelism: after ~11
@@ -82,9 +141,8 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # while still being printed to the console (so KFP UI shows it too).
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
 #
-# Priority: DOC_EXTRACT_LOG_DIR env var > run_config.yml bootstrap.logging.log_dir > fail
+# Priority: DOC_EXTRACT_LOG_DIR env var > bootstrap.logging.log_dir of the settings file > fail
 # No silent fallback: in KFP, pod-local writes are ephemeral/forbidden.
-CONFIG_FILE="./config/run_config.yml"
 
 # ---- The conda environment's own python ---- #
 # The log folder has to be known BEFORE output is redirected into the log, and working it out needs
@@ -106,8 +164,22 @@ fi
 # The log folder: DOC_EXTRACT_LOG_DIR, else bootstrap.logging.log_dir in the settings file, else stop.
 # On failure the command prints the reason, which is then what LOG_DIR holds.
 LOG_DIR="$("$CONDA_PY" -m common.stage_settings "$CONFIG_FILE")" || { echo "$LOG_DIR"; exit 1; }
+
+# The two folders the job writes to are refused if they are beside the code (see the top).
+for WRITTEN in "$LOG_DIR" "${output:-}"; do
+  if [[ -n "$WRITTEN" && "$WRITTEN" != "None" ]] && beside_the_code "$WRITTEN"; then
+    echo "FATAL: the job would write beside the code: $WRITTEN"
+    echo "  What:     a folder the job names for its output or its log is inside the code's own folder, $CODE_DIR"
+    echo "  Where:    the variables output and DOC_EXTRACT_LOG_DIR in the environment of this job."
+    echo "  Expected: folders on the storage mounted for the job's data. The code's folder is in the pod: it is not kept."
+    echo "  Fix:      name folders outside $CODE_DIR"
+    exit 1
+  fi
+done
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/entrypoint_$(date +'%Y%m%d_%H%M%S').log"
+# The settings this start was run with are kept beside its log, under the same name.
+cp "$CONFIG_FILE" "${LOG_FILE%.log}_run_config.yml"
 
 # `exec` redirects ALL subsequent output through `tee`, which writes to
 # both the console (for KFP) and the log file (for persistent debugging).
@@ -235,5 +307,7 @@ fi
 # KFP_TASK names it. Its model and folders are worked out in Python, where a task that is not known, or a
 # setting that is missing, stops the run with a message saying what to set and where.
 log "KFP_TASK: ${KFP_TASK:-<not set>}"
+log "Settings: $CONFIG_FILE"
+log "Commit:   ${DOC_EXTRACT_COMMIT:-<not a checkout>}"
 log ""
-python3 -m stages
+python3 -m stages "$CONFIG_FILE"

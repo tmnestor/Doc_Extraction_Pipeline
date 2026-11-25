@@ -52,7 +52,7 @@ def not_read(name: str) -> dict[str, Any]:
 def cleaned_from(tmp_path: Path, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     extractions = tmp_path / "raw_extractions.jsonl"
     extractions.write_text("".join(json.dumps(record) + "\n" for record in records))
-    return read_jsonl(clean.run(extractions, tmp_path / "cleaned_extractions.jsonl"))
+    return read_jsonl(clean.run(clean.checked(extractions), tmp_path / "cleaned_extractions.jsonl"))
 
 
 # --- the clean stage ------------------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def evaluated(tmp_path: Path, records: list[dict[str, Any]], answered: list[str]
     extractions.write_text("".join(json.dumps(record) + "\n" for record in records))
     key = tmp_path / "ground_truth.jsonl"
     key.write_text("".join(json.dumps({"filename": name, **GOOD}) + "\n" for name in answered))
-    return evaluate.run(extractions, key, tmp_path / "evaluation")
+    return evaluate.run(evaluate.checked(extractions, key), tmp_path / "evaluation")
 
 
 def cleaned(name: str, fields: dict[str, str]) -> dict[str, Any]:
@@ -175,10 +175,10 @@ def test_from_extract_to_evaluate_a_page_left_unread_lowers_no_score(bench: Benc
     bench.processor.read_pages = replies  # type: ignore[method-assign]
 
     raw_path = bench.extract(classifications, out / "raw_extractions.jsonl")
-    cleaned_path = clean.run(raw_path, out / "cleaned_extractions.jsonl")
+    cleaned_path = clean.run(clean.checked(raw_path), out / "cleaned_extractions.jsonl")
     key = out / "ground_truth.jsonl"
     key.write_text("".join(json.dumps({"filename": name, **GOOD}) + "\n" for name in bench.names))
-    results = read_jsonl(evaluate.run(cleaned_path, key, out / "evaluation"))
+    results = read_jsonl(evaluate.run(evaluate.checked(cleaned_path, key), out / "evaluation"))
 
     receipts = [name for name in bench.names if "receipt" in name]
     by_name = {record["image_name"]: record for record in results}

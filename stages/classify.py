@@ -10,31 +10,27 @@ Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 import logging
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from common.classification import BY_THE_DATASET
 from common.config_schema import ConfigError
 from common.engine_calls import EngineWatch, Outcome, groups_of, in_engine_calls
-from common.vllm_dp import RecordSink
 from common.extraction_batching import read_classify_batch_size
-
-from common.stage_settings import StageSettings
+from common.pipeline_ops import check_processor
+from common.settings import Settings
+from common.stage_settings import StageSettings, run_settings
+from common.vllm_dp import RecordSink
 
 from . import records as records_of
 from .carry_on import Work, carry_on
-from .io import in_the_order, read_completed_images, start_afresh
+from .io import discover_images, no_pages_in, start_afresh
 
 logger = logging.getLogger(__name__)
 
 
-def run(
-    image_dir: Path,
-    output_path: Path,
-    *,
-    model_type: str | None = None,
-    config_path: Path | None = None,
-    given_type: str | None = None,
-) -> Path:
+def run(output_path: Path, checked: "Checked", *, given_type: str | None = None) -> Path:
     """Detect document types for all images, write classifications.jsonl.
 
     When the pages are of a dataset that says what they are (``pipeline.datasets``), each is given that
@@ -45,45 +41,46 @@ def run(
     pages' order however the run went. A run with nothing left starts no engine.
 
     Args:
-        image_dir: Directory containing images.
         output_path: Path to write classifications.jsonl.
-        model_type: A registered model.
-        config_path: Optional path to run_config.yml.
+        checked: The run's settings as the stage loads its engine with them, and the pages to
+            classify: what ``checked`` gave.
         given_type: The document type the pages' dataset gives them, or None to ask the model.
 
     Returns:
         Path to the written classifications.jsonl.
     """
-    from common.settings import Settings
-    from stages.io import discover_images
-
-    cli_args: dict[str, Any] = {"output_dir": str(output_path.parent)}
-    if model_type is not None:
-        cli_args["model_type"] = model_type
-
-    app_cfg = Settings.load(cli_args, config_path=config_path).for_stage("classify")
-    check_settings(app_cfg)
-    # Both filters are config-driven and MUST be passed: calling with the
-    # directory alone silently ignored max_images and document_types, so a
-    # 12-image request processed all 165 (fixed 2026-09-21).
-    images = list(
-        discover_images(
-            image_dir,
-            document_types=app_cfg.document_types,
-            max_images=app_cfg.max_images,
-        )
-    )
-    if not images:
-        msg = f"No images found in {image_dir}"
-        raise FileNotFoundError(msg)
-
-    logger.info("Found %d images in %s", len(images), image_dir)
-    if given_type is not None:
-        _give_the_type(images, output_path, given_type)
-        return output_path
+    app_cfg, images = checked.settings, checked.images
 
     def taken_out(records: list[dict[str, Any]]) -> None:
-        logger.info("%d page(s) an earlier run could not classify will be asked about again", len(records))
+        logger.info(
+            "%d page(s) an earlier run could not classify will be %s",
+            len(records),
+            "asked about again" if given_type is None else "given their type",
+        )
+
+    if given_type is not None:
+        # The pages' dataset says what they are. No model is asked, and the stage carries on the one
+        # way: a page the output holds keeps its record, a page an earlier run could not classify is
+        # given its type, and the file is left in the pages' order. The record is the one a page the
+        # model was asked about has, with nothing for a reply, so that every stage after this reads
+        # it as it reads any other.
+        given = carry_on(
+            app_cfg,
+            Work(
+                stage="classify",
+                output=output_path,
+                items=images,
+                name_of=lambda page: page.name,
+                tell=lambda page: records_of.given_its_type(str(page), given_type, BY_THE_DATASET),
+                taken_out=taken_out,
+            ),
+        )
+        logger.info(
+            "%d page(s) given the type %s by the dataset: the model is not asked",
+            len(given.records),
+            given_type,
+        )
+        return output_path
 
     # One engine on each card where the model allows it, else one engine across the cards. Either way the
     # pages are read by classify_pages; only where the engine is started differs.
@@ -123,27 +120,6 @@ def run(
     return output_path
 
 
-def _give_the_type(images: list[Path], output_path: Path, given_type: str) -> None:
-    """Give each page the type its dataset says its pages are. No model is asked.
-
-    The stage carries on as ever: a page the output holds keeps its record, and the file is left in
-    the pages' order. The record is the one a page the model was asked about has, with nothing for a
-    reply, so that every stage after this reads it as it reads any other.
-    """
-    from common.classification import BY_THE_DATASET
-
-    held = read_completed_images(output_path)
-    told = [
-        records_of.given_its_type(str(page), given_type, BY_THE_DATASET)
-        for page in images
-        if page.name not in held
-    ]
-    in_the_order(output_path, [page.name for page in images], adding=told)
-    logger.info(
-        "%d page(s) given the type %s by the dataset: the model is not asked", len(told), given_type
-    )
-
-
 def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
     """Count the pages by how each came by its type, and warn of those given the fallback type.
 
@@ -173,6 +149,66 @@ def _say_how_the_types_were_reached(records: list[dict[str, Any]]) -> None:
             ", ".join(fallbacks[:10]),
             f" and {len(fallbacks) - 10} more" if len(fallbacks) > 10 else "",
         )
+
+
+@dataclass(frozen=True)
+class Checked:
+    """What the stage is run with, read and checked."""
+
+    # The run's settings as classify loads its engine with them.
+    settings: Settings
+    # The pages to classify: those of the folder the settings select, in the order of their names.
+    images: list[Path]
+
+
+def checked(image_dir: Path, settings: Settings) -> Checked:
+    """The run's settings as classify loads its engine with them, and the pages, each read and checked.
+
+    The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
+    nothing is read or worked out a second time.
+
+    Args:
+        image_dir: The folder of pages.
+        settings: The run's settings.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A folder with no
+            page to read is one such: until 26 November 2026 it ended the task with a traceback.
+    """
+    staged = settings.for_stage("classify")
+    check_settings(staged)
+    # Both filters are config-driven and MUST be passed: calling with the
+    # directory alone silently ignored max_images and document_types, so a
+    # 12-image request processed all 165 (fixed 2026-09-21).
+    images = list(
+        discover_images(
+            image_dir,
+            document_types=staged.document_types,
+            max_images=staged.max_images,
+        )
+    )
+    if not images:
+        selected = (
+            f" of the types the settings select ({', '.join(staged.document_types)}, under "
+            f"pipeline.information_extraction.input.document_types in {staged.config_path})"
+            if staged.document_types
+            else ""
+        )
+        raise no_pages_in(image_dir, selected)
+    logger.info("Found %d images in %s", len(images), image_dir)
+    return Checked(staged, images)
+
+
+def check(task: StageSettings) -> Checked:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    assert task.image_dir is not None
+    found = checked(task.image_dir, run_settings(task))
+    check_processor(found.settings)
+    return found
 
 
 def check_settings(app_config: Any) -> None:
@@ -314,16 +350,9 @@ def _classified(processor: Any, outcome: Outcome[str, str]) -> dict[str, Any]:
 BANNER = "Stage 1: classify, the document type of each page (GPU)"
 
 
-def start(task: StageSettings) -> str:
-    """Run the stage for a task, and give the line that says it is done."""
-    assert task.image_dir is not None
+def start(task: StageSettings, checked: Checked) -> str:
+    """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
     start_afresh(task.clear_previous_output, task.classifications)
     started = time.time()
-    run(
-        task.image_dir,
-        task.classifications,
-        model_type=task.model,
-        config_path=task.config_path,
-        given_type=task.given_type,
-    )
+    run(task.classifications, checked, given_type=task.given_type)
     return f"Classification complete ({int(time.time() - started)}s)."

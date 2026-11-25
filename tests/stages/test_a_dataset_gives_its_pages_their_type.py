@@ -15,13 +15,16 @@ from pathlib import Path
 import pytest
 
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
+from bench import run_settings
 from common.stage_timing import read_stage_timings
 from stages import classify
 from stages.io import read_jsonl
 
 
 def given(bench: Bench, output: Path, kind: str, model: str = ONE_ENGINE) -> Path:
-    return classify.run(bench.pages, output, model_type=model, config_path=bench.config, given_type=kind)
+    return classify.run(
+        output, classify.checked(bench.pages, run_settings(model, bench.config)), given_type=kind
+    )
 
 
 @pytest.mark.parametrize("model", [ONE_ENGINE, AN_ENGINE_ON_EACH_CARD])

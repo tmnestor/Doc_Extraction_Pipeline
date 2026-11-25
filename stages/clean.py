@@ -21,15 +21,12 @@ from common.reply_fields import fields_from_reply
 from common.stage_settings import StageSettings
 
 from . import records as records_of
-from .io import read_jsonl, start_afresh, write_jsonl
+from .io import read_input, start_afresh, write_jsonl
 
 logger = logging.getLogger(__name__)
 
 
-def run(
-    raw_extractions_path: Path,
-    output_path: Path,
-) -> Path:
+def run(raw_records: list[dict[str, Any]], output_path: Path) -> Path:
     """Parse, clean, and validate raw model responses.
 
     For each record in raw_extractions.jsonl:
@@ -38,20 +35,12 @@ def run(
       3. Write the cleaned field dict to cleaned_extractions.jsonl
 
     Args:
-        raw_extractions_path: Path to raw_extractions.jsonl from Stage 2.
+        raw_records: The records of raw_extractions.jsonl from Stage 2: what ``checked`` gave.
         output_path: Path to write cleaned_extractions.jsonl.
 
     Returns:
         Path to the written cleaned_extractions.jsonl.
     """
-    # Read raw extractions
-    raw_records = read_jsonl(raw_extractions_path)
-    if not raw_records:
-        msg = f"No records found in {raw_extractions_path}"
-        raise FileNotFoundError(msg)
-
-    logger.info("Read %d raw extractions from %s", len(raw_records), raw_extractions_path)
-
     schema = get_field_schema()
 
     # Build field lookup: doc_type -> list of expected fields
@@ -124,8 +113,33 @@ def run(
 BANNER = "Stage 3: clean, the model's replies parsed and tidied (CPU)"
 
 
-def start(task: StageSettings) -> str:
-    """Run the stage for a task, and give the line that says it is done."""
+def checked(raw_extractions_path: Path) -> list[dict[str, Any]]:
+    """The model's replies, read, and the schema file checked.
+
+    The one place the stage reads what it is run with. What it gives is what ``run`` is handed.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it. A file of
+            replies that is not there, or cannot be read, is one such: until 26 November 2026 it ended
+            the task with a traceback.
+    """
+    get_field_schema()
+    raw_records = read_input(raw_extractions_path, written_by="extract")
+    logger.info("Read %d raw extractions from %s", len(raw_records), raw_extractions_path)
+    return raw_records
+
+
+def check(task: StageSettings) -> list[dict[str, Any]]:
+    """Read and check everything the stage will use, and give it for ``start``. Nothing is written.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    return checked(task.raw_extractions)
+
+
+def start(task: StageSettings, checked: list[dict[str, Any]]) -> str:
+    """Run the stage for a task with what ``check`` gave, and give the line that says it is done."""
     start_afresh(task.clear_previous_output, task.cleaned_extractions)
-    run(task.raw_extractions, task.cleaned_extractions)
+    run(checked, task.cleaned_extractions)
     return "Cleaning complete."

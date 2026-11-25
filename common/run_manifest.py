@@ -19,7 +19,7 @@ and may be run again anywhere, so they leave no note and check none; they say wh
 
 import json
 import logging
-import subprocess
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -43,38 +43,24 @@ class StageNote:
 
     model: str
     image_dir: str
-    # The short commit of the code, or "unknown" where it cannot be told (no git, or not a checkout).
+    # The short commit of the code, or "unknown" where it cannot be told (the folder is not a checkout).
     commit: str
-    # Whether tracked files differed from that commit; None where it cannot be told.
+    # Whether tracked files differed from that commit. None from 26 November 2026: it cannot be told
+    # without running git, which a task does not do. A note written before may hold true or false.
     uncommitted_changes: bool | None
     started: str
     last_run: str
 
 
-def code_version(repository: Path) -> tuple[str, bool | None]:
-    """The short commit of the code in ``repository``, and whether tracked files differ from it.
+def code_version() -> str:
+    """The short commit the job was launched from, or "unknown".
 
-    Where git is missing, or the folder is not a checkout, the commit is "unknown" and the second is None.
+    git is not run. A job under a pipeline is launched from a commit: git writes the code's folder
+    then, and is not used once the pipeline has started. ``entrypoint.sh`` reads the commit from the
+    checkout's own files and exports it. Until 26 November 2026 this ran git twice at the start of
+    every task that uses the cards.
     """
-
-    def git(*arguments: str) -> str | None:
-        try:
-            done = subprocess.run(
-                ["git", "-C", str(repository), *arguments],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=20,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return done.stdout.strip() if done.returncode == 0 else None
-
-    commit = git("rev-parse", "--short", "HEAD")
-    if not commit:
-        return UNKNOWN, None
-    changed = git("status", "--porcelain", "--untracked-files=no")
-    return commit, None if changed is None else bool(changed)
+    return os.environ.get("DOC_EXTRACT_COMMIT") or UNKNOWN
 
 
 def read(output: Path) -> dict[str, StageNote]:
@@ -112,7 +98,6 @@ def check_and_note(
     *,
     model: str,
     image_dir: Path | str,
-    repository: Path,
     starting_afresh: bool,
     now: datetime | None = None,
 ) -> StageNote:
@@ -123,7 +108,6 @@ def check_and_note(
         stage: The stage, one of ``STAGES``.
         model: The model the stage is run with.
         image_dir: The folder of pages it reads.
-        repository: The code's own folder, for its commit.
         starting_afresh: Whether the stage's earlier output has been deleted. Nothing is checked then.
         now: The time to note, or None for the present.
 
@@ -135,7 +119,7 @@ def check_and_note(
             commit, or the notes cannot be read.
     """
     notes = read(output)
-    commit, changed = code_version(repository)
+    commit, changed = code_version(), None
     moment = (now or datetime.now()).isoformat(timespec="seconds")
     this = StageNote(
         model=model,

@@ -79,6 +79,18 @@ def _is_none(value: Any) -> bool:
     return value is None or str(value).strip().lower() in {"none", "null", ""}
 
 
+# What the engine is started with (models.model_loader.load_engine), for every model.
+_ENGINE_KEYS = (
+    "gpu_memory_utilization",
+    "max_model_len",
+    "max_num_seqs",
+    "limit_mm_per_prompt",
+    "enable_prefix_caching",
+)
+# What resources.infrastructure must set: each is read by name (Settings.get_infra).
+_INFRASTRUCTURE = ("dp_join_timeout",)
+
+
 def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
     """The engine settings of each model: ``vllm.defaults`` with the model's own laid over them."""
     section = raw.get("inference", {}).get("vllm", {})
@@ -97,6 +109,24 @@ def _build_vllm_config(raw: dict[str, Any], path: Path) -> dict[str, dict]:
             "        limit_mm_per_prompt: 1\n"
             "        enable_prefix_caching: true\n"
             f"How to fix: add that block to {path}."
+        )
+    missing = [key for key in _ENGINE_KEYS if key not in defaults]
+    if missing:
+        raise ConfigError(
+            f"What: inference.vllm.defaults does not set {', '.join(missing)}. The engine is started with "
+            f"every one of {', '.join(_ENGINE_KEYS)}, and a model's own block may leave any of them to the "
+            f"defaults.\n"
+            f"Where: {path} -> inference.vllm.defaults.{missing[0]}\n"
+            "Expected: each of them under defaults, e.g.\n"
+            "  inference:\n"
+            "    vllm:\n"
+            "      defaults:\n"
+            "        gpu_memory_utilization: 0.90\n"
+            "        max_model_len: 8192\n"
+            "        max_num_seqs: 1\n"
+            "        limit_mm_per_prompt: 1\n"
+            "        enable_prefix_caching: true\n"
+            f"How to fix: add {', '.join(missing)} under inference.vllm.defaults in {path}."
         )
     models = section.get("models", {})
     _check_model_names(models, path)
@@ -142,6 +172,9 @@ class Settings:
     # The folder the stage writes to, when it gave one: only to place the record of what was sent to
     # the model, when that is kept and no place is named for it.
     output_dir: Path | None
+    # The share of each card's memory the job sets (DOC_EXTRACT_GPU_MEMORY_UTILIZATION), checked when
+    # the task was worked out. None: the model's own gpu_memory_utilization, of the settings file.
+    gpu_memory_utilization: float | None
     # Which pages of the folder are read.
     max_images: int | None
     document_types: list[str] | None
@@ -168,13 +201,22 @@ class Settings:
     _stage: str | None
 
     @classmethod
-    def load(cls, overrides: dict[str, Any], *, config_path: Path | None = None) -> "Settings":
+    def load(
+        cls,
+        overrides: dict[str, Any],
+        *,
+        config_path: Path | None = None,
+        raw: dict[str, Any] | None = None,
+    ) -> "Settings":
         """Read and check the settings.
 
         Args:
-            overrides: Any of ``model_type`` and ``num_gpus``, to stand in place of the file's, and
-                ``output_dir``, the folder the stage writes to. A value of None is taken as not given.
+            overrides: Any of ``model_type`` and ``num_gpus``, to stand in place of the file's;
+                ``output_dir``, the folder the stage writes to; and ``gpu_memory_utilization``, the
+                share of each card's memory the job sets. A value of None is taken as not given.
             config_path: The settings file, or None for the shipped one.
+            raw: What that file holds, when it has been read already (``read_settings_file``): a task
+                is worked out from one reading of its settings file. None reads the file.
 
         Raises:
             ConfigError: If the settings file does not exist, holds a key the pipeline does not know,
@@ -182,16 +224,18 @@ class Settings:
                 under a name no model has.
         """
         path = config_path or DEFAULT_CONFIG
-        raw = read_settings_file(path)
+        if raw is None:
+            raw = read_settings_file(path)
         given = {name: value for name, value in overrides.items() if value is not None}
         self = object.__new__(cls)
         self.config_path, self.raw, self._stage = path, raw, None
 
-        unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir"})
+        unknown = sorted(set(given) - {"model_type", "num_gpus", "output_dir", "gpu_memory_utilization"})
         if unknown:
             raise TypeError(f"Settings.load does not take {', '.join(unknown)}")
         folders = "pipeline.information_extraction"
         self.output_dir = Path(given["output_dir"]) if "output_dir" in given else None
+        self.gpu_memory_utilization = given.get("gpu_memory_utilization")
         self.max_images = _need(
             raw, f"{folders}.input.max_images", path, "null for every page, or a number"
         )
@@ -231,7 +275,7 @@ class Settings:
 
         self._vllm_config = _build_vllm_config(raw, path)
         self._token_budgets = cls._budgets(raw, path)
-        self._infrastructure = dict(raw.get("resources", {}).get("infrastructure", {}))
+        self._infrastructure = cls._infrastructure_of(raw, path)
         self.classification_fallback_type = _need(
             raw,
             "pipeline.classification.fallback_type",
@@ -307,10 +351,9 @@ class Settings:
 
     @staticmethod
     def _tracing(raw: dict[str, Any], path: Path) -> tuple[bool, str | None]:
-        """Whether what is sent to the model is kept, and where. No ``inference.tracing`` block is off."""
+        """Whether what is sent to the model is kept, and where. The block must be there: one left out
+        is not taken for 'off'. Until 26 November 2026 it was."""
         tracing = raw.get("inference", {}).get("tracing")
-        if tracing is None:
-            return False, None
         enabled = tracing.get("raw_prompts") if isinstance(tracing, dict) else None
         if not isinstance(enabled, bool) or "path" not in tracing:
             raise ConfigError(
@@ -336,6 +379,25 @@ class Settings:
                 f"page that fails."
             )
         return value
+
+    @staticmethod
+    def _infrastructure_of(raw: dict[str, Any], path: Path) -> dict[str, int | float]:
+        """The settings of resources.infrastructure, each a number of 0 or more. Checked here, and
+        not where each is first used: one of them is used only with an engine on each card, so a model
+        that takes one engine would never have met its absence."""
+        found: dict[str, int | float] = {}
+        for name in _INFRASTRUCTURE:
+            key = f"resources.infrastructure.{name}"
+            value = _need(raw, key, path, f"a number of seconds, e.g. {name}: 60")
+            if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+                raise ConfigError(
+                    f"What: {key} is {value!r}, not a number of 0 or more.\n"
+                    f"Where: {path} -> {key}\n"
+                    f"Expected: a number of seconds, e.g. {name}: 60\n"
+                    f"How to fix: set {key} to a number of 0 or more."
+                )
+            found[name] = value
+        return found
 
     @staticmethod
     def _budgets(raw: dict[str, Any], path: Path) -> dict[str, int]:

@@ -5,6 +5,8 @@ This is what ``entrypoint.sh`` starts, for every task:
     KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> python -m stages
 
 The settings come from ``common.stage_settings.resolve``: the environment first, the settings file second.
+The settings file is the one ``entrypoint.sh`` hands over as the first argument: the job's own if it names
+one in ``run_config``, and otherwise the shipped one beside the code.
 Here they are handed to the stage's own ``run``. Three things are done around a stage, the same for every
 stage. A run carries on from where an earlier one stopped unless ``CLEAR_PREV_OUTPUT=true`` asks for the
 stage's own earlier output to be deleted first: pages arrive over time, and a second run should read only
@@ -34,9 +36,11 @@ CONFIG_PATH = REPOSITORY / "config" / "run_config.yml"
 def _stage(task: str) -> Any:
     """The stage's own module. Imported only now, so that a task loads nothing another task needs.
 
-    A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, and a
-    ``start`` that is given the task's settings, runs the stage and returns the line that says it is
-    done. What a stage reads and writes, and which of its files a run started afresh deletes, is the
+    A stage is a module of ``stages`` with a ``BANNER``, the line that names it in the log, a
+    ``check`` that is given the task's settings, reads everything the stage will use, writes nothing
+    and gives what it worked out, and a ``start`` that is given the task's settings and what
+    ``check`` gave, runs the stage and returns the line that says it is done. Nothing a stage reads
+    to be checked is read or worked out again to be used. What a stage reads and writes, and which of its files a run started afresh deletes, is the
     stage's own to know. Until 25 November 2026 this module knew it for every stage, in a branch each.
     """
     return importlib.import_module(f"stages.{task}")
@@ -63,7 +67,6 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
         settings.task,
         model=settings.model,
         image_dir=settings.image_dir,
-        repository=REPOSITORY,
         # The split stage has no earlier output deleted for it, so it always checks.
         starting_afresh=settings.clear_previous_output and settings.task != "split",
     )
@@ -83,17 +86,27 @@ def run_task(settings: StageSettings) -> None:
     logger.info("=================================================================")
     for name in ("model", "image_dir", "output", "ground_truth", "clear_previous_output"):
         logger.info("  %-22s %s", name + ":", getattr(settings, name))
+    logger.info("  %-22s %s", "settings file:", settings.config_path)
 
+    # In this order. The task is checked whole before anything is written: the note of what made the
+    # folder is one thing written, and a stage started afresh deletes its earlier output. Until
+    # 26 November 2026 the note came first, and the stage read its own settings only once started.
+    # A task that could not start then left a note in a folder that held none of its output, and the
+    # next start with another model was refused as "output from another run"; started afresh, it had
+    # deleted the earlier output before it found that it could not replace it.
+    checked = stage.check(settings)
     _check_what_made_the_folder(settings)
-    logger.info(stage.start(settings))
+    logger.info(stage.start(settings, checked))
 
 
 def main() -> int:
     """Work out the settings of the task ``KFP_TASK`` names and run it."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
-        settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, CONFIG_PATH)
-        check_folder_of_pages(settings, CONFIG_PATH)
+        # The settings file entrypoint.sh hands over: the job's own if it names one, else the shipped one.
+        config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CONFIG_PATH
+        settings = resolve(os.environ.get("KFP_TASK", ""), os.environ, config_path)
+        check_folder_of_pages(settings, config_path)
         run_task(settings)
     except ConfigError as err:
         print(f"FATAL: the task cannot be started.\n{err}")

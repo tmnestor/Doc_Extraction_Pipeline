@@ -239,16 +239,16 @@ prompts:
       - Use NOT_FOUND only if information is genuinely not visible
 
   # ============================================================================
-  # VEHICLE LOGBOOK EXTRACTION - 15 Fields (ATO Motor Vehicle Expense Claims)
+  # VEHICLE LOGBOOK EXTRACTION - 15 Fields (Motor Vehicle Expense Claims)
   # Focused on: VEHICLE details, LOGBOOK PERIOD, ODOMETER, BUSINESS USE %
   # ============================================================================
   logbook:
     name: "Vehicle Logbook Extraction"
-    description: "Extract vehicle logbook details for ATO motor vehicle expense claims (15 fields)"
+    description: "Extract vehicle logbook details for motor vehicle expense claims (15 fields)"
     prompt: |
       Extract vehicle logbook information from this document for a motor vehicle expense claim.
 
-      DOCUMENT TYPES: ATO logbook, motor vehicle logbook, mileage log, trip log, commercial logbook
+      DOCUMENT TYPES: vehicle logbook, motor vehicle logbook, mileage log, trip log, commercial logbook
 
       EXTRACT THESE 15 FIELDS:
 
@@ -266,7 +266,7 @@ prompts:
          - Format: "2.0L", "2.5L", "1.8L", etc.
 
       5. LOGBOOK_PERIOD_START: Start date of logbook period
-         - ATO requires minimum 12 continuous weeks
+         - A logbook must cover a minimum of 12 continuous weeks
          - Format: "DD Mon YYYY" (e.g., "01 Jul 2025")
 
       6. LOGBOOK_PERIOD_END: End date of logbook period
@@ -323,7 +323,7 @@ prompts:
       JOURNEY_PURPOSES: [Purposes with " | " separator or NOT_FOUND]
 
       Instructions:
-      - Focus on ATO logbook essentials: vehicle, period, odometer, business use
+      - Focus on the logbook essentials: vehicle, period, odometer, business use
       - Business use percentage is the key tax deduction calculation
       - Extract journey entries in chronological order
       - Use " | " separator for all list fields

@@ -71,7 +71,7 @@ alike. Each choice below is a well-known pattern, used for the reason given.
 | Pattern | Where it is | Why it is used |
 |---|---|---|
 | **Pipes and filters** | Each task is a filter and each file under `output` is a pipe: `classifications.jsonl` carries `classify`'s work to `extract`, and so on | A task knows only the file it reads and the file it writes. Any task can be run again on files an earlier run left, on another machine, without the tasks before it |
-| **Strategy** | `stages/carry_on.py` is one fixed sequence. Each task that uses the cards hands it the part that differs: how that task asks the model (`classify_pages`, `extract_pages`, `ask_about_photographs`) | Carrying on from an earlier run is written once, not once a task. A fix to it is one fix |
+| **Strategy** | `stages/carry_on.py` is one fixed sequence. Each task that uses the cards hands it the part that differs: how that task asks the model (`classify_pages`, `extract_pages`, `ask_about_photographs`), or, where no model is needed (a dataset that gives its pages their type, the photo split switched off), how it makes a record without one | Carrying on from an earlier run is written once, not once a task. A fix to it is one fix |
 | **Write-ahead journal** | `<output file>.journal`, written by `Journal` in `stages/io.py` | Each record is on disk the moment the model gives it. A run stopped at page 100 of 165 loses nothing |
 | **Checkpoint and restart** | `carry_on`: recover the journal, take out the failed records, read only what is left | A run that carries on ends with the records, in the order, that a run straight through would have written |
 | **Atomic write** | `write_jsonl` and `in_the_order` in `stages/io.py` write beside the file and rename it into place. They are the only two ways a task's output is written | A reader finds the old file or the new one, never half of one |
@@ -89,7 +89,12 @@ Seven rules, which `tests/stages/test_every_stage_keeps_the_contract.py` holds.
 
 A task stands alone:
 
-1. It is one module of `stages/` with a `BANNER` and a `start(task)`. The runner knows no more.
+1. It is one module of `stages/` with a `BANNER`, a `check(task)` and a `start(task, checked)`. The
+   runner knows no more. `check` reads everything the task will use, writes nothing and gives what it
+   worked out, and the runner calls it before the note of what made the folder is written and before a
+   task started afresh deletes its earlier output: a task that cannot start leaves the folder as it
+   found it. `start` is handed what `check` gave, so a task is worked out once: its settings file is
+   read once, and nothing that was read to be checked is read again to be used.
 2. It reads its settings and the file the task before it wrote, and writes its own file. It imports no
    other task.
 3. A record handed from one task to the next is made by `stages/records.py` and by nothing else.
@@ -334,7 +339,8 @@ done
 
 ## What a job may set
 
-Each setting is taken from the environment if it is set there, and otherwise from `config/run_config.yml`.
+Each setting is taken from the environment if it is set there, and otherwise from the settings file:
+`config/run_config.yml`, or the file the job names in `run_config`.
 A variable that is unset, empty or the word `None` counts as not set. A setting a task needs that is in
 neither place stops the run before any work is done, with a message that says what is missing, where to put
 it, what it should look like and how to mend it.
@@ -352,6 +358,7 @@ is asked only for the folders it uses: `clean` and `evaluate` for no folder of p
 | `output` | The folder the tasks write to | every task | `pipeline.information_extraction.output.dir` | unchanged |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | `pipeline.information_extraction.input.ground_truth` | unchanged |
 | `dataset` | A dataset of the settings file, whose pages are all of one type: `classify` gives each page that type and asks no model, and the dataset's folder of pages is read unless `image_dir` is set | optional | a block under `pipeline.datasets` | new |
+| `run_config` | A settings file of the job's own, read whole in place of `config/run_config.yml` | optional | none: unset, the shipped file is read | new |
 | `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional, default `false` | none | unchanged |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | `bootstrap.logging.log_dir` | `LMM_LOG_DIR` |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | none: the default is in `entrypoint.sh` | `LMM_CONDA_ENV` |
@@ -362,6 +369,33 @@ variables. It is not run with the setting silently dropped.
 
 The number of cards is not a variable. It comes from `bootstrap.gpus` in the settings file.
 
+## Where a task writes
+
+Under a pipeline the code's folder is in the job's pod. That storage is not kept, and a job that writes
+there is stopped part way. A job is launched from a commit: git writes the code's folder then, and is
+not used once the pipeline has started. After that nothing is written beside the code:
+
+- **Every file a task writes is under a folder the job names**: `output`, `DOC_EXTRACT_LOG_DIR`, and
+  `inference.tracing.path` when what is sent to the model is kept. `entrypoint.sh` stops a job whose
+  `output` or log folder is the code's folder, or inside it, before either is made.
+- **A setting is changed in a file of the job's own** (`run_config`, below), never in the shipped file.
+- **No task runs git.** `entrypoint.sh` reads the commit from the files the checkout left (`.git/HEAD`
+  and the reference it names), and each task notes it in `run_manifest.json`. Whether files differed
+  from that commit cannot be told that way, and is noted as unknown.
+
+The folder check and the commit are a few lines of bash at the top of `entrypoint.sh`, which every job
+starts with.
+
+Python's compiled copies of the code (`__pycache__`) are left to Python. It writes them beside the code
+where it can, and where it cannot it goes on without them: an import does not fail for want of one.
+
+`tests/scripts/test_the_launch_is_decided_in_the_entry_script.py` runs the script, and
+`tests/common/test_nothing_is_written_beside_the_code.py` watches a whole run of the five tasks for any
+file beside the code that is opened for writing, made, moved or removed.
+
+What the engine and its libraries write for themselves (their caches, under the home folder and the
+temporary folder) is not the pipeline's and is not covered by this.
+
 ## The settings file
 
 `config/run_config.yml` holds every setting that is not one of the variables above: the engine's limits for
@@ -370,6 +404,31 @@ throughout:
 
 - **Nothing is defaulted in Python.** A key the code needs and does not find stops the run with a message.
 - **A key the code does not know is refused.** A misspelt key cannot sit in the file doing nothing.
+
+### A run with settings of its own
+
+The shipped file is in the code's folder, and a job often cannot write there: under a pipeline the code is
+read-only, and the storage a job can write to is mounted beside it. So a setting is never changed by editing
+the shipped file in place. Copy it to storage the job can read, change what the run needs changed, and name
+the copy:
+
+```bash
+cp config/run_config.yml /data/run_20261126/run_config.yml
+# edit /data/run_20261126/run_config.yml
+KFP_TASK=classify run_config=/data/run_20261126/run_config.yml model=gemma4-31b-w4a16-vllm \
+  image_dir=/data/pages output=/data/run_20261126 DOC_EXTRACT_LOG_DIR=/data/run_20261126/logs \
+  bash entrypoint.sh
+```
+
+- **The file named is the whole of the settings.** Nothing is merged from the shipped file. It is read and
+  checked exactly as the shipped file is, so a key it leaves out is missing and a key the code does not know
+  is refused. What a run was set to do can be read from that one file.
+- **Every task of a run names the same file.** Each start keeps a copy of the settings it was run with
+  beside its log, under the log's own name: `entrypoint_<time>_run_config.yml`.
+- **The log folder comes from the same file**, when the job does not set `DOC_EXTRACT_LOG_DIR`.
+
+The document types, their fields and the prompts are not settings of a run: they are part of the code, in
+`config/field_definitions.yaml` and `prompts/`, and are named by the commit.
 
 ## Adding a New Document Class
 
@@ -603,7 +662,7 @@ when that change is intended.
 
 | Folder | Holds |
 |---|---|
-| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER` and a `start` that is given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
+| `stages/` | One module for each task, and `__main__.py`, which starts the task `KFP_TASK` names. Each task's module has a `BANNER`, and a `check` and a `start` that are each given the task's settings: the runner knows no more of a task than that. Three modules are what the tasks share: `io.py` reads and writes their files, `records.py` defines each record one task hands another and the functions that make it, and `carry_on.py` is the one way a task that uses the cards carries on from an earlier run |
 | `common/` | What the tasks share: settings, parsing, cleaning, scoring, the page finder |
 | `models/` | The model registry, the vLLM engine loader, and the code that builds prompts and reads replies |
 | `config/` | `run_config.yml` and `field_definitions.yaml` |

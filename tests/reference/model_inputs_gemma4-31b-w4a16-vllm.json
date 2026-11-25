@@ -2837,24 +2837,7 @@
             "image_pil",
             "PAGE010_invoice.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -2974,24 +2957,7 @@
             "image_pil",
             "PAGE020_invoice.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3111,24 +3077,7 @@
             "image_pil",
             "PAGE030_invoice.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3248,24 +3197,7 @@
             "image_pil",
             "PAGE040_invoice.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3385,24 +3317,7 @@
             "image_pil",
             "PAGE050_invoice.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3599,24 +3514,7 @@
             "image_pil",
             "PAGE010_receipt.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3736,24 +3634,7 @@
             "image_pil",
             "PAGE020_receipt.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -3873,24 +3754,7 @@
             "image_pil",
             "PAGE030_receipt.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -4010,24 +3874,7 @@
             "image_pil",
             "PAGE040_receipt.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -4147,24 +3994,7 @@
             "image_pil",
             "PAGE050_receipt.png RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 1408,
-        "temperature": 0
-      },
-      "stage": "extract"
-    },
-    {
-      "engine": 1,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -6504,24 +6334,7 @@
             "image_pil",
             "image 107x150 RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 256,
-        "temperature": 0
-      },
-      "stage": "sroie"
-    },
-    {
-      "engine": 3,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",
@@ -6682,24 +6495,7 @@
             "image_pil",
             "image 107x150 RGB"
           ]
-        ]
-      ],
-      "sampling": {
-        "max_tokens": 256,
-        "temperature": 0
-      },
-      "stage": "dataset_sroie"
-    },
-    {
-      "engine": 4,
-      "others": {
-        "chat_template": null,
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        },
-        "use_tqdm": false
-      },
-      "requests": [
+        ],
         [
           [
             "user",

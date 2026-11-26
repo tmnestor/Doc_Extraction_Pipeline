@@ -23,7 +23,9 @@ from typing import Any
 from common import run_manifest
 from common.engine_calls import StageStopped
 from common.errors import ConfigError
+from common.field_schema import get_field_schema
 from common.stage_settings import StageSettings, resolve
+from models.registry import get_model
 
 
 logger = logging.getLogger("stages")
@@ -65,11 +67,33 @@ def _check_what_made_the_folder(settings: StageSettings) -> None:
         settings.task,
         model=settings.model,
         image_dir=settings.image_dir,
-        # The split stage has no earlier output deleted for it, so it always checks.
-        starting_afresh=settings.clear_previous_output and settings.task != "split",
+        starting_afresh=settings.clear_previous_output,
     )
     if settings.task == "extract":
         run_manifest.warn_if_made_another_way(settings.output, "extract", after="classify")
+
+
+def _check_what_every_task_is_asked(settings: StageSettings) -> None:
+    """The two things the entry script cannot ask, since the answer is in the pipeline's own files.
+
+    That the model is one that is registered, and that a document type the job gives is a type of the
+    schema file. Until 26 November 2026 each was asked by some tasks and not by others.
+
+    Raises:
+        ConfigError: With what is wrong, where, what is expected and how to mend it.
+    """
+    if settings.model:
+        get_model(settings.model)
+    schema = get_field_schema()
+    if settings.given_type is not None and schema.document_type(settings.given_type) is None:
+        raise ConfigError(
+            f"What: the job gives every page the type {settings.given_type!r}, which is not a document "
+            f"type.\n"
+            f"Where: the variable document_type in the environment of this job.\n"
+            f"Expected: a document type of config/field_definitions.yaml, in either case: "
+            f"{', '.join(sorted(schema.document_types))}.\n"
+            f"How to fix: name one of those, or leave document_type unset for the model to be asked."
+        )
 
 
 def run_task(settings: StageSettings) -> None:
@@ -89,6 +113,7 @@ def run_task(settings: StageSettings) -> None:
     # A task that could not start then left a note in a folder that held none of its output, and the
     # next start with another model was refused as "output from another run"; started afresh, it had
     # deleted the earlier output before it found that it could not replace it.
+    _check_what_every_task_is_asked(settings)
     checked = stage.check(settings)
     _check_what_made_the_folder(settings)
     logger.info(stage.start(settings, checked))

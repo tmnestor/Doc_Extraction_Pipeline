@@ -107,8 +107,10 @@ def test_a_type_the_schema_file_does_not_have_stops_classify_before_anything_is_
         "document_type": "LEDGER",
     }
 
+    from stages import __main__ as starter
+
     with pytest.raises(ConfigError) as refused:
-        classify.check(resolve("classify", job))
+        starter.run_task(resolve("classify", job))
 
     message = str(refused.value)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))

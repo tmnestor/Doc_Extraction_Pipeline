@@ -345,20 +345,24 @@ parameter as the text "None".
 | Variable | Meaning | Needed by | When it is not set |
 |---|---|---|---|
 | `KFP_TASK` | The task to run | every start | the job is stopped |
-| `model` | A registered model | `split`, `classify`, `extract` | the job is stopped |
+| `model` | A registered model. One that is not registered is refused by every task given it | `split`, `classify`, `extract` | the job is stopped |
 | `image_dir` | The folder of pages, which must exist | `split`, `classify`, `extract` | the job is stopped |
-| `output` | The folder the tasks write to | every task | the job is stopped |
+| `output` | The folder the tasks write to. It is made if it is not there; a file, or a place the job may not write, is refused | every task | the job is stopped |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | the job is stopped |
-| `document_types` | Read only the pages whose file name holds one of these, written with commas and in either case: `receipt,invoice` | optional | every page is read |
-| `max_images` | Read at most this many pages: a whole number of 1 or more | optional | every page is read |
+| `document_types` | `classify` reads only the pages whose file name holds one of these, written with commas and in either case: `receipt,invoice` | optional | every page is read |
+| `max_images` | `classify` reads at most this many pages: a whole number of 1 or more | optional | every page is read |
 | `photo_split` | `true`: the `split` task asks the model where each receipt is, and cuts a photograph of several | optional | `false`: every photograph is passed through, and no model is asked |
-| `document_type` | Every page is of this document type, and `classify` asks no model | optional | the model is asked |
-| `CLEAR_PREV_OUTPUT` | `true` deletes the task's earlier output first | optional | `false`: the task carries on |
+| `document_type` | Every page is of this document type, and `classify` asks no model. It must be a type of the schema file, whichever task is run | optional | the model is asked |
+| `CLEAR_PREV_OUTPUT` | `true` deletes the task's own earlier output first; for `split`, also the images it had cut | optional | `false`: the task carries on |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | the job is stopped |
-| `DOC_EXTRACT_MODELS_DIR` | The folder that holds each model's folder of weights | `split`, `classify`, `extract` | the job is stopped |
+| `DOC_EXTRACT_MODELS_DIR` | The folder that holds each model's folder of weights | a start that loads a model: `extract`, `classify` unless `document_type` is set, `split` with `photo_split=true` | the job is stopped |
 | `DOC_EXTRACT_TRACE_FILE` | Keep everything sent to the model, and its replies, in this file | optional | it is not kept |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | the folder written in `entrypoint.sh` |
 | `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | the model's own share, in its registration |
+
+**Which pages are read is `classify`'s to decide.** `document_types` and `max_images` are read by
+`classify` alone. `split` takes every photograph in `image_dir`, and `extract` reads every page that
+was classified: to read fewer, classify fewer.
 
 Two variables that are no longer read are refused by name, and not run with the setting silently
 dropped: `dataset` and `run_config`. Until 26 November 2026 a run's choices were keys of a settings

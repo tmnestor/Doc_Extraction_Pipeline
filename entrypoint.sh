@@ -20,17 +20,21 @@
 #   image_dir                the folder of pages to read. Needed by split, classify and extract
 #   output                   the folder the stages write to. Needed by every task
 #   ground_truth             the answer key, a .jsonl file. Needed by evaluate
-#   document_types           read only the pages whose file name holds one of these, written with
-#                            commas, e.g. receipt,invoice. Unset: every page
-#   max_images               read at most this many pages. Unset: every page
+#   document_types           classify only the pages whose file name holds one of these, written
+#                            with commas, e.g. receipt,invoice. Unset: every page. Read by
+#                            classify alone: extract reads whatever was classified
+#   max_images               classify at most this many pages. Unset: every page. Read by
+#                            classify alone
 #   photo_split              true: the split task asks the model where each receipt is, and cuts a
 #                            photograph of several. Unset: false, every photograph is passed through
 #   document_type            every page is of this document type, and classify asks no model.
 #                            Unset: the model is asked
-#   CLEAR_PREV_OUTPUT        true: delete the stage's earlier output first. Unset: false
+#   CLEAR_PREV_OUTPUT        true: delete the task's own earlier output first, and for split the
+#                            images it had cut. Unset: false, the task carries on
 #   DOC_EXTRACT_LOG_DIR      the folder for the log. Needed by every task
-#   DOC_EXTRACT_MODELS_DIR   the folder that holds each model's folder of weights. Needed by
-#                            split, classify and extract
+#   DOC_EXTRACT_MODELS_DIR   the folder that holds each model's folder of weights. Needed by a
+#                            start that loads a model: extract, classify unless document_type
+#                            is set, and split with photo_split=true
 #   DOC_EXTRACT_TRACE_FILE   keep what is sent to the model, in this file. Unset: not kept
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
 #   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take.
@@ -91,6 +95,16 @@ stop() {
   echo "  Expected: $4"
   echo "  Fix:      $5"
   exit 1
+}
+# can_be_made <folder>: succeeds if the folder is there, or can be made, and the job may write
+# in it. The folder need not exist yet: the task makes it. So ABOVE climbs from the folder to
+# the nearest one that does exist (`dirname` gives the folder above a path, and the loop ends
+# at / at the latest). That one must be a folder (-d) the job may write in (-w). `local` keeps
+# ABOVE to this function. A function succeeds or fails as its last command does.
+can_be_made() {
+  local ABOVE="$1"
+  while [[ ! -e "$ABOVE" ]]; do ABOVE="$(dirname -- "$ABOVE")"; done
+  [[ -d "$ABOVE" && -w "$ABOVE" ]]
 }
 # The ending of every message's "Where" line, written once.
 IN_THE_JOB="in the environment of this job (the pipeline manifest, or the command that started it)."
@@ -154,15 +168,35 @@ if [[ -n "${run_config:-}" ]]; then
     "set the variables the run needs in place of the file, and unset run_config."
 fi
 
+# ---- The two choices that are true or false ---- #
+# They come first: what the split task needs depends on one of them.
+# A manifest may pass a YAML true as the text "True".
+for NAME in photo_split CLEAR_PREV_OUTPUT; do
+  # ${!NAME:-false} is the variable's value, or false if it is not set: this is where the
+  # default is stated. `tr 'A-Z' 'a-z'` turns capitals into small letters, so True and TRUE
+  # are read as true.
+  VALUE="$(echo "${!NAME:-false}" | tr 'A-Z' 'a-z')"
+  if [[ "$VALUE" != "true" && "$VALUE" != "false" ]]; then
+    stop "$NAME is neither true nor false: ${!NAME}" \
+      "photo_split=true has the split task ask the model and cut; CLEAR_PREV_OUTPUT=true deletes the stage's earlier output first." \
+      "the variable $NAME $IN_THE_JOB" \
+      "true or false, e.g. $NAME=true. Unset means false." \
+      "set it to true or false, or leave it unset."
+  fi
+  # `export` hands the variable to every command this script starts. The task is always given
+  # both, written out as true or false, and has no default of its own to keep in step.
+  export "$NAME=$VALUE"
+done
+
 # ---- The task, and what it needs ---- #
 # `case` compares one text with a list of patterns and runs the commands of the first that
 # matches. `a | b | c)` matches any of the three, `;;` ends a pattern's commands, and `*)`
 # matches anything left over: here, a task that is none of the five.
 #
-# NEEDED is the list of variables the task cannot run without. This is the one place that
-# says which task needs what.
+# NEEDED is the list of variables the task cannot run without. This section is the one place
+# that says which task needs what.
 case "${KFP_TASK:-}" in
-  split | classify | extract) NEEDED="model image_dir output DOC_EXTRACT_MODELS_DIR" ;;
+  split | classify | extract) NEEDED="model image_dir output" ;;
   clean) NEEDED="output" ;;
   evaluate) NEEDED="output ground_truth" ;;
   *)
@@ -173,14 +207,30 @@ case "${KFP_TASK:-}" in
       "set it to one of those, e.g. KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh"
     ;;
 esac
+# The folder of the models' weights is needed by a start that loads a model, and by no other:
+# extract always, classify unless the job gives every page its type, and split when the
+# photo split is on. The three tests are joined by ||, so any one of them is enough.
+if [[ "$KFP_TASK" == "extract" ]] ||
+  [[ "$KFP_TASK" == "classify" && -z "${document_type:-}" ]] ||
+  [[ "$KFP_TASK" == "split" && "$photo_split" == "true" ]]; then
+  NEEDED="$NEEDED DOC_EXTRACT_MODELS_DIR"
+fi
 # Every name in NEEDED, and the log folder, which every task needs. The first that is not
-# set stops the job, with its own name in the message.
+# set stops the job, with its own name in the message and an example of its own.
 for NAME in $NEEDED DOC_EXTRACT_LOG_DIR; do
   if [[ -z "${!NAME:-}" ]]; then
+    case "$NAME" in
+      model) EXAMPLE="gemma4-31b-w4a16-vllm" ;;
+      image_dir) EXAMPLE="/data/pages" ;;
+      ground_truth) EXAMPLE="/data/pages/ground_truth.jsonl" ;;
+      DOC_EXTRACT_MODELS_DIR) EXAMPLE="/data/models" ;;
+      DOC_EXTRACT_LOG_DIR) EXAMPLE="/data/run_20261126/logs" ;;
+      *) EXAMPLE="/data/run_20261126" ;;
+    esac
     stop "the task $KFP_TASK needs $NAME, and it is not set" \
       "$KFP_TASK cannot run without $NAME. Unset, empty and the word None all count as not set." \
       "the variable $NAME $IN_THE_JOB" \
-      "what the top of entrypoint.sh says of $NAME, e.g. output=/data/run_20261126" \
+      "what the top of entrypoint.sh says of $NAME, e.g. $NAME=$EXAMPLE" \
       "set $NAME and start the job again."
   fi
 done
@@ -225,23 +275,6 @@ if [[ -n "${document_types:-}" ]] && ! [[ "$document_types" =~ [^,[:space:]] ]];
     "names written with commas, in either case, e.g. document_types=receipt,invoice. Unset, every page is read." \
     "name at least one, or leave it unset."
 fi
-# The two that are true or false. A manifest may pass a YAML true as the text "True".
-for NAME in photo_split CLEAR_PREV_OUTPUT; do
-  # ${!NAME:-false} is the variable's value, or false if it is not set: this is where the
-  # default is stated. `tr 'A-Z' 'a-z'` turns capitals into small letters, so True and TRUE
-  # are read as true.
-  VALUE="$(echo "${!NAME:-false}" | tr 'A-Z' 'a-z')"
-  if [[ "$VALUE" != "true" && "$VALUE" != "false" ]]; then
-    stop "$NAME is neither true nor false: ${!NAME}" \
-      "photo_split=true has the split task ask the model and cut; CLEAR_PREV_OUTPUT=true deletes the stage's earlier output first." \
-      "the variable $NAME $IN_THE_JOB" \
-      "true or false, e.g. $NAME=true. Unset means false." \
-      "set it to true or false, or leave it unset."
-  fi
-  # `export` hands the variable to every command this script starts. The task is always given
-  # both, written out as true or false, and has no default of its own to keep in step.
-  export "$NAME=$VALUE"
-done
 # The share of a card's memory: a number above 0 and at most 1. The expression has two
 # alternatives, with | between them: a number below 1 with a digit that is not 0 after the
 # point (0.9, .85, 0.05), or 1 itself, with or without zeros after a point (1, 1.0).
@@ -259,22 +292,28 @@ fi
 # folder got through, every reply then failed to be kept, and the stage stopped saying that
 # the engine had stopped answering.
 #
-# The file's folder may not exist yet: the task makes it. So ABOVE climbs from the file's
-# folder to the nearest one that does exist (`dirname` gives the folder above a path, and
-# the loop ends at / at the latest). That one must be a folder (-d) the job may write in
-# (-w), and the file itself must not be a folder.
+# The file must not be a folder, and its own folder must be one that can be made
+# (can_be_made, near the top). The braces group the two tests that follow the &&.
 TRACE="${DOC_EXTRACT_TRACE_FILE:-}"
-if [[ -n "$TRACE" ]]; then
-  ABOVE="$(dirname -- "$TRACE")"
-  while [[ ! -e "$ABOVE" ]]; do ABOVE="$(dirname -- "$ABOVE")"; done
-  if [[ -d "$TRACE" || ! -d "$ABOVE" || ! -w "$ABOVE" ]]; then
-    stop "DOC_EXTRACT_TRACE_FILE is not a file that can be written: $TRACE" \
-      "what is sent to the model is kept in this file, and it is a folder, or $ABOVE above it is no folder the job may write in." \
-      "the variable DOC_EXTRACT_TRACE_FILE $IN_THE_JOB" \
-      "a file in a folder the job may write to, e.g. DOC_EXTRACT_TRACE_FILE=/data/run_20261126/sent.jsonl. Unset, nothing is kept." \
-      "name such a file, or leave it unset."
-  fi
+if [[ -n "$TRACE" ]] && { [[ -d "$TRACE" ]] || ! can_be_made "$(dirname -- "$TRACE")"; }; then
+  stop "DOC_EXTRACT_TRACE_FILE is not a file that can be written: $TRACE" \
+    "what is sent to the model is kept in this file, and it is a folder, or it is under something that is no folder the job may write in." \
+    "the variable DOC_EXTRACT_TRACE_FILE $IN_THE_JOB" \
+    "a file in a folder the job may write to, e.g. DOC_EXTRACT_TRACE_FILE=/data/run_20261126/sent.jsonl. Unset, nothing is kept." \
+    "name such a file, or leave it unset."
 fi
+
+# The two folders the job writes to. Until 26 November 2026 an output that named a file, or
+# was under one, got through and ended the task in a traceback.
+for NAME in output DOC_EXTRACT_LOG_DIR; do
+  if [[ -n "${!NAME:-}" ]] && ! can_be_made "${!NAME}"; then
+    stop "$NAME is not a folder that can be written in: ${!NAME}" \
+      "the task writes into this folder, making it if it is not there, and it is a file, or under a file, or where the job may not write." \
+      "the variable $NAME $IN_THE_JOB" \
+      "a folder on the storage mounted for the job's data, e.g. $NAME=/data/run_20261126" \
+      "name a folder the job may write in."
+  fi
+done
 
 # The conda environment: its folder holds a python that can be run (-x). Unset, it is the
 # folder written here, and that is written out for the log. Both models run in vllm_env4

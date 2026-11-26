@@ -43,7 +43,7 @@ from common.sheet_finder import FinderParams
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
-from .io import discover_images, no_pages_in
+from .io import discover_images, no_pages_in, start_afresh
 from .records import failed
 
 logger = logging.getLogger(__name__)
@@ -446,9 +446,13 @@ BANNER = "Stage 0: split, one image for each document in a photograph (GPU)"
 def start(task: StageSettings, checked: Checked) -> str:
     """Run the stage for a task, and give the line that says it is done.
 
-    The split stage has no earlier output deleted for it: a photograph already dealt with is passed over.
+    Started afresh, the stage first deletes its earlier records and the images they name. Until
+    26 November 2026 it deleted nothing: an image an earlier run had cut was then read by the stages
+    after this one, beside whatever the new run made of the same photograph.
     """
     task.split_dir.mkdir(parents=True, exist_ok=True)
+    deleted = start_afresh(task.clear_previous_output, task.split_dir / RECORDS_FILE)
+    _remove_the_images_of(deleted, task.split_dir / IMAGES_DIR)
     images = run(
         task.split_dir,
         checked,

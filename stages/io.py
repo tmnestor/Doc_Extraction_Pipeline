@@ -4,6 +4,7 @@ Each stage writes one JSON object per line. Writers flush per-record
 so that partial output survives crashes (critical at 10K images).
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -97,21 +98,32 @@ class StreamingJsonlWriter:
         return self._count
 
 
-def start_afresh(asked_for: bool, *files: Path) -> None:
+def start_afresh(asked_for: bool, *files: Path) -> list[dict[str, Any]]:
     """Delete a stage's own earlier output, if that was asked for. Never a folder, never a log.
 
     Args:
         asked_for: Whether the job asked for it (``CLEAR_PREV_OUTPUT=true``).
         files: The stage's output files. With each goes its journal: what an interrupted run had read
             and not yet written.
+
+    Returns:
+        The records deleted, those of a journal as the stage made them. A stage that wrote more than
+        its records removes what they name: the split stage, the images it cut. Empty if not asked.
     """
+    deleted: list[dict[str, Any]] = []
     if not asked_for:
-        return
+        return deleted
     for output in files:
         for file in (output, Journal(output).path):
             if file.is_file():
+                for line in file.read_text().splitlines():
+                    # A journal's last line may be the one being written when its run stopped.
+                    with contextlib.suppress(json.JSONDecodeError):
+                        record = json.loads(line)
+                        deleted.append(record.get(_RECORD_MADE, record))
                 file.unlink()
                 logger.info("CLEAR_PREV_OUTPUT: removed %s", file)
+    return deleted
 
 
 # In a journal's line, the record a stage made of the reply the line holds.

@@ -203,17 +203,10 @@ def check(task: StageSettings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     assert task.image_dir is not None
-    schema = get_field_schema()
-    if task.given_type is not None and schema.document_type(task.given_type) is None:
-        raise ConfigError(
-            f"What: the job gives every page the type {task.given_type!r}, which is not a document type.\n"
-            f"Where: the variable document_type in the environment of this job.\n"
-            f"Expected: a document type of config/field_definitions.yaml, in either case: "
-            f"{', '.join(sorted(schema.document_types))}.\n"
-            f"How to fix: name one of those, or leave document_type unset for the model to be asked."
-        )
     found = checked(task.image_dir, task)
-    check_processor(found.settings)
+    # Given the type of every page, the stage asks no model: none is looked for.
+    if task.given_type is None:
+        check_processor(found.settings)
     return found
 
 

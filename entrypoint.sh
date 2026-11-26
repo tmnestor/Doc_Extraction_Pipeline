@@ -54,8 +54,36 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# ---- How to read the bash below ---- #
+# The checks use a handful of constructs over and over. Each is explained here once, and
+# again in a line where it is first used.
+#
+#   "$NAME"            the value of NAME. The quotes keep a value with spaces in one piece.
+#   "${NAME:-}"        the value of NAME, or nothing if NAME is not set. Needed because of
+#                      nounset above: reading an unset variable any other way ends the script.
+#   "${NAME:-text}"    the value of NAME, or text if NAME is not set or empty: a default.
+#   "${!NAME:-}"       NAME holds the NAME OF another variable, and this is THAT variable's
+#                      value. With NAME=max_images it reads max_images. It lets one loop check
+#                      many variables.
+#   [[ ... ]]          a test. It succeeds or fails, and `if` acts on which.
+#     -n text          succeeds if text is not empty
+#     -z text          succeeds if text is empty
+#     -d path          succeeds if path is a folder that exists
+#     a == pattern     succeeds if a matches the pattern, where * stands for anything
+#     a =~ regex       succeeds if a matches the regular expression
+#     !  &&  ||        not, and, or
+#   $(command)         runs the command and puts what it prints in its place
+#   command || true    never fails: if the command fails, `true` succeeds in its place, so
+#                      errexit above does not end the script
+#   \ at a line's end  the command goes on with the next line
+
 # ---- How a job that cannot be started is stopped ---- #
-# stop <what is wrong, in a line> <what> <where> <expected> <fix>
+# A function: `stop` is called like a command, with five pieces of text after it, and inside
+# the function they are $1 to $5. It prints the message in the four parts every refusal has
+# (what, where, expected, fix) and ends the script with exit code 1, which a pipeline reads
+# as a failed job. Every check below ends in a call of it.
+#
+#   stop <what is wrong, in a line> <what> <where> <expected> <fix>
 stop() {
   echo "FATAL: $1"
   echo "  What:     $2"
@@ -64,19 +92,34 @@ stop() {
   echo "  Fix:      $5"
   exit 1
 }
+# The ending of every message's "Where" line, written once.
 IN_THE_JOB="in the environment of this job (the pipeline manifest, or the command that started it)."
 
 # ---- A variable that is blank is not set ---- #
+# A pipeline manifest passes a parameter left blank as the text "None". So a variable that is
+# empty, or holds the word None, is removed here, and every check after this has one question
+# to ask of a variable: is it set?
+#
+# JOB_VARIABLES is one piece of text holding every name, with spaces and line breaks between
+# them. Written WITHOUT quotes after `in`, bash cuts it at the spaces, and the loop runs once
+# for each name, with that name in NAME. The same list is used again to write the log.
 JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images photo_split
   document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_MODELS_DIR
   DOC_EXTRACT_TRACE_FILE DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+# The two names added at the end are the variables refused in the next section: one of those
+# left blank by a manifest must not be refused.
 for NAME in $JOB_VARIABLES dataset run_config; do
+  # ${!NAME:-} is the value of the variable NAME names. Empty (-z), or the word None: `unset`
+  # removes that variable, so the task started at the end does not see it at all.
   if [[ -z "${!NAME:-}" || "${!NAME}" == "None" ]]; then unset "$NAME"; fi
 done
 
 # ---- Two variables that are no longer read are refused, not ignored ---- #
 # Until 26 November 2026 a run's choices were keys of a settings file, which run_config named, and
 # dataset named a block of it. A job that still sets one would otherwise run with it dropped.
+#
+# -n succeeds if the variable holds anything. The five quoted texts after `stop` are its five
+# arguments, one a line.
 if [[ -n "${dataset:-}" ]]; then
   stop "dataset is no longer read: $dataset" \
     "a set of pages that are all of one type is now two variables, and no block of a settings file." \
@@ -93,6 +136,12 @@ if [[ -n "${run_config:-}" ]]; then
 fi
 
 # ---- The task, and what it needs ---- #
+# `case` compares one text with a list of patterns and runs the commands of the first that
+# matches. `a | b | c)` matches any of the three, `;;` ends a pattern's commands, and `*)`
+# matches anything left over: here, a task that is none of the five.
+#
+# NEEDED is the list of variables the task cannot run without. This is the one place that
+# says which task needs what.
 case "${KFP_TASK:-}" in
   split | classify | extract) NEEDED="model image_dir output DOC_EXTRACT_MODELS_DIR" ;;
   clean) NEEDED="output" ;;
@@ -105,6 +154,8 @@ case "${KFP_TASK:-}" in
       "set it to one of those, e.g. KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh"
     ;;
 esac
+# Every name in NEEDED, and the log folder, which every task needs. The first that is not
+# set stops the job, with its own name in the message.
 for NAME in $NEEDED DOC_EXTRACT_LOG_DIR; do
   if [[ -z "${!NAME:-}" ]]; then
     stop "the task $KFP_TASK needs $NAME, and it is not set" \
@@ -114,6 +165,8 @@ for NAME in $NEEDED DOC_EXTRACT_LOG_DIR; do
       "set $NAME and start the job again."
   fi
 done
+# *image_dir* matches if NEEDED holds the word image_dir anywhere: that is, for the three
+# tasks that read pages. `! -d` succeeds if the folder is NOT there.
 if [[ "$NEEDED" == *image_dir* && ! -d "$image_dir" ]]; then
   stop "the folder of pages does not exist: $image_dir" \
     "$KFP_TASK reads its pages from the folder image_dir names, and there is no such folder." \
@@ -121,6 +174,8 @@ if [[ "$NEEDED" == *image_dir* && ! -d "$image_dir" ]]; then
     "a folder that holds the pages to read, e.g. image_dir=/data/pages" \
     "correct the folder, or create it and put the pages in it."
 fi
+# != *.jsonl succeeds if the file's name does NOT end in .jsonl. Asked for evaluate alone:
+# no other task reads the answer key.
 if [[ "$KFP_TASK" == "evaluate" && "$ground_truth" != *.jsonl ]]; then
   stop "the answer key is not a JSON lines file: $ground_truth" \
     "JSON lines is the one format read: an answer a line, with the page's file name and its type's fields." \
@@ -130,6 +185,11 @@ if [[ "$KFP_TASK" == "evaluate" && "$ground_truth" != *.jsonl ]]; then
 fi
 
 # ---- A run's choices: each value is one that can be used ---- #
+# Each check has the same two halves: the variable is set (-n), AND its value does not (!)
+# match what a usable value looks like. A variable that is not set passes every check here.
+#
+# max_images: ^[1-9][0-9]*$ is a regular expression for a whole number of 1 or more. ^ is the
+# start, [1-9] one digit that is not 0, [0-9]* any number of digits after it, $ the end.
 if [[ -n "${max_images:-}" ]] && ! [[ "$max_images" =~ ^[1-9][0-9]*$ ]]; then
   stop "max_images is not a number of pages: $max_images" \
     "at most this many pages are read, and it is not a whole number of 1 or more." \
@@ -137,6 +197,8 @@ if [[ -n "${max_images:-}" ]] && ! [[ "$max_images" =~ ^[1-9][0-9]*$ ]]; then
     "a whole number such as max_images=12. Unset, every page is read." \
     "set it to such a number, or leave it unset."
 fi
+# document_types: [^,[:space:]] matches one character that is neither a comma nor a space. If
+# there is no such character, the value is only commas and spaces, and names no type.
 if [[ -n "${document_types:-}" ]] && ! [[ "$document_types" =~ [^,[:space:]] ]]; then
   stop "document_types names no type: '$document_types'" \
     "only pages whose file name holds one of these are read, and none is named." \
@@ -146,6 +208,9 @@ if [[ -n "${document_types:-}" ]] && ! [[ "$document_types" =~ [^,[:space:]] ]];
 fi
 # The two that are true or false. A manifest may pass a YAML true as the text "True".
 for NAME in photo_split CLEAR_PREV_OUTPUT; do
+  # ${!NAME:-false} is the variable's value, or false if it is not set: this is where the
+  # default is stated. `tr 'A-Z' 'a-z'` turns capitals into small letters, so True and TRUE
+  # are read as true.
   VALUE="$(echo "${!NAME:-false}" | tr 'A-Z' 'a-z')"
   if [[ "$VALUE" != "true" && "$VALUE" != "false" ]]; then
     stop "$NAME is neither true nor false: ${!NAME}" \
@@ -154,8 +219,13 @@ for NAME in photo_split CLEAR_PREV_OUTPUT; do
       "true or false, e.g. $NAME=true. Unset means false." \
       "set it to true or false, or leave it unset."
   fi
+  # `export` hands the variable to every command this script starts. The task is always given
+  # both, written out as true or false, and has no default of its own to keep in step.
   export "$NAME=$VALUE"
 done
+# The share of a card's memory: a number above 0 and at most 1. The expression has two
+# alternatives, with | between them: a number below 1 with a digit that is not 0 after the
+# point (0.9, .85, 0.05), or 1 itself, with or without zeros after a point (1, 1.0).
 SHARE="${DOC_EXTRACT_GPU_MEMORY_UTILIZATION:-}"
 if [[ -n "$SHARE" ]] && ! [[ "$SHARE" =~ ^(0?\.[0-9]*[1-9][0-9]*|1(\.0*)?)$ ]]; then
   stop "DOC_EXTRACT_GPU_MEMORY_UTILIZATION is not a share of a card's memory: $SHARE" \
@@ -169,6 +239,15 @@ fi
 # Under a pipeline this folder is in the job's pod: its storage is not kept, and a job that writes
 # there is stopped. git writes it once, when the job is launched from its commit, and is not used
 # after that. So the places the job names to write to are refused if they are inside this folder.
+#
+# `pwd -P` prints the folder the script was started in, with every link followed: the code's
+# folder, since the script is run from there. The loop takes the three places in turn. Each
+# is in quotes of its own, so one that is not set is an empty text, which -n passes over.
+#
+# `realpath -m` writes a path out in full, following links and resolving any `..`, whether
+# or not the path exists yet. With a / put on the end of it, the pattern "$CODE_DIR"/*
+# matches the code's folder itself and anything inside it, and does not match a neighbour
+# whose name merely begins the same way (/code_old beside /code).
 CODE_DIR="$(pwd -P)"
 for WRITTEN in "$DOC_EXTRACT_LOG_DIR" "${output:-}" "${DOC_EXTRACT_TRACE_FILE:-}"; do
   if [[ -n "$WRITTEN" && "$(realpath -m -- "$WRITTEN")/" == "$CODE_DIR"/* ]]; then
@@ -183,10 +262,18 @@ done
 # ---- The commit this job was launched from ---- #
 # Read from the checkout's own files, since git is not run once the job has started. Each task
 # that uses the cards notes it in <output>/run_manifest.json. Empty if this folder is no checkout.
+#
+# .git/HEAD holds either the commit's own name (forty letters and digits), or a line such as
+# "ref: refs/heads/main" that names the file which holds it. `2>/dev/null` throws away the
+# error message if the file is not there, and `|| true` keeps that from ending the script.
 HEAD_NOW="$(cat .git/HEAD 2>/dev/null || true)"
 if [[ "$HEAD_NOW" == "ref: "* ]]; then
+  # ${HEAD_NOW#ref: } is the value with "ref: " taken off its front: the name of the file
+  # that holds the commit's name.
   HEAD_NOW="$(cat ".git/${HEAD_NOW#ref: }" 2>/dev/null || true)"
 fi
+# ${HEAD_NOW:0:7} is seven characters of the value, from the first: the short name of the
+# commit, as `git log --oneline` shows it.
 export DOC_EXTRACT_COMMIT="${HEAD_NOW:0:7}"
 
 # ---- CUDA Environment ---- #
@@ -222,6 +309,11 @@ export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
 # All output (stdout + stderr) is captured to a timestamped log file in DOC_EXTRACT_LOG_DIR,
 # while still being printed to the console (so the KFP UI shows it too).
 # Each run creates its own log file, e.g. entrypoint_20260213_143022.log
+#
+# This is the first thing the script writes. Every check above comes before it, so a job that
+# is refused leaves nothing behind. `mkdir -p` makes the folder and any folder above it that
+# is missing, and does not complain if it is already there. $(date +'...') is the time now,
+# in the form given.
 LOG_DIR="$DOC_EXTRACT_LOG_DIR"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/entrypoint_$(date +'%Y%m%d_%H%M%S').log"
@@ -257,6 +349,9 @@ log "================================================================="
 log "    Document extraction pipeline"
 log "================================================================="
 log ""
+# Every variable of the job, as the checks left it, at the top of the log: what a run was set
+# to do can be read from here. `printf '%-36s %s'` writes the name padded with spaces to 36
+# characters and then the value, so the values line up in a column.
 log "What this job set:"
 for NAME in $JOB_VARIABLES; do
   log "$(printf '  %-36s %s' "$NAME" "${!NAME:-<not set>}")"
@@ -264,9 +359,9 @@ done
 log ""
 
 # ---- Conda Activation ---- #
-# Assumes EFS is mounted via KFP volume spec at /efs/shared/. If the
-# volume mount is missing, conda activate will fail below. Check the
-# KFP pipeline YAML volume definitions if this step errors.
+# The environment's folder is on storage mounted for the job. If the mount is missing the
+# folder is not there, and the check below says so: look at the volume definitions of the
+# pipeline if it does.
 #
 # KFP containers start with a bare shell. We need to initialise conda
 # (the `eval` line) and then activate our environment which has all
@@ -281,11 +376,14 @@ if [[ ! -d "$CONDA_ENV" ]]; then
     "point DOC_EXTRACT_CONDA_ENV at the environment's folder."
 fi
 log "Activating conda environment..."
+# `conda shell.bash hook` PRINTS the shell code that defines the command `conda activate`.
+# `eval` runs that printed code here, in this script, so that the command exists below.
 eval "$(conda shell.bash hook)"
 log "Conda env: $CONDA_ENV"
 # Temporarily allow unbound variables: conda activation scripts (e.g. MKL)
 # reference variables that may not be set yet.
 set +o nounset
+# `command || { ...; }` runs what is in the braces only if the command fails.
 conda activate "$CONDA_ENV" || { set -o nounset; log "FATAL: conda activate failed"; exit 1; }
 set -o nounset
 # Ensure conda's libstdc++ is found before the (older) system copy.
@@ -335,11 +433,17 @@ log "  CUDA_DEVICE_ORDER:     ${CUDA_DEVICE_ORDER}"
 log "  NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-<not set>}"
 log ""
 
+# `command -v name` succeeds if there is a command of that name. `&>/dev/null` throws away
+# everything it prints: only whether it succeeded is wanted.
 if command -v nvidia-smi &>/dev/null; then
   GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
   log "Detected $GPU_COUNT GPU(s):"
   log ""
   # Per-GPU detail: index, name, VRAM, temperature, ECC errors
+  # nvidia-smi prints one line a card, its values with commas between them. The line is piped
+  # (|) into a loop: `while IFS=',' read -r a b c` reads a line at a time, cuts it at the
+  # commas and puts the pieces in the variables named. `echo "$x" | xargs` trims the spaces
+  # from around a value.
   nvidia-smi --query-gpu=index,name,memory.total,memory.free,temperature.gpu,ecc.errors.uncorrected.volatile.total \
     --format=csv,noheader 2>/dev/null | while IFS=',' read -r idx name mem_total mem_free temp ecc; do
     log "  GPU $idx: $name |$(echo "$mem_total" | xargs) total |$(echo "$mem_free" | xargs) free | ${temp}C | ECC errors: $(echo "$ecc" | xargs)"
@@ -361,7 +465,8 @@ fi
 # #############################################################################
 #  THE TASK
 # #############################################################################
-# KFP_TASK names it, and it is run with the variables checked above.
+# KFP_TASK names it, and it is run with the variables checked above. It is the last command,
+# so its exit code is the script's: a task that fails is a job that fails.
 log "KFP_TASK: $KFP_TASK"
 log "Commit:   ${DOC_EXTRACT_COMMIT:-<not a checkout>}"
 log ""

@@ -35,8 +35,9 @@ is how one task finds what another wrote.
 | `clean` | no | `raw_extractions.jsonl` | `cleaned_extractions.jsonl`: the replies parsed into fields and tidied |
 | `evaluate` | no | `cleaned_extractions.jsonl` and the answer key | `evaluation/`: each field scored, with the totals |
 
-`split` is optional. It is for photographs that may hold several documents or sit at an angle. When it has
-run, give the later tasks `image_dir=<output>/split/images`.
+`split` is optional. It is for photographs that may hold several documents or sit at an angle, and it
+asks the model only when the job sets `photo_split=true`: without that, every photograph is passed
+through as it is. When it has run, give the later tasks `image_dir=<output>/split/images`.
 
 A set of pages that are all of one type, known beforehand, is read by the same tasks: see
 [Reading pages that are all of one type](#reading-pages-that-are-all-of-one-type).
@@ -143,7 +144,7 @@ A job reads such a set by saying what type its pages are:
 for task in classify extract clean; do
   KFP_TASK=$task document_type=SROIE_RECEIPT image_dir=/data/sroie/test/img \
     model=gemma4-31b-w4a16-vllm output=/data/run_sroie \
-    DOC_EXTRACT_LOG_DIR=/data/run_sroie/logs bash entrypoint.sh
+    DOC_EXTRACT_LOG_DIR=/data/run_sroie/logs DOC_EXTRACT_MODELS_DIR=/data/models bash entrypoint.sh
 done
 ```
 
@@ -311,12 +312,13 @@ model=gemma4-31b-w4a16-vllm \
 image_dir=/data/pages \
 output=/data/run_20261121 \
 DOC_EXTRACT_LOG_DIR=/data/run_20261121/logs \
+DOC_EXTRACT_MODELS_DIR=/data/models \
 bash entrypoint.sh
 ```
 
-Run it from the repository's own folder. The script prepares the machine (the conda environment, the CUDA
-and vLLM variables, a log file, a look at the cards) and then starts `python3 -m stages`, which works out
-the task's settings and runs it.
+Run it from the repository's own folder. The script checks the job's variables, prepares the machine
+(the conda environment, the CUDA and vLLM variables, a log file, a look at the cards) and then starts
+`python3 -m stages`, which runs the task with the variables the script checked.
 
 A whole run is the tasks one after another with the same `model` and `output`:
 
@@ -324,7 +326,7 @@ A whole run is the tasks one after another with the same `model` and `output`:
 for task in classify extract clean evaluate; do
   KFP_TASK=$task model=gemma4-31b-w4a16-vllm image_dir=/data/pages output=/data/run_20261121 \
     ground_truth=/data/pages/ground_truth.jsonl DOC_EXTRACT_LOG_DIR=/data/run_20261121/logs \
-    bash entrypoint.sh
+    DOC_EXTRACT_MODELS_DIR=/data/models bash entrypoint.sh
 done
 ```
 

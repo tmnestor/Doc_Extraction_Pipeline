@@ -354,6 +354,49 @@ done)
 `/home/jovyan/nfs_share/models` is where the models' weights are on the sandbox. Elsewhere, name the
 folder that holds each model's folder.
 
+## Under a pipeline: one task, one pod
+
+One start of `entrypoint.sh` runs one task, the one `KFP_TASK` names, and ends. The loop above is three
+starts one after another in one terminal: it is how a run is made by hand, and it stands in for what a
+pipeline does. Under a pipeline each task is a step of its own, in a pod of its own, which sets its
+own variables and runs `bash entrypoint.sh` once. Nothing in the code puts two tasks in one process.
+
+```mermaid
+flowchart LR
+  P1["pod: split<br/>(optional)"] --> P2["pod: classify"]
+  P2 --> P3["pod: extract"]
+  P3 --> P4["pod: clean"]
+  P4 --> P5["pod: evaluate"]
+  P1 -.-> O[("output folder,<br/>on storage every pod sees")]
+  P2 -.-> O
+  P3 -.-> O
+  P4 -.-> O
+  P5 -.-> O
+```
+
+A pod is given only what its task uses:
+
+| Pod | Variables it sets | Cards | Weights |
+|---|---|---|---|
+| `split` | `KFP_TASK=split`, `model`, `image_dir`, `output`, `photo_split=true`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
+| `classify` | `KFP_TASK=classify`, `model`, `image_dir`, `output`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
+| `extract` | `KFP_TASK=extract`, `model`, `image_dir`, `output`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
+| `clean` | `KFP_TASK=clean`, `output`, `DOC_EXTRACT_LOG_DIR` | no | no |
+| `evaluate` | `KFP_TASK=evaluate`, `output`, `ground_truth`, `DOC_EXTRACT_LOG_DIR` | no | no |
+
+- **The two tasks that use no model ask for none.** `clean` and `evaluate` need no card, no weights and
+  no `model`, so their pods can be small.
+- **Every task's output is kept, each in a file of its own.** The pods share nothing but the output
+  folder: each task writes its file there (the table under [The five tasks](#the-five-tasks)), and the
+  next task reads it from there. So `output` must be on storage that every pod of the run can see, and
+  the same for every pod. Beside the tasks' files are `run_manifest.json`, which says which model,
+  pages and commit made each one, and the time each task spent on the cards. Each start writes a log
+  of its own in `DOC_EXTRACT_LOG_DIR`.
+- **A pod that is stopped loses nothing it had read.** The task's journal is beside its output, in the
+  same folder. Start the same task again, with the same variables, and it carries on from there.
+- **A pod's own storage is not used.** Nothing is written beside the code: see
+  [Where a task writes](#where-a-task-writes).
+
 ## What a job may set
 
 The job's variables are the whole of a run's settings. `entrypoint.sh` lists them at its top and checks

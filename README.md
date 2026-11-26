@@ -141,11 +141,16 @@ prompts:
 A job reads such a set by saying what type its pages are:
 
 ```bash
-for task in classify extract clean; do
-  KFP_TASK=$task document_type=SROIE_RECEIPT image_dir=/data/sroie/test/img \
-    model=gemma4-31b-w4a16-vllm output=/data/run_sroie \
-    DOC_EXTRACT_LOG_DIR=/data/run_sroie/logs DOC_EXTRACT_MODELS_DIR=/data/models bash entrypoint.sh
-done
+time (for t in classify extract clean; do
+  KFP_TASK=$t \
+    model=gemma4-31b-w4a16-vllm \
+    document_type=SROIE_RECEIPT \
+    image_dir=/data/sroie/test/img \
+    output=$E \
+    DOC_EXTRACT_LOG_DIR=$E/logs \
+    DOC_EXTRACT_MODELS_DIR=/home/jovyan/nfs_share/models \
+    bash entrypoint.sh || break
+done)
 ```
 
 - `classify` gives every page that type and asks no model: it starts no engine. Each record says so,
@@ -317,19 +322,37 @@ bash entrypoint.sh
 ```
 
 Run it from the repository's own folder: a start from any other folder is refused. The script checks
-the job's variables, prepares the machine
-(the conda environment, the CUDA and vLLM variables, a log file, a look at the cards) and then starts
+the job's variables, prepares the machine (the conda environment, the CUDA and vLLM variables, a log
+file, a look at the cards) and then starts
 `python3 -m stages`, which runs the task with the variables the script checked.
 
-A whole run is the tasks one after another with the same `model` and `output`:
+A whole run is the tasks one after another, with the same variables. This is the form to copy:
 
 ```bash
-for task in classify extract clean evaluate; do
-  KFP_TASK=$task model=gemma4-31b-w4a16-vllm image_dir=/data/pages output=/data/run_20261121 \
-    ground_truth=/data/pages/ground_truth.jsonl DOC_EXTRACT_LOG_DIR=/data/run_20261121/logs \
-    DOC_EXTRACT_MODELS_DIR=/data/models bash entrypoint.sh
-done
+time (for t in classify extract clean; do
+  KFP_TASK=$t \
+    model=gemma4-31b-w4a16-vllm \
+    image_dir=$D/crumpled_20261021 \
+    output=$E \
+    DOC_EXTRACT_LOG_DIR=$E/logs \
+    DOC_EXTRACT_MODELS_DIR=/home/jovyan/nfs_share/models \
+    bash entrypoint.sh || break
+done)
 ```
+
+- `$D` is the folder that holds the sets of pages and `$E` the folder this run writes to. Set
+  both before the loop, for example `D=/data` and `E=/data/run_20261126`.
+- Each variable is on a line of its own, ending in `\`, so a run is read and changed a line at a
+  time. A choice for the run is one more line: `photo_split=true \`, `max_images=12 \`,
+  `document_types=receipt,invoice \`.
+- `|| break` stops the loop at the first task that fails, so `extract` is not started after a
+  `classify` that was refused.
+- `time ( ... )` prints how long the whole run took.
+- To score the run, add `evaluate` to the list of tasks and the line
+  `ground_truth=<the set's ground_truth.jsonl> \`.
+
+`/home/jovyan/nfs_share/models` is where the models' weights are on the sandbox. Elsewhere, name the
+folder that holds each model's folder.
 
 ## What a job may set
 

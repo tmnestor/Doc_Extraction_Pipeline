@@ -316,7 +316,8 @@ DOC_EXTRACT_MODELS_DIR=/data/models \
 bash entrypoint.sh
 ```
 
-Run it from the repository's own folder. The script checks the job's variables, prepares the machine
+Run it from the repository's own folder: a start from any other folder is refused. The script checks
+the job's variables, prepares the machine
 (the conda environment, the CUDA and vLLM variables, a log file, a look at the cards) and then starts
 `python3 -m stages`, which runs the task with the variables the script checked.
 

@@ -86,12 +86,12 @@ def test_a_machine_that_says_nothing_of_its_cards_is_taken_to_have_one(
 
 
 @pytest.mark.parametrize(
-    ("number_set", "visible", "listed"),
-    [(0, "0,1", 8), (0, None, 2), (0, "0", 2), (0, None, 4), (0, None, None)],
+    ("visible", "listed", "cards"),
+    [("0,1", 8, 2), (None, 2, 2), ("0", 2, 1), (None, 4, 4), (None, None, 1)],
     ids=["visible", "listed", "one visible of two", "four listed", "nothing said"],
 )
 def test_the_engines_started_and_the_cards_an_engine_is_split_across_are_one_number(
-    monkeypatch: pytest.MonkeyPatch, number_set: int, visible: str | None, listed: int | None
+    monkeypatch: pytest.MonkeyPatch, visible: str | None, listed: int | None, cards: int
 ) -> None:
     """Whatever says how many cards there are, both uses hear the same answer."""
     if visible is None:
@@ -99,10 +99,11 @@ def test_the_engines_started_and_the_cards_an_engine_is_split_across_are_one_num
     else:
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
     nvidia_smi_lists(monkeypatch, listed)
-    split_across = cards_to_use()
+    # The cards the process is shown come first, then those nvidia-smi lists, and never fewer than one.
+    assert cards_to_use() == cards
 
     # A model that fits on one card has an engine on each; one that does not has one across them all.
-    assert resolve_dp_gpus(ON_EACH_CARD) == (split_across if split_across > 1 else None)
+    assert resolve_dp_gpus(ON_EACH_CARD) == (cards if cards > 1 else None)
     assert resolve_dp_gpus(ACROSS_THE_CARDS) is None
 
 

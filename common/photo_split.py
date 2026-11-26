@@ -319,7 +319,7 @@ def row_direction(image: Image.Image, finder: FinderParams) -> float | None:
 
     Args:
         image: The image: a cut receipt, or the part of a photograph inside a receipt's box.
-        finder: The settings for finding print and its direction (`pipeline.photo_split.finder`).
+        finder: The settings for finding print and its direction (`FINDER`).
 
     Returns:
         The direction, positive when the rows fall away to the right, or None when the print gives none.
@@ -333,7 +333,7 @@ def row_measures(image: Image.Image, finder: FinderParams) -> tuple[float | None
 
     Args:
         image: The image: a cut receipt, or the part of a photograph inside a receipt's box.
-        finder: The settings for finding print and its direction (`pipeline.photo_split.finder`).
+        finder: The settings for finding print and its direction (`FINDER`).
 
     Returns:
         The direction in degrees from level, and the drift in text heights (see
@@ -432,7 +432,7 @@ def rectify(
 
     Args:
         image: The photograph.
-        finder: The sheet finder's settings (`pipeline.photo_split.finder`).
+        finder: The sheet finder's settings (`FINDER`).
         config: The photo split settings.
         box: The model's box for the document, when it gave exactly one. The paper method uses it to tell the
             document's print from anything else in the photograph.

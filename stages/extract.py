@@ -57,9 +57,8 @@ def run(output_path: Path, checked: "Checked") -> Path:
     app_cfg, classifications = checked.settings, checked.classifications
 
     # The pages are put one document type after another, so that the engine reuses its work on a
-    # type's prompt. That is the order of the output too.
+    # type's prompt. That is the order of the output too: a stage's output is in its items' order.
     in_order = sort_for_extraction(classifications, list(get_field_schema().read_in_this_order))
-    order = [page["image_name"] for page in in_order]
 
     # Two kinds of page are read again: a page an earlier run could not read, and a page that has been
     # given another document type since it was read, whose record is of the wrong fields.
@@ -89,7 +88,6 @@ def run(output_path: Path, checked: "Checked") -> Path:
             items=in_order,
             name_of=lambda page: page["image_name"],
             read=extract_pages,
-            order=order,
             read_again=lambda record: records_of.failed(record) or retyped(record),
             taken_out=taken_out,
             timing=output_path.parent,

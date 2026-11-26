@@ -242,7 +242,6 @@ def _print_summary_table(
         read_stage_timings(output_dir.parent),
         per_image_total=total_processing,
         pages=num,
-        read=num,
     )
 
     doc_types: dict[str, int] = {}

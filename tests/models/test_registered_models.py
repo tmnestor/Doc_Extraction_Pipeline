@@ -13,7 +13,6 @@ import pytest
 from models.registry import IMAGE_TOKENS, get_model, list_models
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUN_CONFIG = REPO_ROOT / "config" / "run_config.yml"
 MODELS = ["gemma4-12b-unified-w4a16-vllm", "gemma4-31b-w4a16-vllm"]
 
 

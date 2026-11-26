@@ -47,7 +47,7 @@ If you want to adapt this to a new task, the pattern to copy is
 | Evidence parser + rule evaluator | `common/classification.py` |
 | Classification prompt + evidence rules (`column_roles`, `classification_evidence`) | `prompts/document_type_detection.yaml` |
 | Pipeline stage (`KFP_TASK=classify`) | `stages/classify.py` |
-| Config | `config/run_config.yml` (`classification:`, `token_budgets.classify`) |
+| What is not in the prompt file | `fallback_type` in `config/field_definitions.yaml`; `CLASSIFY_TOKENS` in `models/orchestrator.py` |
 
 ---
 
@@ -124,7 +124,7 @@ Why this shape:
   reasoning we can't inspect.
 - The answers are **auditable**: `raw_response` is stored, so a wrong call can
   be traced to a wrong fact, not a black-box guess.
-- It keeps the response **short** (`token_budgets.classify: 150`), which is fast
+- It keeps the response **short** (`CLASSIFY_TOKENS`, 150), which is fast
   and cheap.
 - **Add evidence, not verdicts.** When a new type can't be told apart by the
   existing facts, the fix is to add a *new observable question* (as `TRAVEL` was
@@ -314,17 +314,15 @@ output and appends, rather than re-classifying everything.
 
 ## Configuration
 
-All knobs live in `config/run_config.yml` (YAML is the single source of truth:
-there are no hardcoded Python defaults):
+There is no settings file. Two values shape classification, and each is beside what it belongs to:
 
-```yaml
-pipeline:
-  classification:
-    fallback_type: UNIVERSAL   # the type of a page whose reply cannot be read
+- `fallback_type`, at the top of `config/field_definitions.yaml`: the type of a page whose reply
+  cannot be read. It must be a document type of that file, and is refused if it is not.
+- `CLASSIFY_TOKENS` in `models/orchestrator.py` (150): the most tokens the model may give in its
+  reply to the questions. It is a value the code was tuned to, changed by a commit.
 
-  token_budgets:
-    classify: 150              # max tokens for the detection response
-```
+A job that knows the type of every page beforehand sets `document_type=<a document type>`, and
+the model is not asked.
 
 ---
 

@@ -152,16 +152,51 @@ def test_a_model_whose_weights_are_not_there_stops_its_task_at_the_check(tmp_pat
 
 
 def test_there_is_no_settings_file_and_nothing_that_reads_one() -> None:
+    import subprocess
+
     assert not (REPO_ROOT / "config" / "run_config.yml").exists()
     assert not (REPO_ROOT / "common" / "settings.py").exists()
     assert not (REPO_ROOT / "common" / "config_schema.py").exists()
+    # No file of the pipeline names the settings file, or the modules that read it, any longer.
+    named = subprocess.run(
+        [
+            "git",
+            "grep",
+            "-lE",
+            r"run_config\.yml|common\.settings|config_schema",
+            "--",
+            "common",
+            "stages",
+            "models",
+            "config",
+            "prompts",
+            "docs",
+            "entrypoint.sh",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    assert named == []
 
 
 def test_the_variable_that_cut_the_benchmark_short_is_no_longer_read() -> None:
-    """How many pages are read is max_images, for every run."""
+    """How many pages are read is max_images, for every run: a limit under the old task's name is
+    read as nothing, and the name is in no file of the pipeline."""
+    import subprocess
+
     settings = resolve("classify", {**USUAL, "sroie_max_images": "forty"})
 
-    assert settings.max_images is None and not hasattr(settings, "sroie_max_images")
+    assert settings.max_images is None
+    named = subprocess.run(
+        ["git", "grep", "-il", "sroie_max_images", "--", "common", "stages", "models", "entrypoint.sh"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.split()
+    assert named == []
 
 
 # --- running a task with its settings ---------------------------------------------------------------

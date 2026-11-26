@@ -201,16 +201,14 @@ class RunTime:
         return ", ".join(f"{t.stage}={t.execution_mode}" for t in self.stages)
 
 
-def run_time(timings: list[StageTiming], *, per_image_total: float, pages: int, read: int) -> RunTime:
+def run_time(timings: list[StageTiming], *, per_image_total: float, pages: int) -> RunTime:
     """A run's time on the cards, from the best record there is.
 
     1. **The stages' own rows.** The model's time, apart from engine start, and right for either
        arrangement of engines. Set aside as stale when a row covers another number of pages than its
        own stage dealt with, which is what an output folder scored again after a part run would give.
-       Each row is judged by itself: ``classify`` gives every page a type, and ``extract`` reads those
-       the settings do not say to leave. Until 25 November 2026 the mean of the two rows was set beside
-       the pages read, so two pages left unread made the rows of a whole run stale. A row of any other
-       stage is judged by nothing here and kept apart (``RunTime.others``).
+       Each row is judged by itself: ``classify`` gives every page a type and ``extract`` reads every
+       page. A row of any other stage is judged by nothing here and kept apart (``RunTime.others``).
     2. **The sum of the pages' own times.** With an engine on each card this is the work done and not
        the time taken, so it understates the rate by about the number of cards. It is labelled so.
 
@@ -219,10 +217,10 @@ def run_time(timings: list[StageTiming], *, per_image_total: float, pages: int, 
     Args:
         timings: The rows of the run's output folder.
         per_image_total: The sum of the scored pages' own times.
-        pages: How many pages the run has a record of: what ``classify`` dealt with.
-        read: How many of them were read: what ``extract`` dealt with.
+        pages: How many pages the run has a record of: what ``classify`` and ``extract`` each dealt
+            with.
     """
-    covers = {"classify": pages, "extract": read}
+    covers = {"classify": pages, "extract": pages}
     of_the_pages = [t for t in timings if t.stage in covers]
     others = tuple(t for t in timings if t.stage not in covers)
     if of_the_pages and sum(t.inference_seconds for t in of_the_pages) > 0:

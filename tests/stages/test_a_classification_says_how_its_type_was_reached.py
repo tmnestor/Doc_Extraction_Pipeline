@@ -11,7 +11,6 @@ The pages are blank images and every reply is invented.
 """
 
 import logging
-import types
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -118,7 +117,6 @@ def processor(backend: Backend) -> DocumentOrchestrator:
     made = object.__new__(DocumentOrchestrator)
     made._backend = backend  # type: ignore[assignment]
     made._fallback_type = "UNIVERSAL"
-    made.app_config = types.SimpleNamespace(get_token_budget=lambda name: 150)  # type: ignore[assignment]
     return made
 
 

@@ -215,7 +215,7 @@ def ask_about_photographs(
     worker calls it with its share. It loads no model, cuts no image and writes no file: it gives the
     model's reply for each photograph, and the stage's ``run`` acts on the replies.
 
-    Photographs go ``pipeline.photo_split.batch_size`` to an engine call. A call that fails is tried again
+    Photographs go ``photo_split.CONFIG.batch_size`` to an engine call. A call that fails is tried again
     one photograph at a time, and a photograph that still fails comes back with its error and no reply
     (``common.engine_calls``).
 

@@ -36,6 +36,11 @@ def test_every_variable_a_job_may_set_is_in_the_table() -> None:
     in_script = re.findall(r"^#   (\w+)", header, flags=re.MULTILINE)
     assert len(in_script) == 15, in_script
     assert listed == in_script
+    # The names the script's own loops go through are the same names: one in the header and not in
+    # the list would be neither read as blank nor logged.
+    script = (REPO / "entrypoint.sh").read_text()
+    looped = re.search(r'^JOB_VARIABLES="([^"]*)"', script, flags=re.MULTILINE)
+    assert looped is not None and sorted(looped.group(1).split()) == sorted(in_script)
 
 
 # Words the flowchart grammar keeps for itself. A node named by one of them stops the whole diagram

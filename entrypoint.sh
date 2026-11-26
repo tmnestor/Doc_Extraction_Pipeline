@@ -95,6 +95,25 @@ stop() {
 # The ending of every message's "Where" line, written once.
 IN_THE_JOB="in the environment of this job (the pipeline manifest, or the command that started it)."
 
+# ---- The script is started from its own folder ---- #
+# The folder the script is started in is taken for the code's: the commit is read there, the
+# task is started there, and a place the job writes to is refused if it is inside it. So a
+# start from any other folder is refused. Until 26 November 2026 such a start stopped for
+# want of the settings file, which is gone.
+#
+# ${BASH_SOURCE[0]} is the path the script was started by, and `dirname` its folder. The
+# `cd` is inside $( ), which runs apart from the script: the script itself stays where it
+# is. `pwd -P` prints a folder with every link followed, so the two can be compared.
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+CODE_DIR="$(pwd -P)"
+if [[ "$CODE_DIR" != "$SCRIPT_DIR" ]]; then
+  stop "entrypoint.sh was not started from its own folder" \
+    "the script is in $SCRIPT_DIR and was started in $CODE_DIR. It reads the commit, and starts the task, in the folder it is started in." \
+    "the command that starts the job." \
+    "the script started in the folder that holds it, e.g. cd $SCRIPT_DIR && bash entrypoint.sh" \
+    "change to $SCRIPT_DIR before starting the script."
+fi
+
 # ---- A variable that is blank is not set ---- #
 # A pipeline manifest passes a parameter left blank as the text "None". So a variable that is
 # empty, or holds the word None, is removed here, and every check after this has one question
@@ -105,7 +124,7 @@ IN_THE_JOB="in the environment of this job (the pipeline manifest, or the comman
 # for each name, with that name in NAME. The same list is used again to write the log.
 JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images photo_split
   document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_MODELS_DIR
-  DOC_EXTRACT_TRACE_FILE DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
+  DOC_EXTRACT_TRACE_FILE DOC_EXTRACT_CONDA_ENV DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
 # The two names added at the end are the variables refused in the next section: one of those
 # left blank by a manifest must not be refused.
 for NAME in $JOB_VARIABLES dataset run_config; do
@@ -235,20 +254,55 @@ if [[ -n "$SHARE" ]] && ! [[ "$SHARE" =~ ^(0?\.[0-9]*[1-9][0-9]*|1(\.0*)?)$ ]]; 
     "set it to such a number, or leave it unset."
 fi
 
+# The record of what is sent to the model is a file that can be written. The file is opened
+# once for each reply, deep inside an engine call: until 26 November 2026 one that named a
+# folder got through, every reply then failed to be kept, and the stage stopped saying that
+# the engine had stopped answering.
+#
+# The file's folder may not exist yet: the task makes it. So ABOVE climbs from the file's
+# folder to the nearest one that does exist (`dirname` gives the folder above a path, and
+# the loop ends at / at the latest). That one must be a folder (-d) the job may write in
+# (-w), and the file itself must not be a folder.
+TRACE="${DOC_EXTRACT_TRACE_FILE:-}"
+if [[ -n "$TRACE" ]]; then
+  ABOVE="$(dirname -- "$TRACE")"
+  while [[ ! -e "$ABOVE" ]]; do ABOVE="$(dirname -- "$ABOVE")"; done
+  if [[ -d "$TRACE" || ! -d "$ABOVE" || ! -w "$ABOVE" ]]; then
+    stop "DOC_EXTRACT_TRACE_FILE is not a file that can be written: $TRACE" \
+      "what is sent to the model is kept in this file, and it is a folder, or $ABOVE above it is no folder the job may write in." \
+      "the variable DOC_EXTRACT_TRACE_FILE $IN_THE_JOB" \
+      "a file in a folder the job may write to, e.g. DOC_EXTRACT_TRACE_FILE=/data/run_20261126/sent.jsonl. Unset, nothing is kept." \
+      "name such a file, or leave it unset."
+  fi
+fi
+
+# The conda environment: its folder holds a python that can be run (-x). Unset, it is the
+# folder written here, and that is written out for the log. Both models run in vllm_env4
+# (vLLM 0.29.0): see conda_envs/vllm_env4.yaml. The folder is on storage mounted for the
+# job: if this check stops a pipeline's job, look at its volume definitions.
+export DOC_EXTRACT_CONDA_ENV="${DOC_EXTRACT_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
+CONDA_ENV="$DOC_EXTRACT_CONDA_ENV"
+if [[ ! -x "$CONDA_ENV/bin/python" ]]; then
+  stop "the conda environment is not there: $CONDA_ENV" \
+    "the task runs in a conda environment, and there is no $CONDA_ENV/bin/python that can be run." \
+    "the variable DOC_EXTRACT_CONDA_ENV $IN_THE_JOB Unset, it is the folder written in entrypoint.sh." \
+    "the folder of a conda environment, e.g. DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4" \
+    "point DOC_EXTRACT_CONDA_ENV at the environment's folder."
+fi
+
 # ---- Nothing is written beside the code ---- #
 # Under a pipeline this folder is in the job's pod: its storage is not kept, and a job that writes
 # there is stopped. git writes it once, when the job is launched from its commit, and is not used
 # after that. So the places the job names to write to are refused if they are inside this folder.
 #
-# `pwd -P` prints the folder the script was started in, with every link followed: the code's
-# folder, since the script is run from there. The loop takes the three places in turn. Each
-# is in quotes of its own, so one that is not set is an empty text, which -n passes over.
+# CODE_DIR is the code's folder, worked out near the top. The loop takes the three places in
+# turn. Each is in quotes of its own, so one that is not set is an empty text, which -n
+# passes over.
 #
 # `realpath -m` writes a path out in full, following links and resolving any `..`, whether
 # or not the path exists yet. With a / put on the end of it, the pattern "$CODE_DIR"/*
 # matches the code's folder itself and anything inside it, and does not match a neighbour
 # whose name merely begins the same way (/code_old beside /code).
-CODE_DIR="$(pwd -P)"
 for WRITTEN in "$DOC_EXTRACT_LOG_DIR" "${output:-}" "${DOC_EXTRACT_TRACE_FILE:-}"; do
   if [[ -n "$WRITTEN" && "$(realpath -m -- "$WRITTEN")/" == "$CODE_DIR"/* ]]; then
     stop "the job would write beside the code: $WRITTEN" \
@@ -359,22 +413,10 @@ done
 log ""
 
 # ---- Conda Activation ---- #
-# The environment's folder is on storage mounted for the job. If the mount is missing the
-# folder is not there, and the check below says so: look at the volume definitions of the
-# pipeline if it does.
-#
 # KFP containers start with a bare shell. We need to initialise conda
 # (the `eval` line) and then activate our environment which has all
 # the Python dependencies (torch, transformers, etc.) pre-installed.
-# Both models run in vllm_env4 (vLLM 0.29.0). See conda_envs/vllm_env4.yaml.
-CONDA_ENV="${DOC_EXTRACT_CONDA_ENV:-/home/jovyan/.conda/envs/vllm_env4}"
-if [[ ! -d "$CONDA_ENV" ]]; then
-  stop "the conda environment is not there: $CONDA_ENV" \
-    "the task runs in a conda environment, and this folder does not exist." \
-    "the variable DOC_EXTRACT_CONDA_ENV $IN_THE_JOB Unset, it is the folder written in entrypoint.sh." \
-    "the folder of a conda environment, e.g. DOC_EXTRACT_CONDA_ENV=/home/jovyan/.conda/envs/vllm_env4" \
-    "point DOC_EXTRACT_CONDA_ENV at the environment's folder."
-fi
+# That the environment is there was checked above, before anything was written.
 log "Activating conda environment..."
 # `conda shell.bash hook` PRINTS the shell code that defines the command `conda activate`.
 # `eval` runs that printed code here, in this script, so that the command exists below.

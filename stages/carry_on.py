@@ -55,9 +55,6 @@ class Work:
     # started, and there is no time on the cards to note. Until 26 November 2026 each such stage
     # wrote its own carrying on, and one of them kept the record of a page an earlier run had failed.
     tell: Callable[[Any], dict[str, Any]] | None = None
-    # Every name the output may hold, in order, when that is not the items' names in the order given.
-    # None: the items' names.
-    order: list[str] | None = None
     # Says of a record in the output whether its item is to be read again.
     read_again: Callable[[dict[str, Any]], bool] = records.failed
     # Told of the records taken out to be read again, before anything is read.
@@ -147,7 +144,7 @@ def carry_on(settings: StageSettings | None, work: Work) -> Carried:
             "Work takes exactly one of read (the items are read on the cards) and tell (no model is asked)"
         )
         raise ValueError(msg)
-    order = work.order if work.order is not None else [work.name_of(item) for item in work.items]
+    order = [work.name_of(item) for item in work.items]
     journal = Journal(work.output)
 
     recovered = journal.recover(order)

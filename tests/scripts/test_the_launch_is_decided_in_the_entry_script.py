@@ -24,8 +24,10 @@ Every value written into a file here is invented.
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -49,8 +51,23 @@ JOB_VARIABLES = (
 )
 
 
+def a_folder_with_a_python(folder: Path) -> Path:
+    """A folder that passes for a conda environment as far as the script looks: it holds bin/python.
+
+    The script gets past its check of the environment, opens its log, and stops when conda will not
+    activate the folder.
+    """
+    (folder / "bin").mkdir(parents=True)
+    (folder / "bin" / "python").write_text("#!/bin/sh\nexit 1\n")
+    (folder / "bin" / "python").chmod(0o755)
+    return folder
+
+
+NO_REAL_ENVIRONMENT = a_folder_with_a_python(Path(tempfile.mkdtemp(prefix="doc_extract_no_env_")) / "env")
+
+
 def started(
-    variables: dict[str, str], conda_env: Path = Path("/nowhere/at/all")
+    variables: dict[str, str], conda_env: Path = NO_REAL_ENVIRONMENT, cwd: Path = REPO
 ) -> subprocess.CompletedProcess[str]:
     environment = {
         key: value
@@ -58,8 +75,8 @@ def started(
         if key not in JOB_VARIABLES and not key.startswith("DOC_EXTRACT_")
     }
     return subprocess.run(
-        ["bash", "entrypoint.sh"],
-        cwd=REPO,
+        ["bash", str(REPO / "entrypoint.sh")],
+        cwd=cwd,
         env={**environment, "DOC_EXTRACT_CONDA_ENV": str(conda_env), **variables},
         capture_output=True,
         text=True,
@@ -250,6 +267,7 @@ def test_a_value_that_can_be_used_is_logged_as_the_job_set_it(
         "CLEAR_PREV_OUTPUT",
         "DOC_EXTRACT_TRACE_FILE",
         "DOC_EXTRACT_GPU_MEMORY_UTILIZATION",
+        "DOC_EXTRACT_MODELS_DIR",
     ],
 )
 @pytest.mark.parametrize("blank", ["", "None"])
@@ -258,8 +276,11 @@ def test_a_variable_that_is_empty_or_the_word_none_is_not_set(
 ) -> None:
     result = started(a_clean_job(tmp_path, **{variable: blank}))
 
-    assert f"FATAL: {variable} " not in result.stdout and "would write beside the code" not in result.stdout
-    assert (tmp_path / "logs").is_dir()
+    assert "FATAL" not in result.stdout.split("What this job set:")[0]
+    # The log says what the task will be given: nothing, or for the two with a default, false.
+    expected = "false" if variable in ("photo_split", "CLEAR_PREV_OUTPUT") else "<not set>"
+    (line,) = [line for line in result.stdout.splitlines() if f" {variable} " in f"{line} "]
+    assert line.rstrip().endswith(expected), line
 
 
 def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(tmp_path: Path) -> None:
@@ -275,6 +296,7 @@ def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(
     assert logged("photo_split") == "false" and logged("CLEAR_PREV_OUTPUT") == "false"
     assert logged("document_types") == logged("max_images") == logged("model") == "<not set>"
     assert logged("DOC_EXTRACT_MODELS_DIR") == "<not set>"
+    assert logged("DOC_EXTRACT_CONDA_ENV") == str(NO_REAL_ENVIRONMENT)
 
 
 @pytest.mark.parametrize(
@@ -300,6 +322,81 @@ def test_one_of_those_left_blank_by_a_manifest_is_not_refused(tmp_path: Path, go
     assert "no longer read" not in result.stdout and (tmp_path / "logs").is_dir()
 
 
+# --- the folder the script is started in, the environment, and the record of what is sent ---------------
+
+
+def test_a_job_started_from_another_folder_is_refused_before_anything_is_written(tmp_path: Path) -> None:
+    """The script takes the folder it is started in for the code's: the commit is read there, the task is
+    started there, and the places a job writes to are refused if they are inside it. Until 26 November
+    2026 a start from another folder stopped for want of the settings file, which is gone."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    result = started(a_clean_job(tmp_path), cwd=elsewhere)
+
+    refused(result, "FATAL: entrypoint.sh was not started from its own folder", str(REPO), str(elsewhere))
+    assert not (tmp_path / "logs").exists()
+
+
+def test_a_conda_environment_that_is_not_there_is_refused_before_anything_is_written(
+    tmp_path: Path,
+) -> None:
+    result = started(a_clean_job(tmp_path), conda_env=tmp_path / "no_such_env")
+
+    refused(result, "FATAL: the conda environment is not there", "no_such_env", "DOC_EXTRACT_CONDA_ENV")
+    assert not (tmp_path / "logs").exists()
+
+
+def test_a_folder_that_holds_no_python_is_not_taken_for_a_conda_environment(tmp_path: Path) -> None:
+    (tmp_path / "a_folder").mkdir()
+
+    result = started(a_clean_job(tmp_path), conda_env=tmp_path / "a_folder")
+
+    refused(result, "FATAL: the conda environment is not there", "a_folder", "bin/python")
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize("blank", ["", "None"])
+def test_a_conda_environment_left_blank_is_the_one_written_in_the_script(
+    tmp_path: Path, blank: str
+) -> None:
+    """It is refused on this machine, which has no such folder: by the folder's own name, and not as 'None'."""
+    result = started({**a_clean_job(tmp_path), "DOC_EXTRACT_CONDA_ENV": blank})
+
+    assert "not there: None" not in result.stdout and "not there: \n" not in result.stdout
+    assert "/home/jovyan/.conda/envs/vllm_env4" in result.stdout
+
+
+def test_a_record_of_what_is_sent_that_names_a_folder_is_refused(tmp_path: Path) -> None:
+    """Until 26 November 2026 it got through, each reply then failed to be kept, and the stage stopped
+    saying that the engine had stopped answering."""
+    (tmp_path / "out").mkdir()
+
+    result = started(a_clean_job(tmp_path, DOC_EXTRACT_TRACE_FILE=str(tmp_path / "out")))
+
+    refused(
+        result, "FATAL: DOC_EXTRACT_TRACE_FILE is not a file that can be written", str(tmp_path / "out")
+    )
+    assert not (tmp_path / "logs").exists()
+
+
+def test_a_record_of_what_is_sent_under_something_that_is_no_folder_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "a_file").write_text("not a folder")
+
+    result = started(a_clean_job(tmp_path, DOC_EXTRACT_TRACE_FILE=str(tmp_path / "a_file" / "sent.jsonl")))
+
+    refused(result, "FATAL: DOC_EXTRACT_TRACE_FILE is not a file that can be written", "a_file")
+    assert not (tmp_path / "logs").exists()
+
+
+def test_a_record_of_what_is_sent_in_a_folder_yet_to_be_made_is_accepted(tmp_path: Path) -> None:
+    result = started(
+        a_clean_job(tmp_path, DOC_EXTRACT_TRACE_FILE=str(tmp_path / "new" / "deep" / "sent.jsonl"))
+    )
+
+    assert "FATAL: DOC_EXTRACT_TRACE_FILE" not in result.stdout and (tmp_path / "logs").is_dir()
+
+
 # --- nothing beside the code, and no git ----------------------------------------------------------------
 
 
@@ -322,7 +419,10 @@ def test_the_script_runs_git_and_python_nowhere_before_the_task() -> None:
     ]
 
     assert not any(" git " in f" {line} " for line in code)
-    assert [line for line in code if "python" in line and "log " not in line] == ["python3 -m stages"]
+    # A line that RUNS Python: the word begins a command. The check that the environment holds a python
+    # names one and runs none, and the two lines that log its version come after the environment is on.
+    runs_python = [line for line in code if re.search(r"(^|[;&|(]\s*)python[0-9.]*\s", line.strip())]
+    assert [line for line in runs_python if "log " not in line] == ["python3 -m stages"]
     assert not any("run_config.yml" in line or "CONFIG_FILE" in line for line in code)
 
 

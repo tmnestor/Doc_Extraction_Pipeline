@@ -183,8 +183,25 @@ class PromptCatalog:
         return opening + "\n\n" + "\n\n".join(parts) + "\n"
 
     def photo_split_prompt(self) -> str:
-        """The question the split task puts to the model about each photograph."""
-        return self._load_yaml(self._dir / "photo_split.yaml")["prompt"].strip()
+        """The question the split task puts to the model about each photograph.
+
+        Raises:
+            ConfigError: If the file cannot be read, or holds no question.
+        """
+        path = self._dir / "photo_split.yaml"
+        try:
+            question = self._load_yaml(path)["prompt"]
+        except (OSError, yaml.YAMLError, KeyError, TypeError):
+            question = None
+        if not isinstance(question, str) or not question.strip():
+            raise ConfigError(
+                "What: the question the split task puts to the model cannot be read, or is empty.\n"
+                f"Where: {path.absolute()} (key: prompt).\n"
+                "Expected: the question as text, e.g.\n  prompt: |\n    Find every receipt in this "
+                "photograph...\n"
+                "How to fix: restore the file from the repository, or give `prompt:` the question."
+            )
+        return question.strip()
 
     def _refuse(self, what: str, key: str, expected: str, fix: str) -> ConfigError:
         """A fault in the classification file, with what is wrong, where, what is expected and the fix."""

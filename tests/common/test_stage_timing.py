@@ -172,7 +172,7 @@ def test_the_runs_time_is_the_stages_model_times_together() -> None:
         StageTiming("extract", 288.9, 200.4, "data-parallel (2 GPUs)", 165),
     ]
 
-    time = run_time(rows, per_image_total=396.7, pages=165, read=165)
+    time = run_time(rows, per_image_total=396.7, pages=165)
 
     assert time.model_seconds == pytest.approx(232.3)
     assert time.source == "stage timing (this run)"
@@ -186,7 +186,7 @@ def test_rows_for_another_number_of_pages_are_stale_and_the_pages_own_times_are_
     rows = [StageTiming("extract", 60.0, 20.0, "single-engine", 12)]
 
     with caplog.at_level(logging.WARNING):
-        time = run_time(rows, per_image_total=396.7, pages=165, read=165)
+        time = run_time(rows, per_image_total=396.7, pages=165)
 
     assert time.model_seconds == 396.7 and time.stages == ()
     assert "unreliable under data parallelism" in time.source
@@ -194,24 +194,9 @@ def test_rows_for_another_number_of_pages_are_stale_and_the_pages_own_times_are_
 
 
 def test_with_no_record_the_time_is_not_recorded_and_is_never_nothing() -> None:
-    time = run_time([], per_image_total=0.0, pages=165, read=165)
+    time = run_time([], per_image_total=0.0, pages=165)
 
     assert time.model_seconds is None and time.source == "not recorded"
-
-
-@pytest.mark.parametrize("not_read", [0, 1, 2, 5])
-def test_pages_left_unread_do_not_make_the_rows_stale(not_read: int) -> None:
-    """Classify counts every page and extract those it read. Until 25 November 2026 the mean of the two
-    was set beside the pages read, so two pages left unread made the rows of a whole run stale.
-    """
-    rows = [
-        StageTiming("classify", 100.0, 30.0, "single-engine", 165),
-        StageTiming("extract", 300.0, 200.0, "single-engine", 165 - not_read),
-    ]
-
-    time = run_time(rows, per_image_total=230.0, pages=165, read=165 - not_read)
-
-    assert time.source == "stage timing (this run)" and time.model_seconds == pytest.approx(230.0)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +210,7 @@ def test_a_row_that_covers_another_number_than_its_own_stage_read_is_stale(
     rows: list[StageTiming],
 ) -> None:
     """The mean of these two rows is right, or near it. Each is judged by itself."""
-    assert "unreliable" in run_time(rows, per_image_total=230.0, pages=165, read=165).source
+    assert "unreliable" in run_time(rows, per_image_total=230.0, pages=165).source
 
 
 def test_a_row_of_another_stage_is_kept_apart_and_judged_by_nothing() -> None:
@@ -235,7 +220,7 @@ def test_a_row_of_another_stage_is_kept_apart_and_judged_by_nothing() -> None:
         StageTiming("extract", 300.0, 200.0, "single-engine", 165),
     ]
 
-    time = run_time(rows, per_image_total=230.0, pages=165, read=165)
+    time = run_time(rows, per_image_total=230.0, pages=165)
 
     assert [t.stage for t in time.stages] == ["classify", "extract"]
     assert [t.stage for t in time.others] == ["split"]
@@ -248,7 +233,7 @@ def test_stages_arranged_differently_are_each_named() -> None:
         StageTiming("extract", 20.0, 9.0, "data-parallel (2 GPUs)", 4),
     ]
 
-    assert run_time(rows, per_image_total=0.0, pages=4, read=4).execution_mode == (
+    assert run_time(rows, per_image_total=0.0, pages=4).execution_mode == (
         "classify=single-engine, extract=data-parallel (2 GPUs)"
     )
 
@@ -262,7 +247,7 @@ def test_the_summary_says_which_stages_every_time_is_of() -> None:
         StageTiming("extract", 300.0, 90.0, "single-engine", 60),
     ]
 
-    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60, read=60), 60))
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60), 60))
 
     assert shown["Classify, model time"] == "30.0s"
     assert shown["Extract, model time"] == "90.0s"
@@ -278,14 +263,14 @@ def test_the_summary_says_which_stages_every_time_is_of() -> None:
 def test_an_older_runs_folder_with_extracts_row_alone_says_so() -> None:
     rows = [StageTiming("extract", 300.0, 90.0, "single-engine", 60)]
 
-    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60, read=60), 60))
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60), 60))
 
     assert shown["Model Time (extract)"] == "90.0s"
     assert shown["Throughput"] == "40.00 images/min"
 
 
 def test_a_run_with_no_time_recorded_shows_none_and_no_rate() -> None:
-    shown = dict(evaluate.time_rows(run_time([], per_image_total=0.0, pages=60, read=60), 60))
+    shown = dict(evaluate.time_rows(run_time([], per_image_total=0.0, pages=60), 60))
 
     assert shown == {
         "Model Time": "not recorded",
@@ -304,7 +289,7 @@ def test_the_summary_shows_splits_time_on_a_row_of_its_own_and_not_in_the_rate()
         StageTiming("extract", 300.0, 200.0, "single-engine", 165),
     ]
 
-    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=165, read=165), 165))
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=165), 165))
 
     assert shown["Split, model time (57 photographs, not in the rate)"] == "21.0s"
     assert shown["Model Time (classify + extract)"] == "230.0s"
@@ -315,6 +300,6 @@ def test_the_summary_shows_splits_time_on_a_row_of_its_own_and_not_in_the_rate()
 def test_a_run_with_no_row_of_split_shows_none() -> None:
     rows = [StageTiming("classify", 100.0, 30.0, "x", 60), StageTiming("extract", 300.0, 90.0, "x", 60)]
 
-    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60, read=60), 60))
+    shown = dict(evaluate.time_rows(run_time(rows, per_image_total=0.0, pages=60), 60))
 
     assert not [label for label in shown if label.startswith("Split")]

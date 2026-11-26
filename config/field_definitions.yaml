@@ -193,7 +193,7 @@ document_types:
 
   # The receipts of the public SROIE test split: four fields, each of a kind the pipeline has, and a
   # fixed budget, since a reply is four short lines. Their pages are not classified by a rule: the
-  # dataset says what they are (pipeline.datasets in config/run_config.yml).
+  # job says what they are (document_type=SROIE_RECEIPT).
   sroie_receipt:
     completion_tokens: 256
     fields:

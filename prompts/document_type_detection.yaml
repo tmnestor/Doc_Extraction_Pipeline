@@ -123,7 +123,7 @@ column_roles:
 #         question in lower case with true or false, e.g. paid: true, travel: false
 #   (multiple keys in one `when:` are AND-ed)
 # default: type assigned when NO rule matches.
-#   none   -> the page gets pipeline.classification.fallback_type
+#   none   -> the page gets fallback_type, of config/field_definitions.yaml
 #   <TYPE> -> a hard default
 classification_evidence:
   rules:

@@ -6,7 +6,7 @@ which hands the engine call to the backend. The replies of an extraction are kep
 later, by the clean stage.
 """
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from common import classification
 from common.errors import ConfigError
@@ -43,8 +43,14 @@ class DocumentOrchestrator:
     # -- Image loading ---------------------------------------------------------
 
     def load_document_image(self, image_path: str) -> Image.Image:
-        """A page's image. A file that cannot be opened is the caller's to deal with."""
-        return Image.open(image_path)
+        """A page's image, the way up its orientation tag says it is.
+
+        A phone or camera held on its side stores the picture as its sensor saw it and adds a tag (EXIF
+        Orientation) saying how to turn it. The tag is honoured here, so the model is shown the page as a
+        person viewing the file sees it. A file with no tag is returned as it is stored. A file that
+        cannot be opened is the caller's to deal with.
+        """
+        return ImageOps.exif_transpose(Image.open(image_path))
 
     # -- The engine ------------------------------------------------------------
 

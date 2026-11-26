@@ -38,8 +38,8 @@ from common.engine_calls import EngineWatch, groups_of, in_engine_calls
 from common.photo_split import PhotoSplitConfig
 from common.pipeline_ops import check_processor
 from common.prompt_catalog import PromptCatalog
-from common.stage_settings import StageSettings
 from common.sheet_finder import FinderParams
+from common.stage_settings import StageSettings
 from common.vllm_dp import RecordSink
 
 from .carry_on import Work, carry_on
@@ -113,7 +113,7 @@ def apply_reply(
     Returns:
         The record for splits.jsonl.
     """
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     from common.photo_split import (
         box_within,
@@ -148,7 +148,7 @@ def apply_reply(
         # may be sheets at different angles.
         if straighten and finder is not None and len(decision.boxes) <= 1:
             with Image.open(photograph) as image:
-                rgb = image.convert("RGB")
+                rgb = ImageOps.exif_transpose(image).convert("RGB")
                 region = rgb
                 if decision.boxes:
                     (rectangle,) = crop_rectangles(
@@ -184,15 +184,19 @@ def apply_reply(
     # Otherwise its corners are tried, and failing that it is turned.
     outputs, turns, drifts, rectifieds = [], [], [], []
     with Image.open(photograph) as image:
-        rgb = image.convert("RGB")
+        rgb = ImageOps.exif_transpose(image).convert("RGB")
         rectangles = crop_rectangles(decision.boxes, rgb.width, rgb.height, config.margin_frac)
         for number, (box, rectangle) in enumerate(zip(decision.boxes, rectangles, strict=True), start=1):
             piece = rgb.crop(rectangle)
             degrees, drift = measured(piece)
             page = None
-            if straighten and finder is not None and config.rectify_pieces:
-                if worth_straightening(drift, config):
-                    page = rectify(piece, finder, config, box_within(box, rectangle, rgb.width, rgb.height))
+            if (
+                straighten
+                and finder is not None
+                and config.rectify_pieces
+                and worth_straightening(drift, config)
+            ):
+                page = rectify(piece, finder, config, box_within(box, rectangle, rgb.width, rgb.height))
             name = cut_name(photograph, number)
             if page is not None:
                 page.save(images_dir / name)

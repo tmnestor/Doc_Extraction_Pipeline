@@ -778,3 +778,54 @@ def test_a_photograph_on_a_two_coloured_surface_is_rectified_by_the_stage(tmp_pa
 
     assert record["action"] == "pass_through" and record["rectified"] is True
     assert record["outputs"] == ["IMG_20.png"]
+
+
+# ---- the orientation tag -----------------------------------------------------------------------------------
+
+
+def stored_on_its_side(source: Path, path: Path) -> Path:
+    """A photograph as a phone held upright stores it: the pixels a quarter turn round, and a tag saying so."""
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    Image.open(source).transpose(Image.Transpose.ROTATE_90).save(path, exif=exif)
+    return path
+
+
+def test_a_photograph_stored_on_its_side_is_cut_the_way_up_its_tag_says(tmp_path: Path) -> None:
+    """The model's boxes are for the photograph as it is viewed, so the stage must cut it that way up too."""
+    upright, reply = photograph_of(tmp_path / "IMG_40.png", 14.0, -9.0)
+    tagged = stored_on_its_side(upright, tmp_path / "IMG_41.png")
+    assert Image.open(tagged).size == (800, 1000) and Image.open(upright).size == (1000, 800)
+    for folder in ("as_viewed", "as_stored"):
+        (tmp_path / folder).mkdir()
+
+    wanted = apply_reply(upright, reply, tmp_path / "as_viewed", CONFIG, FINDER)
+    record = apply_reply(tagged, reply, tmp_path / "as_stored", CONFIG, FINDER)
+
+    assert record["action"] == "split" and record["rectified_each"] == wanted["rectified_each"]
+    assert record["turned_deg"] == wanted["turned_deg"]
+    for name, same in zip(record["outputs"], wanted["outputs"], strict=True):
+        assert np.array_equal(
+            np.asarray(Image.open(tmp_path / "as_stored" / name)),
+            np.asarray(Image.open(tmp_path / "as_viewed" / same)),
+        )
+
+
+def test_one_page_stored_on_its_side_is_turned_level_the_way_up_its_tag_says(tmp_path: Path) -> None:
+    upright = tmp_path / "IMG_42.png"
+    printed_receipt(9.0).save(upright)
+    tagged = stored_on_its_side(upright, tmp_path / "IMG_43.png")
+    for folder in ("as_viewed", "as_stored"):
+        (tmp_path / folder).mkdir()
+
+    wanted = apply_reply(upright, "[]", tmp_path / "as_viewed", TURN_ONLY, FINDER)
+    record = apply_reply(tagged, "[]", tmp_path / "as_stored", TURN_ONLY, FINDER)
+
+    assert (
+        wanted["turned_deg"] == pytest.approx([9.0], abs=1.0)
+        and record["turned_deg"] == wanted["turned_deg"]
+    )
+    assert np.array_equal(
+        np.asarray(Image.open(tmp_path / "as_stored" / record["outputs"][0])),
+        np.asarray(Image.open(tmp_path / "as_viewed" / wanted["outputs"][0])),
+    )

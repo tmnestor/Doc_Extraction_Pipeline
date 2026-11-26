@@ -159,6 +159,8 @@ def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
         "ground_truth": str(tmp_path / "ground_truth.jsonl"),
         "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
         "DOC_EXTRACT_MODELS_DIR": str(tmp_path / "models"),
+        # The photo split is on, so that the split task loads a model and needs its weights.
+        "photo_split": "true",
     }
     if blank is None:
         del job[left_out]
@@ -167,7 +169,8 @@ def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
 
     result = started(job)
 
-    refused(result, f"the task {task} needs {left_out}")
+    # The example in the message is of the variable that is missing, and not of another.
+    refused(result, f"the task {task} needs {left_out}", f"e.g. {left_out}=")
     assert not (tmp_path / "logs").exists()
 
 
@@ -176,6 +179,62 @@ def test_clean_needs_no_model_no_weights_no_pages_and_no_answer_key(tmp_path: Pa
 
     assert "FATAL: the task" not in result.stdout
     assert (tmp_path / "logs").is_dir()
+
+
+MODEL = "gemma4-31b-w4a16-vllm"
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        {"KFP_TASK": "split"},
+        {"KFP_TASK": "split", "photo_split": "false"},
+        {"KFP_TASK": "classify", "document_type": "RECEIPT"},
+    ],
+    ids=["split passing through", "split told not to ask", "classify given the type"],
+)
+def test_a_task_that_loads_no_model_needs_no_folder_of_weights(tmp_path: Path, job: dict[str, str]) -> None:
+    """Until 26 November 2026 the three tasks that can load a model were asked for it whether or not
+    this start would load one."""
+    (tmp_path / "pages").mkdir()
+
+    result = started({**a_clean_job(tmp_path), "model": MODEL, "image_dir": str(tmp_path / "pages"), **job})
+
+    assert "FATAL: the task" not in result.stdout and (tmp_path / "logs").is_dir()
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        {"KFP_TASK": "split", "photo_split": "True"},
+        {"KFP_TASK": "classify"},
+        {"KFP_TASK": "classify", "document_type": "None"},
+        {"KFP_TASK": "extract", "document_type": "RECEIPT"},
+    ],
+    ids=["split asking the model", "classify", "classify with the type left blank", "extract"],
+)
+def test_a_task_that_loads_a_model_needs_the_folder_of_weights(tmp_path: Path, job: dict[str, str]) -> None:
+    (tmp_path / "pages").mkdir()
+
+    result = started({**a_clean_job(tmp_path), "model": MODEL, "image_dir": str(tmp_path / "pages"), **job})
+
+    refused(result, f"the task {job['KFP_TASK']} needs DOC_EXTRACT_MODELS_DIR")
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize("which", ["output", "DOC_EXTRACT_LOG_DIR"])
+@pytest.mark.parametrize("under", ["", "inside"], ids=["a file", "under a file"])
+def test_a_folder_the_job_writes_to_that_cannot_be_a_folder_is_refused(
+    tmp_path: Path, which: str, under: str
+) -> None:
+    """Until 26 November 2026 an output that named a file ended the task in a traceback."""
+    (tmp_path / "a_file").write_text("not a folder")
+    named = tmp_path / "a_file" / under if under else tmp_path / "a_file"
+
+    result = started(a_clean_job(tmp_path, **{which: str(named)}))
+
+    refused(result, f"FATAL: {which} is not a folder that can be written in", "a_file")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["a_file"]
 
 
 def test_a_folder_of_pages_that_is_not_there_is_refused(tmp_path: Path) -> None:

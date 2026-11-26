@@ -265,16 +265,16 @@ def test_a_second_model_may_start_the_stage_afresh(
     assert run_manifest.read(tmp_path / "out")["classify"].model == ANOTHER_MODEL
 
 
-def test_the_split_stage_checks_even_when_told_to_start_afresh(
+def test_the_split_stage_started_afresh_is_a_new_run_like_the_others(
     tmp_path: Path, stage: Called, commit: dict[str, Any]
 ) -> None:
-    """Nothing of the split stage's is deleted for it, so its earlier output is still carried on from."""
+    """Until 26 November 2026 CLEAR_PREV_OUTPUT did nothing for split, so its earlier output was always
+    carried on from and another model was refused. It now deletes what split wrote, as for every stage."""
     starter.run_task(settings_for("split", tmp_path))
 
-    with pytest.raises(ConfigError) as refused:
-        starter.run_task(settings_for("split", tmp_path, model=ANOTHER_MODEL, CLEAR_PREV_OUTPUT="true"))
+    starter.run_task(settings_for("split", tmp_path, model=ANOTHER_MODEL, CLEAR_PREV_OUTPUT="true"))
 
-    assert f"delete {tmp_path / 'out' / 'split'}" in str(refused.value)
+    assert run_manifest.read(tmp_path / "out")["split"].model == ANOTHER_MODEL
 
 
 def test_every_stage_that_carries_on_leaves_a_note_and_the_others_leave_none(

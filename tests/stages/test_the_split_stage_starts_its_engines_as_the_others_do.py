@@ -320,3 +320,61 @@ def test_split_started_as_a_task_notes_its_row_in_the_runs_output_folder(
     (row,) = read_stage_timings(tmp_path / "out")
     assert (row.stage, row.images, row.execution_mode) == ("split", 6, "data-parallel (2 GPUs)")
     assert not (tmp_path / "out" / "split" / ".stage_timing.jsonl").exists()
+
+
+# --- started afresh --------------------------------------------------------------------------------------
+
+
+def started_as_a_task(bench: Bench, out: Path, **more: str) -> list[str]:
+    """Start split as the runner does, and give the names of the images it leaves for the later stages."""
+    environ = {
+        "model": ONE_ENGINE,
+        "image_dir": str(bench.pages),
+        "output": str(out),
+        "DOC_EXTRACT_MODELS_DIR": str(bench.models),
+        **more,
+    }
+    task = resolve("split", environ)
+    split.start(task, split.check(task))
+    return sorted(path.name for path in (out / "split" / "images").iterdir())
+
+
+def test_split_started_afresh_deletes_its_records_and_the_images_they_name(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """Until 26 November 2026 CLEAR_PREV_OUTPUT did nothing for split. An image an earlier run had cut
+    would be read by the stages after it, beside whatever the new run made of the same photograph."""
+    two_receipts_in_each(bench)
+    out = tmp_path / "out"
+    cut = started_as_a_task(bench, out, photo_split="true")
+    assert len(cut) == 2 * len(bench.names) and all("__r" in name for name in cut)
+
+    passed_through = started_as_a_task(bench, out, CLEAR_PREV_OUTPUT="true")
+
+    assert passed_through == sorted(bench.names, key=str)
+    records = read_jsonl(out / "split" / "splits.jsonl")
+    assert [record["action"] for record in records] == ["pass_through"] * len(bench.names)
+
+
+def test_split_not_started_afresh_keeps_what_it_had_done(bench: Bench, tmp_path: Path) -> None:
+    two_receipts_in_each(bench)
+    out = tmp_path / "out"
+    cut = started_as_a_task(bench, out, photo_split="true")
+
+    assert started_as_a_task(bench, out) == cut
+
+
+def test_split_started_afresh_after_a_stopped_run_removes_what_that_run_had_cut(
+    bench: Bench, tmp_path: Path
+) -> None:
+    """What a stopped run had done is in its journal, not yet in its records: those images go too."""
+    two_receipts_in_each(bench)
+    out = tmp_path / "out"
+    bench.processor.stop_at_call = 2
+    with pytest.raises(Stopped):
+        started_as_a_task(bench, out, photo_split="true")
+    bench.processor.stop_at_call = None
+    assert any("__r" in path.name for path in (out / "split" / "images").iterdir())
+
+    assert started_as_a_task(bench, out, CLEAR_PREV_OUTPUT="true") == sorted(bench.names, key=str)
+    assert not (out / "split" / "splits.jsonl.journal").exists()

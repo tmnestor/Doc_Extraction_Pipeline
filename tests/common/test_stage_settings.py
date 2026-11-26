@@ -306,9 +306,10 @@ def test_the_runner_names_no_stage_but_where_a_stage_differs_in_what_it_carries_
     code = code.split("def _stage(", 1)[1]
 
     named = sorted({task for task in TASKS if re.search(rf"[\"\x27]{task}[\"\x27]", code)})
-    # The split stage always checks what made its folder, and extract warns if classify was made
-    # another way: both are about the note a stage leaves, not about how a stage is run.
-    assert named == ["classify", "extract", "split"]
+    # Extract warns if classify was made another way: that is about the note a stage leaves, not
+    # about how a stage is run. Until 26 November 2026 split was named too, for the one stage that
+    # deleted nothing when started afresh.
+    assert named == ["classify", "extract"]
     assert "elif" not in code
 
 

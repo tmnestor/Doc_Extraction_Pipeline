@@ -42,6 +42,9 @@ class VllmSpec:
             it differently.
         chat_template: The path of a ``*.jinja`` file to use in place of the model's own chat template,
             or None for the model's own: the last resort for a model whose template thinks by default.
+        reply_tokens_added: Tokens added to the budget of every reply. 0 for a model that answers at
+            once. For one that deliberates before it answers, even with thinking off, enough that the
+            deliberation cannot use up the budget before the answer is written.
     """
 
     model_type: str
@@ -57,6 +60,7 @@ class VllmSpec:
     supports_data_parallel: bool = True
     default_image_first: bool = False
     chat_template: str | None = None
+    reply_tokens_added: int = 0
 
 
 # The image tokens a page is given. Gemma 4 takes 70, 140, 280, 560 or 1120: 560 is the measured best
@@ -176,5 +180,51 @@ register_vllm_model(
         supports_data_parallel=True,
         # The text before the image, as for the 31B and for the reason given there.
         default_image_first=False,
+    )
+)
+
+# -- Qwen 3.8 27B, FP8: AN EXPERIMENT, not a model the pipeline runs ------------------
+# Registered on this branch alone, to measure it again beside the Gemma 31B. It was measured once, on
+# 22 September 2026 (mean F1 0.937 against Gemma's 0.987 on 165 clean pages), removed on 20 November
+# with the other models no longer run, and is not to be merged as it stands.
+#
+# Qwen/Qwen3.8-27B-FP8. The weights are 27,781,427,952 B = 25.87 GiB in 66 shards, more than one
+# 24 GiB L4 holds, so this is one engine across both cards (tp=2), as the Gemma 31B is. Measured at
+# load on 21 September: 14.86 GiB a card, and a cache for 86,167 tokens.
+#
+# The engine's values are those of 22 September, so that what differs from that run is the pipeline
+# and the one thing changed on purpose (reply_tokens_added):
+#   max_model_len  16384 holds a bank statement at its own size (about 6,166 image tokens) with the
+#                  prompt and the reply.
+#   max_num_seqs   8, as it was run.
+#   mm_processor_kwargs  the checkpoint's own limits, written out. This model sizes an image by its
+#                  area in pixels (image tokens = pixels / 1024), not by a number of tokens asked for,
+#                  so it takes no hf_overrides.
+#
+# Thinking is off (chat_template_kwargs). Its chat template was read on 27 November 2026: given
+# enable_thinking false it writes an empty, closed block of thinking after the assistant's header
+# and adds no instruction to reason. On 22 September the model deliberated in plain text all the
+# same, on 107 of 165 pages, and closed a block it had not opened: about three times the output of
+# the Gemma, and on four receipts the deliberation used up the budget before the answer was written.
+# reply_tokens_added is what is changed for that: room for the deliberation AND the answer. It does
+# not stop the deliberation, which is the model's own and is paid for in time.
+register_vllm_model(
+    VllmSpec(
+        model_type="qwen38-27b-fp8-vllm",
+        weights_folder="Qwen3.8-27B-FP8",
+        max_model_len=16384,
+        max_num_seqs=8,
+        gpu_memory_utilization=0.90,
+        mm_processor_kwargs={"min_pixels": 65536, "max_pixels": 16777216},
+        hf_overrides={},
+        prompt_file="extraction_prompts.yaml",
+        description="Qwen 3.8 27B FP8 via vLLM (25.87 GiB, 2xL4 tp=2): an experiment",
+        chat_template_kwargs={"enable_thinking": False},
+        supports_data_parallel=False,
+        # The image before the text, as its chat template's own examples have it and as it was run on
+        # 22 September. The Gemma models are sent the text first, a choice measured for them.
+        default_image_first=True,
+        # The longest replies of 22 September were about 5,000 characters, cut short at 1,408 tokens.
+        reply_tokens_added=2048,
     )
 )

@@ -21,7 +21,6 @@ from models.backends.vllm_backend import VllmBackend
 from models.orchestrator import DocumentOrchestrator
 from models.registry import VllmSpec
 
-
 # The same for every model. False: the engine compiles CUDA graphs when it starts, a slower start and
 # faster reading, which is the right trade for a run of more than a few pages.
 ENFORCE_EAGER = False
@@ -123,6 +122,7 @@ def build_processor(spec: VllmSpec, engine: Any, settings: StageSettings) -> Doc
         chat_template=spec.chat_template,
         chat_template_kwargs=spec.chat_template_kwargs,
         default_image_first=spec.default_image_first,
+        reply_tokens_added=spec.reply_tokens_added,
         trace_path=settings.trace_file,
     )
     return DocumentOrchestrator(backend, model_type_key=spec.model_type)

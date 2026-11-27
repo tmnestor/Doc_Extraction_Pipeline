@@ -34,9 +34,13 @@ class VllmBackend:
         chat_template: str | None = None,
         chat_template_kwargs: dict[str, Any] | None = None,
         default_image_first: bool = False,
+        reply_tokens_added: int = 0,
         trace_path: Path | None = None,
     ) -> None:
         self.model = engine
+        # Tokens added to the budget of every reply, from the model's registration: 0 for a model that
+        # answers at once.
+        self._reply_tokens_added = reply_tokens_added
         self._model_type_key = model_type_key
         # A chat template to use in place of the model's own, or None for the model's own.
         self._chat_template = chat_template
@@ -107,7 +111,7 @@ class VllmBackend:
             template_arguments["chat_template_kwargs"] = dict(self._chat_template_kwargs)
         outputs = self.model.chat(
             messages=conversations,
-            sampling_params=SamplingParams(max_tokens=max_tokens, temperature=0),
+            sampling_params=SamplingParams(max_tokens=max_tokens + self._reply_tokens_added, temperature=0),
             chat_template=self._chat_template,
             use_tqdm=False,
             **template_arguments,

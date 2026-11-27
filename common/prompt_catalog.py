@@ -182,24 +182,28 @@ class PromptCatalog:
             )
         return opening + "\n\n" + "\n\n".join(parts) + "\n"
 
-    def photo_split_prompt(self) -> str:
-        """The question the split task puts to the model about each photograph.
+    def photo_split_prompt(self, key: str = "prompt") -> str:
+        """A question the split task puts to the model about each photograph.
+
+        Args:
+            key: The question's key in the file: ``prompt``, where each receipt is, or ``upright``,
+                whether the print is the right way up.
 
         Raises:
-            ConfigError: If the file cannot be read, or holds no question.
+            ConfigError: If the file cannot be read, or holds no such question.
         """
         path = self._dir / "photo_split.yaml"
         try:
-            question = self._load_yaml(path)["prompt"]
+            question = self._load_yaml(path)[key]
         except (OSError, yaml.YAMLError, KeyError, TypeError):
             question = None
         if not isinstance(question, str) or not question.strip():
             raise ConfigError(
-                "What: the question the split task puts to the model cannot be read, or is empty.\n"
-                f"Where: {path.absolute()} (key: prompt).\n"
-                "Expected: the question as text, e.g.\n  prompt: |\n    Find every receipt in this "
+                "What: a question the split task puts to the model cannot be read, or is empty.\n"
+                f"Where: {path.absolute()} (key: {key}).\n"
+                f"Expected: the question as text, e.g.\n  {key}: |\n    A question about this "
                 "photograph...\n"
-                "How to fix: restore the file from the repository, or give `prompt:` the question."
+                f"How to fix: restore the file from the repository, or give `{key}:` the question."
             )
         return question.strip()
 

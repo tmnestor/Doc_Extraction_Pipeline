@@ -1,6 +1,11 @@
 """Stage 0: Split photographs of several receipts into one image per receipt (GPU).
 
-Runs before classify. Each photograph is shown to the model, which says where each receipt is. A photograph
+Runs before classify. Each photograph is first set the right way up: one lying on its side is set on end by
+its print, and the model says whether it is then upside down. A photograph that arrives turned a quarter or
+a half with no orientation tag is read worse, and this puts it right. A photograph so turned is written as
+<photograph>.png, and how far it was turned is recorded as `upright_turn`.
+
+Each photograph is then shown to the model, which says where each receipt is. A photograph
 holding one receipt, or one the model's answer is unclear about, is copied through unchanged; a photograph the
 model clearly says holds several is cut into one image per receipt. Each image, cut or whole, is then left
 alone unless its rows of print drift far enough to mislead a reader. One that does is rectified from its four
@@ -77,6 +82,7 @@ def _record(
     rectified: list[bool],
     reply: str,
     drift_heights: list[float | None],
+    upright_turn: int,
 ) -> dict[str, Any]:
     return {
         "image_path": str(photograph),
@@ -85,6 +91,7 @@ def _record(
         "reason": reason,
         "boxes": boxes,
         "outputs": outputs,
+        "upright_turn": upright_turn,
         "turned_deg": [round(degrees, 2) for degrees in turned_deg],
         "rectified": any(rectified),
         "rectified_each": rectified,
@@ -99,6 +106,7 @@ def apply_reply(
     images_dir: Path,
     config: PhotoSplitConfig,
     finder: FinderParams | None = None,
+    upright_turn: int = 0,
 ) -> dict[str, Any]:
     """Act on the model's reply about one photograph: copy it through, turn it, or cut it up.
 
@@ -109,6 +117,9 @@ def apply_reply(
         config: The photo split's rules.
         finder: The values for finding print and its direction.
             Needed when `config.straighten` is true; None leaves every image as it lies.
+        upright_turn: How far the photograph was turned anticlockwise to set its print the right way
+            up before the model was asked where the receipts are: 0, 90, 180 or 270 degrees. The
+            reply's boxes are of the photograph so turned, and so is every image written.
 
     Returns:
         The record for splits.jsonl.
@@ -123,10 +134,15 @@ def apply_reply(
         rectify,
         row_measures,
         turn,
+        turned_upright,
         worth_straightening,
     )
 
     straighten = bool(config.straighten and finder is not None)
+
+    def the_right_way_up(image: Any) -> Any:
+        """The photograph the way up its tag says, then turned as it was to set its print upright."""
+        return turned_upright(ImageOps.exif_transpose(image).convert("RGB"), upright_turn)
 
     def measured(part: Any) -> tuple[float, float | None]:
         """The turn that would level an image's print (0 when it should be left), and its rows' drift."""
@@ -148,7 +164,7 @@ def apply_reply(
         # may be sheets at different angles.
         if straighten and finder is not None and len(decision.boxes) <= 1:
             with Image.open(photograph) as image:
-                rgb = ImageOps.exif_transpose(image).convert("RGB")
+                rgb = the_right_way_up(image)
                 region = rgb
                 if decision.boxes:
                     (rectangle,) = crop_rectangles(
@@ -165,8 +181,12 @@ def apply_reply(
                     elif degrees:
                         turn(rgb, degrees, config).save(images_dir / altered_name(photograph))
         altered = bool(degrees) or rectified
-        written = altered_name(photograph) if altered else photograph.name
-        if not altered:
+        written = altered_name(photograph) if altered or upright_turn else photograph.name
+        if upright_turn and not altered:
+            # Set the right way up and otherwise left as it is.
+            with Image.open(photograph) as image:
+                the_right_way_up(image).save(images_dir / written)
+        elif not altered:
             shutil.copy2(photograph, images_dir / written)
         return _record(
             photograph,
@@ -178,13 +198,14 @@ def apply_reply(
             [rectified],
             reply,
             [drift],
+            upright_turn,
         )
     # Several receipts: one image is cut per box, and each is then treated as a photograph of one receipt
     # is. Its rows are measured, and unless they drift far enough to mislead a reader it is left as cut.
     # Otherwise its corners are tried, and failing that it is turned.
     outputs, turns, drifts, rectifieds = [], [], [], []
     with Image.open(photograph) as image:
-        rgb = ImageOps.exif_transpose(image).convert("RGB")
+        rgb = the_right_way_up(image)
         rectangles = crop_rectangles(decision.boxes, rgb.width, rgb.height, config.margin_frac)
         for number, (box, rectangle) in enumerate(zip(decision.boxes, rectangles, strict=True), start=1):
             piece = rgb.crop(rectangle)
@@ -207,7 +228,9 @@ def apply_reply(
             turns.append(degrees)
             drifts.append(drift)
             rectifieds.append(page is not None)
-    return _record(photograph, "split", decision.reason, boxes, outputs, turns, rectifieds, reply, drifts)
+    return _record(
+        photograph, "split", decision.reason, boxes, outputs, turns, rectifieds, reply, drifts, upright_turn
+    )
 
 
 def ask_about_photographs(
@@ -218,6 +241,12 @@ def ask_about_photographs(
     One engine across the cards calls this once with every photograph. With an engine on each card, each
     worker calls it with its share. It loads no model, cuts no image and writes no file: it gives the
     model's reply for each photograph, and the stage's ``run`` acts on the replies.
+
+    A photograph is first set the right way up, since one that arrives turned with no orientation tag
+    is read worse. One lying on its side is set on end by its print (``photo_split.lies_on_its_side``),
+    which cannot tell the right way up from upside down. The model is then asked whether the print is
+    the right way up, and on NO the photograph is turned half way round. Only then is it asked where the
+    receipts are, so its boxes are of the photograph the right way up. So a call here is two engine calls.
 
     Photographs go ``photo_split.CONFIG.batch_size`` to an engine call. A call that fails is tried again
     one photograph at a time, and a photograph that still fails comes back with its error and no reply
@@ -230,15 +259,25 @@ def ask_about_photographs(
         sink: Where to write each photograph's reply as soon as it is given, if anywhere.
 
     Returns:
-        For each photograph, in the order given: image_name, image_path, raw_response, error and
-        processing_time.
+        For each photograph, in the order given: image_name, image_path, raw_response, error,
+        processing_time and upright_turn, how far it was turned anticlockwise to set it the right way up.
     """
     config = photo_split.CONFIG
-    prompt = PromptCatalog().photo_split_prompt()
+    prompt, is_it_upright = (PromptCatalog().photo_split_prompt(key) for key in ("prompt", "upright"))
     watch = EngineWatch()
+    turns: dict[Path, int] = {}
 
     def ask(batch: list[Path]) -> list[str]:
-        images = [processor.load_document_image(str(photograph)) for photograph in batch]
+        images = []
+        for photograph in batch:
+            image = processor.load_document_image(str(photograph))
+            turns[photograph] = 90 * photo_split.lies_on_its_side(image, photo_split.FINDER, config)
+            images.append(photo_split.turned_upright(image, turns[photograph]))
+        said = processor.ask(images, [is_it_upright] * len(images), config.upright_max_tokens)
+        for index, (photograph, reply) in enumerate(zip(batch, said, strict=True)):
+            if photo_split.said_upright(reply) is False:
+                turns[photograph] += 180
+                images[index] = photo_split.turned_upright(images[index], 180)
         return processor.ask(images, [prompt] * len(images), config.max_tokens)
 
     asked: list[dict[str, Any]] = []
@@ -251,6 +290,8 @@ def ask_about_photographs(
                 "raw_response": outcome.reply or "",
                 "error": outcome.error,
                 "processing_time": outcome.seconds,
+                # A photograph the model could not be asked about is left the way up it came.
+                "upright_turn": turns.get(outcome.item, 0) if outcome.error is None else 0,
             }
             asked.append(record)
             if sink is not None:
@@ -305,8 +346,9 @@ def checked(settings: StageSettings, image_dir: Path) -> Checked:
     logger.info("Found %d photographs in %s", len(photographs), image_dir)
     if not settings.photo_split:
         return Checked(False, None, photographs)
-    # Read here, before any engine is started: it is asked for again where the model is asked.
+    # Read here, before any engine is started: each is asked for again where the model is asked.
     PromptCatalog().photo_split_prompt()
+    PromptCatalog().photo_split_prompt("upright")
     return Checked(True, settings, photographs)
 
 
@@ -363,7 +405,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
             shutil.copy2(photograph, images_dir / photograph.name)
             reason = "photo_split is not enabled"
             return _record(
-                photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None]
+                photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None], 0
             )
 
         copied = carry_on(
@@ -390,7 +432,9 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
         """Act on the model's reply about one photograph, and give the stage's record of it."""
         nonlocal acted_on
         photograph = Path(asked["image_path"])
-        record = apply_reply(photograph, asked["raw_response"], images_dir, split_config, finder)
+        record = apply_reply(
+            photograph, asked["raw_response"], images_dir, split_config, finder, asked["upright_turn"]
+        )
         if asked.get("error"):
             # The model could not be asked about this photograph, in a shared call or alone. It is
             # treated as one the model said nothing clear about, and says why.

@@ -268,7 +268,8 @@ def models_folder(folder: Path) -> Path:
     models = folder / "models"
     for name in list_models():
         weights = models / get_model(name).weights_folder
-        weights.mkdir(parents=True)
+        # Two registrations may read the same weights: the same model set up two ways.
+        weights.mkdir(parents=True, exist_ok=True)
         (weights / "config.json").write_text("{}")
     return models
 

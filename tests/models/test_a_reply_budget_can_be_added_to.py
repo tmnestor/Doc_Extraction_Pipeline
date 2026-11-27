@@ -9,6 +9,7 @@ unchanged.
 The engine is a stand-in: no model is loaded.
 """
 
+import dataclasses
 import sys
 import types
 from typing import Any
@@ -17,7 +18,7 @@ import pytest
 from PIL import Image
 
 from models.backends.vllm_backend import VllmBackend
-from models.registry import get_model
+from models.registry import get_model, list_models
 
 THE_MODELS_THE_PIPELINE_RUNS = ("gemma4-31b-w4a16-vllm", "gemma4-12b-unified-w4a16-vllm")
 THE_EXPERIMENT = "qwen38-27b-fp8-vllm"
@@ -88,3 +89,55 @@ def test_the_experiment_is_registered_as_it_was_run_in_september_with_room_to_de
     assert spec.prompt_file == "extraction_prompts.yaml"
     # Room for the longest deliberation of September, which was cut short at 1,408 tokens, and the answer.
     assert spec.reply_tokens_added == 2048
+
+
+# --- the same model with its images held to a size ------------------------------------------------------
+# This model gives an image a token for each 1,024 pixels, and its time goes on the image. Each of these
+# differs from the model above in the one thing its name says.
+
+
+@pytest.mark.parametrize(
+    ("name", "pixels", "tokens_of_image_at_most"),
+    [("4m", 4_194_304, 4096), ("2m", 2_097_152, 2048), ("1m", 1_048_576, 1024), ("05m", 524_288, 512)],
+)
+def test_a_limit_on_the_image_is_the_one_thing_that_differs(
+    name: str, pixels: int, tokens_of_image_at_most: int
+) -> None:
+    whole, held = get_model(THE_EXPERIMENT), get_model(f"{THE_EXPERIMENT}-{name}")
+
+    assert held.mm_processor_kwargs == {"min_pixels": 65536, "max_pixels": pixels}
+    assert pixels // 1024 == tokens_of_image_at_most
+    assert (
+        dataclasses.replace(
+            held,
+            model_type=whole.model_type,
+            mm_processor_kwargs=whole.mm_processor_kwargs,
+            description=whole.description,
+        )
+        == whole
+    )
+
+
+def test_the_text_first_and_the_sixteen_at_once_each_differ_from_the_one_megapixel_model_in_that_alone() -> (
+    None
+):
+    held = get_model(f"{THE_EXPERIMENT}-1m")
+    text_first = get_model(f"{THE_EXPERIMENT}-1m-text-first")
+    sixteen = get_model(f"{THE_EXPERIMENT}-1m-16")
+
+    assert (held.default_image_first, text_first.default_image_first) == (True, False)
+    assert (held.max_num_seqs, sixteen.max_num_seqs) == (8, 16)
+    for other, changed in ((text_first, {"default_image_first": True}), (sixteen, {"max_num_seqs": 8})):
+        assert (
+            dataclasses.replace(other, model_type=held.model_type, description=held.description, **changed)
+            == held
+        )
+
+
+def test_every_form_of_the_experiment_reads_the_same_weights_and_the_same_prompts() -> None:
+    forms = [name for name in list_models() if name.startswith(THE_EXPERIMENT)]
+
+    assert len(forms) == 7
+    assert {get_model(name).weights_folder for name in forms} == {"Qwen3.8-27B-FP8"}
+    assert {get_model(name).prompt_file for name in forms} == {"extraction_prompts.yaml"}
+    assert all(get_model(name).chat_template_kwargs == {"enable_thinking": False} for name in forms)

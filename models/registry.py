@@ -8,7 +8,7 @@ requests it runs at once, its share of the card's memory and its number of image
 Nothing here imports the engine, so reading the registry costs nothing.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from common.errors import ConfigError
@@ -226,5 +226,53 @@ register_vllm_model(
         default_image_first=True,
         # The longest replies of 22 September were about 5,000 characters, cut short at 1,408 tokens.
         reply_tokens_added=2048,
+    )
+)
+
+# -- The Qwen with its images held to a size: also an experiment --------------------------
+# CORRECTION to the account above, found on 27 November 2026 after the run of that day. The model did
+# not deliberate at all in that run (none of 165 replies), and the tokens added to its replies were
+# not needed. September's deliberation was the pipeline's fault, not the model's: the backend's call
+# for a batch of pages left out chat_template_kwargs, so invoices and receipts were read with
+# thinking on. That went with 875ccf1.
+#
+# What that run did show is where the Qwen's time goes. It read as well as the Gemma 31B and took
+# 3.3 times the model time, and the time is the image: a request costs about 1 ms a token, and this
+# model gives an image a token for each 1,024 pixels, so a page of 6.5 megapixels is 6,500 tokens
+# where the Gemma is given 560. Real receipts are large images: the 347 SROIE scans have a median of
+# 1.5 megapixels and a tenth of them are 34.8, which at the checkpoint's own limit of 16,777,216
+# pixels is 16,384 tokens, the whole of the context.
+#
+# So each of these holds an image to a number of pixels (max_pixels), to measure what the answers
+# lose and the time gains as the image gets smaller. The name says the limit: 4m is 4 x 1,048,576
+# pixels, which is 4,096 tokens of image at most. Two more are the 1m limit with one other thing
+# changed: the text before the image, which lets the engine reuse its work on the prompt from one
+# page to the next (it saved the Gemma 16% of its extract time), and 16 requests at once where the
+# others run 8.
+_QWEN = get_model("qwen38-27b-fp8-vllm")
+_MEGAPIXEL = 1024 * 1024
+for _name, _megapixels in (("4m", 4.0), ("2m", 2.0), ("1m", 1.0), ("05m", 0.5)):
+    register_vllm_model(
+        replace(
+            _QWEN,
+            model_type=f"qwen38-27b-fp8-vllm-{_name}",
+            mm_processor_kwargs={"min_pixels": 65536, "max_pixels": int(_megapixels * _MEGAPIXEL)},
+            description=f"Qwen 3.8 27B FP8, an image held to {_megapixels:g} megapixels: an experiment",
+        )
+    )
+register_vllm_model(
+    replace(
+        get_model("qwen38-27b-fp8-vllm-1m"),
+        model_type="qwen38-27b-fp8-vllm-1m-text-first",
+        default_image_first=False,
+        description="Qwen 3.8 27B FP8, an image held to 1 megapixel, the text first: an experiment",
+    )
+)
+register_vllm_model(
+    replace(
+        get_model("qwen38-27b-fp8-vllm-1m"),
+        model_type="qwen38-27b-fp8-vllm-1m-16",
+        max_num_seqs=16,
+        description="Qwen 3.8 27B FP8, an image held to 1 megapixel, 16 requests at once: an experiment",
     )
 )

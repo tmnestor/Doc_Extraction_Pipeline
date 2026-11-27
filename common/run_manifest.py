@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 FILE = "run_manifest.json"
 # The stages that carry on from their own earlier output.
-STAGES = ("split", "classify", "extract")
+STAGES = ("preprocess", "classify", "extract")
 UNKNOWN = "unknown"
 # What must be the same for a stage to carry on from an earlier run, and what each is called in a message.
 _SAME_RUN = (("model", "the model"), ("image_dir", "the folder of pages"), ("commit", "the code's commit"))
@@ -140,8 +140,8 @@ def check_and_note(
         ]
         if differs:
             afresh = (
-                f"delete {output / 'split'}"
-                if stage == "split"
+                f"delete {output / 'preprocess'}"
+                if stage == "preprocess"
                 else "set CLEAR_PREV_OUTPUT=true, which deletes this stage's earlier output"
             )
             raise ConfigError(

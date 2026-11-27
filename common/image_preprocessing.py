@@ -1,4 +1,7 @@
-"""Split a photograph of several receipts into one image per receipt.
+"""The rules of the preprocess stage: set a photograph upright, cut it into one image per receipt, level its print.
+
+Most of what follows is about the cutting, which came first and gave the module its earlier name,
+``photo_split``. The setting upright is at `lies_on_its_side` and `said_upright`.
 
 People often lay a few receipts on a table and take one photograph. Every later stage expects one document per
 image, so such a photograph has to become one image per receipt first.
@@ -37,7 +40,7 @@ one with its corners within 0.1% of the page's diagonal, and 5 left to turning (
 The reply's form is the one the model gives for detection prompts: a JSON list of objects, each with
 `"box_2d": [ymin, xmin, ymax, xmax]` on a scale of 0 to 1000 across the photograph's height and width.
 
-Every operating choice is a field of `PhotoSplitConfig`, with the value it was measured at.
+Every operating choice is a field of `PreprocessConfig`, with the value it was measured at.
 """
 
 import json
@@ -63,12 +66,12 @@ BOX_SCALE = 1000.0
 
 
 @dataclass(frozen=True)
-class PhotoSplitConfig:
-    """The photo split's rules, each with the value it was measured at.
+class PreprocessConfig:
+    """The preprocess stage's rules, each with the value it was measured at.
 
     Until 26 November 2026 these were keys of the settings file, all required. No run ever changed one:
-    they are tuned values, changed with the code and not by a job. Whether the photo split is on at all
-    is the job's choice, and is not here; the question put to the model is in `prompts/photo_split.yaml`.
+    they are tuned values, changed with the code and not by a job. Whether photographs are preprocessed at all
+    is the job's choice, and is not here; the question put to the model is in `prompts/preprocess.yaml`.
 
     Attributes:
         max_tokens: Longest reply allowed.
@@ -155,8 +158,8 @@ class Decision:
     boxes: tuple[Box, ...]
 
 
-# What the split stage goes by. A test puts another record in their place.
-CONFIG = PhotoSplitConfig()
+# What the preprocess stage goes by. A test puts another record in their place.
+CONFIG = PreprocessConfig()
 FINDER = FinderParams()
 
 
@@ -197,12 +200,12 @@ def _shared_area(first: Box, second: Box) -> float:
     return max(width, 0.0) * max(height, 0.0)
 
 
-def decide(reply: str, config: PhotoSplitConfig) -> Decision:
+def decide(reply: str, config: PreprocessConfig) -> Decision:
     """Decide what to do with a photograph from the model's reply about it.
 
     Args:
         reply: The model's reply to the configured prompt.
-        config: The photo split settings.
+        config: The stage's rules.
 
     Returns:
         Whether to split the photograph or pass it through, why, and the boxes.
@@ -322,7 +325,7 @@ def _print_of(image: Image.Image, finder: FinderParams) -> tuple[np.ndarray, flo
     return print_marks(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), finder)
 
 
-def _alternation(marks: np.ndarray, text_height: float, config: PhotoSplitConfig) -> float:
+def _alternation(marks: np.ndarray, text_height: float, config: PreprocessConfig) -> float:
     """How sharply print and gap alternate down an image of print marks, for each unit of print."""
     ink = (marks > 0).astype(np.float32)
     strip = max(round(config.upright_strip_heights * text_height), 8)
@@ -341,7 +344,7 @@ def _alternation(marks: np.ndarray, text_height: float, config: PhotoSplitConfig
     return energy / inked if inked else 0.0
 
 
-def lies_on_its_side(image: Image.Image, finder: FinderParams, config: PhotoSplitConfig) -> bool:
+def lies_on_its_side(image: Image.Image, finder: FinderParams, config: PreprocessConfig) -> bool:
     """Whether the rows of print in an image run up it and not across it.
 
     Print is rows of letters with gaps between the rows. Down a page that is the right way up, or upside
@@ -354,7 +357,7 @@ def lies_on_its_side(image: Image.Image, finder: FinderParams, config: PhotoSpli
     Args:
         image: The photograph.
         finder: The settings for finding print (`FINDER`).
-        config: The photo split's rules.
+        config: The stage's rules.
 
     Returns:
         True when the rows run up the image. False when they run across it, or there is no print to say.
@@ -405,7 +408,7 @@ def row_measures(image: Image.Image, finder: FinderParams) -> tuple[float | None
     return text_direction(marks, text_height, finder), row_drift(marks, text_height, finder)
 
 
-def worth_straightening(drift: float | None, config: PhotoSplitConfig) -> bool:
+def worth_straightening(drift: float | None, config: PreprocessConfig) -> bool:
     """Whether an image's rows drift far enough for turning or rectifying it to change how it reads.
 
     An image whose drift could not be measured is treated as worth it: nothing is known against it.
@@ -413,14 +416,14 @@ def worth_straightening(drift: float | None, config: PhotoSplitConfig) -> bool:
     return drift is None or drift >= config.straighten_min_drift_heights
 
 
-def level_turn(direction: float | None, config: PhotoSplitConfig) -> float:
+def level_turn(direction: float | None, config: PreprocessConfig) -> float:
     """The turn to apply for a row direction: the direction itself, or 0 when it is too small or not believed."""
     if direction is None or not config.straighten_min_deg <= abs(direction) <= config.straighten_max_deg:
         return 0.0
     return direction
 
 
-def turn(image: Image.Image, degrees: float, config: PhotoSplitConfig) -> Image.Image:
+def turn(image: Image.Image, degrees: float, config: PreprocessConfig) -> Image.Image:
     """Turn an image so that rows running at `degrees` from level become level.
 
     The image grows to hold its turned corners, which are filled with `straighten_fill_rgb`.
@@ -428,7 +431,7 @@ def turn(image: Image.Image, degrees: float, config: PhotoSplitConfig) -> Image.
     Args:
         image: The image.
         degrees: The direction of its rows of print, as `row_direction` gives it. 0 returns the image unchanged.
-        config: The photo split settings.
+        config: The stage's rules.
 
     Returns:
         The turned image.
@@ -440,7 +443,7 @@ def turn(image: Image.Image, degrees: float, config: PhotoSplitConfig) -> Image.
     )
 
 
-def _desk_quad(rgb: np.ndarray, finder: FinderParams, config: PhotoSplitConfig) -> np.ndarray | None:
+def _desk_quad(rgb: np.ndarray, finder: FinderParams, config: PreprocessConfig) -> np.ndarray | None:
     """The corners of the one sheet the desk method finds, when they pass every test of trust."""
     sheets = find_sheets(rgb, finder)
     if len(sheets) != 1:
@@ -461,7 +464,7 @@ def _desk_quad(rgb: np.ndarray, finder: FinderParams, config: PhotoSplitConfig) 
 
 
 def _paper_quad(
-    rgb: np.ndarray, finder: FinderParams, config: PhotoSplitConfig, box: Box | None
+    rgb: np.ndarray, finder: FinderParams, config: PreprocessConfig, box: Box | None
 ) -> np.ndarray | None:
     """The corners of the sheet the paper method finds, when they pass every test of trust."""
     shares = (
@@ -481,7 +484,7 @@ def _paper_quad(
 
 
 def rectify(
-    image: Image.Image, finder: FinderParams, config: PhotoSplitConfig, box: Box | None = None
+    image: Image.Image, finder: FinderParams, config: PreprocessConfig, box: Box | None = None
 ) -> Image.Image | None:
     """Rectify a photograph of one document from its four corners, when they can be trusted.
 
@@ -495,7 +498,7 @@ def rectify(
     Args:
         image: The photograph.
         finder: The sheet finder's settings (`FINDER`).
-        config: The photo split settings.
+        config: The stage's rules.
         box: The model's box for the document, when it gave exactly one. The paper method uses it to tell the
             document's print from anything else in the photograph.
 

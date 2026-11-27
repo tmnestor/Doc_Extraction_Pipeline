@@ -1,14 +1,15 @@
 """One way for a stage that uses the cards to carry on from what an earlier run left.
 
-``split``, ``classify`` and ``extract`` each read items with the model and write a record for each. A run
+``preprocess``, ``classify`` and ``extract`` each read items with the model and write a record for each. A run
 may be the first, or may follow one that was stopped, or one that left pages it could not read, or one
 after which more pages arrived. Whichever it is, the stage describes its work (``Work``) and calls
 ``carry_on``, and its output comes out as a run straight through would have left it: one record for each
 item, in the stage's own order.
 
 Until 25 November 2026 each of the three wrote this out for itself, and the three did not agree. A fix
-to carrying on was a fix written three times, and ``split`` was the last to get each. Two of them added
-what a run recovered, then what it read, then what it read again, each after what was there, so a
+to carrying on was a fix written three times, and the first stage, then called ``split``, was the last
+to get each. Two of them added what a run recovered, then what it read, then what it read again, each
+after what was there, so a
 classify stopped between its cards left its pages in another order, and extract then grouped them into
 other engine calls than a run straight through would.
 
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 class Work:
     """What a stage has to read, and where its records go."""
 
-    # "split", "classify" or "extract": the name of its row of time.
+    # "preprocess", "classify" or "extract": the name of its row of time.
     stage: str
     # The stage's file of records.
     output: Path

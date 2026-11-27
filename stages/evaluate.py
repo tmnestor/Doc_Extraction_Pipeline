@@ -192,7 +192,7 @@ def _some(names: list[str], most: int = 10) -> str:
 
 
 # What a stage that does not read pages reads, for its row of time.
-_READS = {"split": "photographs"}
+_READS = {"preprocess": "photographs"}
 
 
 def time_rows(time: RunTime, pages: int) -> list[tuple[str, str]]:
@@ -201,7 +201,7 @@ def time_rows(time: RunTime, pages: int) -> list[tuple[str, str]]:
     The model's time is given for each stage and for the stages together, and the rate is of the stages
     together: pages a minute through every stage that used the cards.
     """
-    # A stage that does not read pages, such as split, has a row of its own and is in no figure below
+    # A stage that does not read pages, such as preprocess, has a row of its own and is in no figure below
     # it: the rate is of pages, and a photograph is not a page.
     rows = [
         (

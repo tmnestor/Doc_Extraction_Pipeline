@@ -15,9 +15,10 @@
 # word None is not set: a pipeline manifest passes a blank parameter as the text "None".
 #
 # The variables a job may set. They are the whole of a run's settings:
-#   KFP_TASK                 split, classify, extract, clean or evaluate
-#   model                    a registered model. Needed by split, classify and extract
-#   image_dir                the folder of pages to read. Needed by split, classify and extract
+#   KFP_TASK                 preprocess, classify, extract, clean or evaluate
+#   model                    a registered model. Needed by preprocess, classify and extract
+#   image_dir                the folder of pages to read. Needed by preprocess, classify and
+#                            extract
 #   output                   the folder the stages write to. Needed by every task
 #   ground_truth             the answer key, a .jsonl file. Needed by evaluate
 #   document_types           classify only the pages whose file name holds one of these, written
@@ -25,16 +26,18 @@
 #                            classify alone: extract reads whatever was classified
 #   max_images               classify at most this many pages. Unset: every page. Read by
 #                            classify alone
-#   photo_split              true: the split task asks the model where each receipt is, and cuts a
-#                            photograph of several. Unset: false, every photograph is passed through
+#   preprocess_photographs   true: the preprocess task asks the model about each photograph, sets
+#                            it the right way up and cuts a photograph of several receipts.
+#                            Unset: false, every photograph is passed through
 #   document_type            every page is of this document type, and classify asks no model.
 #                            Unset: the model is asked
-#   CLEAR_PREV_OUTPUT        true: delete the task's own earlier output first, and for split the
-#                            images it had cut. Unset: false, the task carries on
+#   CLEAR_PREV_OUTPUT        true: delete the task's own earlier output first, and for
+#                            preprocess the images it had written. Unset: false, the task
+#                            carries on
 #   DOC_EXTRACT_LOG_DIR      the folder for the log. Needed by every task
 #   DOC_EXTRACT_MODELS_DIR   the folder that holds each model's folder of weights. Needed by a
 #                            start that loads a model: extract, classify unless document_type
-#                            is set, and split with photo_split=true
+#                            is set, and preprocess with preprocess_photographs=true
 #   DOC_EXTRACT_TRACE_FILE   keep what is sent to the model, in this file. Unset: not kept
 #   DOC_EXTRACT_CONDA_ENV    the conda environment's folder
 #   DOC_EXTRACT_GPU_MEMORY_UTILIZATION   the share of each card's memory the engine may take.
@@ -136,20 +139,23 @@ fi
 # JOB_VARIABLES is one piece of text holding every name, with spaces and line breaks between
 # them. Written WITHOUT quotes after `in`, bash cuts it at the spaces, and the loop runs once
 # for each name, with that name in NAME. The same list is used again to write the log.
-JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images photo_split
+JOB_VARIABLES="KFP_TASK model image_dir output ground_truth document_types max_images preprocess_photographs
   document_type CLEAR_PREV_OUTPUT DOC_EXTRACT_LOG_DIR DOC_EXTRACT_MODELS_DIR
   DOC_EXTRACT_TRACE_FILE DOC_EXTRACT_CONDA_ENV DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
-# The two names added at the end are the variables refused in the next section: one of those
+# The three names added at the end are the variables refused in the next section: one of those
 # left blank by a manifest must not be refused.
-for NAME in $JOB_VARIABLES dataset run_config; do
+for NAME in $JOB_VARIABLES dataset run_config photo_split; do
   # ${!NAME:-} is the value of the variable NAME names. Empty (-z), or the word None: `unset`
   # removes that variable, so the task started at the end does not see it at all.
   if [[ -z "${!NAME:-}" || "${!NAME}" == "None" ]]; then unset "$NAME"; fi
 done
 
-# ---- Two variables that are no longer read are refused, not ignored ---- #
+# ---- Three variables that are no longer read are refused, not ignored ---- #
 # Until 26 November 2026 a run's choices were keys of a settings file, which run_config named, and
-# dataset named a block of it. A job that still sets one would otherwise run with it dropped.
+# dataset named a block of it. Until 27 November 2026 the first task was called split and its
+# switch photo_split: the task is now preprocess and the switch preprocess_photographs (the old
+# task name is refused further down, where the task is looked up). A job that still sets one of
+# the three would otherwise run with it dropped.
 #
 # -n succeeds if the variable holds anything. The five quoted texts after `stop` are its five
 # arguments, one a line.
@@ -164,21 +170,28 @@ if [[ -n "${run_config:-}" ]]; then
   stop "run_config is no longer read: $run_config" \
     "a run has no settings file: its settings are the variables listed at the top of entrypoint.sh." \
     "the variable run_config $IN_THE_JOB" \
-    "each choice of the run as its own variable, e.g. max_images=12 document_types=receipt photo_split=true" \
+    "each choice of the run as its own variable, e.g. max_images=12 document_types=receipt preprocess_photographs=true" \
     "set the variables the run needs in place of the file, and unset run_config."
+fi
+if [[ -n "${photo_split:-}" ]]; then
+  stop "photo_split is no longer read: $photo_split" \
+    "the switch was renamed with its task on 27 November 2026: it now also sets a photograph the right way up, and levels its print." \
+    "the variable photo_split $IN_THE_JOB" \
+    "the same value under the new name, e.g. preprocess_photographs=$photo_split" \
+    "set preprocess_photographs in place of photo_split."
 fi
 
 # ---- The two choices that are true or false ---- #
-# They come first: what the split task needs depends on one of them.
+# They come first: what the preprocess task needs depends on one of them.
 # A manifest may pass a YAML true as the text "True".
-for NAME in photo_split CLEAR_PREV_OUTPUT; do
+for NAME in preprocess_photographs CLEAR_PREV_OUTPUT; do
   # ${!NAME:-false} is the variable's value, or false if it is not set: this is where the
   # default is stated. `tr 'A-Z' 'a-z'` turns capitals into small letters, so True and TRUE
   # are read as true.
   VALUE="$(echo "${!NAME:-false}" | tr 'A-Z' 'a-z')"
   if [[ "$VALUE" != "true" && "$VALUE" != "false" ]]; then
     stop "$NAME is neither true nor false: ${!NAME}" \
-      "photo_split=true has the split task ask the model and cut; CLEAR_PREV_OUTPUT=true deletes the stage's earlier output first." \
+      "preprocess_photographs=true has the preprocess task ask the model, set upright and cut; CLEAR_PREV_OUTPUT=true deletes the stage's earlier output first." \
       "the variable $NAME $IN_THE_JOB" \
       "true or false, e.g. $NAME=true. Unset means false." \
       "set it to true or false, or leave it unset."
@@ -195,24 +208,35 @@ done
 #
 # NEEDED is the list of variables the task cannot run without. This section is the one place
 # that says which task needs what.
+#
+# split is the name the first task had until 27 November 2026. It is refused by name, with the
+# name that replaced it, so that a job written before then is not told only that its task is
+# unknown.
 case "${KFP_TASK:-}" in
-  split | classify | extract) NEEDED="model image_dir output" ;;
+  preprocess | classify | extract) NEEDED="model image_dir output" ;;
   clean) NEEDED="output" ;;
   evaluate) NEEDED="output ground_truth" ;;
+  split)
+    stop "KFP_TASK=split is no longer a task: it is now preprocess" \
+      "the first task was renamed on 27 November 2026, since it does more than split: it sets a photograph the right way up, cuts a photograph of several receipts and levels its print." \
+      "the variable KFP_TASK $IN_THE_JOB" \
+      "KFP_TASK=preprocess, with the switch preprocess_photographs where the job set photo_split. The task writes to <output>/preprocess, where it wrote to <output>/split." \
+      "set KFP_TASK=preprocess, and point the later tasks' image_dir at <output>/preprocess/images."
+    ;;
   *)
     stop "KFP_TASK is not a task of this pipeline: ${KFP_TASK:-<not set>}" \
       "KFP_TASK names the task this job runs." \
       "the variable KFP_TASK $IN_THE_JOB" \
-      "split, classify, extract, clean or evaluate." \
+      "preprocess, classify, extract, clean or evaluate." \
       "set it to one of those, e.g. KFP_TASK=classify model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh"
     ;;
 esac
 # The folder of the models' weights is needed by a start that loads a model, and by no other:
-# extract always, classify unless the job gives every page its type, and split when the
-# photo split is on. The three tests are joined by ||, so any one of them is enough.
+# extract always, classify unless the job gives every page its type, and preprocess when its
+# switch is on. The three tests are joined by ||, so any one of them is enough.
 if [[ "$KFP_TASK" == "extract" ]] ||
   [[ "$KFP_TASK" == "classify" && -z "${document_type:-}" ]] ||
-  [[ "$KFP_TASK" == "split" && "$photo_split" == "true" ]]; then
+  [[ "$KFP_TASK" == "preprocess" && "$preprocess_photographs" == "true" ]]; then
   NEEDED="$NEEDED DOC_EXTRACT_MODELS_DIR"
 fi
 # Every name in NEEDED, and the log folder, which every task needs. The first that is not
@@ -521,19 +545,30 @@ if command -v nvidia-smi &>/dev/null; then
   log "Detected $GPU_COUNT GPU(s):"
   log ""
   # Per-GPU detail: index, name, VRAM, temperature, ECC errors
-  # nvidia-smi prints one line a card, its values with commas between them. The line is piped
-  # (|) into a loop: `while IFS=',' read -r a b c` reads a line at a time, cuts it at the
-  # commas and puts the pieces in the variables named. `echo "$x" | xargs` trims the spaces
-  # from around a value.
+  # nvidia-smi prints one line a card, its values with a comma and a space between them. The
+  # lines are piped (|) into awk, which reads a line at a time: -F', *' cuts the line at each
+  # comma and the spaces after it, and the pieces are $1, $2 and so on. `printf` writes them
+  # out in the form given. Each line awk prints is then read by the loop and handed to `log`,
+  # which puts the time before it.
+  #
+  # awk is used for jobs like this one, which start, print and finish. It is kept out of the
+  # path the log itself takes (the `exec ... tee` near the top): fed from a pipe, some awks
+  # hold lines back until their input ends, and a live log would stall. Only what every awk
+  # has is used here, since the awk of one machine is not that of another.
   nvidia-smi --query-gpu=index,name,memory.total,memory.free,temperature.gpu,ecc.errors.uncorrected.volatile.total \
-    --format=csv,noheader 2>/dev/null | while IFS=',' read -r idx name mem_total mem_free temp ecc; do
-    log "  GPU $idx: $name |$(echo "$mem_total" | xargs) total |$(echo "$mem_free" | xargs) free | ${temp}C | ECC errors: $(echo "$ecc" | xargs)"
-  done
+    --format=csv,noheader 2>/dev/null |
+    awk -F', *' '{ printf "  GPU %s: %s | %s total | %s free | %sC | ECC errors: %s\n", $1, $2, $3, $4, $5, $6 }' |
+    while IFS= read -r LINE; do log "$LINE"; done
   log ""
 
   # Check for GPUs in error state: ERR or "Unknown Error" in nvidia-smi
   # means the GPU has fallen off the bus or has a hardware fault.
-  if nvidia-smi --query-gpu=index,pstate --format=csv,noheader 2>/dev/null | grep -qi "err"; then
+  #
+  # The second value of each line is the card's state. awk looks for "err" in that value alone,
+  # in either case (`tolower` makes it small letters first), notes that it found one, and at the
+  # END exits with 0, which `if` reads as success, only if it did.
+  if nvidia-smi --query-gpu=index,pstate --format=csv,noheader 2>/dev/null |
+    awk -F', *' 'tolower($2) ~ /err/ { found = 1 } END { exit !found }'; then
     log "WARNING: One or more GPUs report error state. Run may fail."
     log "$(nvidia-smi --query-gpu=index,pstate,ecc.errors.uncorrected.volatile.total --format=csv 2>/dev/null)"
     log ""

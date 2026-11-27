@@ -28,22 +28,22 @@ USUAL = {
     "output": f"{D}/output_run",
     "DOC_EXTRACT_LOG_DIR": f"{D}/output_run/logs",
     # The two the entry script always writes out.
-    "photo_split": "false",
+    "preprocess_photographs": "false",
     "CLEAR_PREV_OUTPUT": "false",
 }
 
 
 def test_the_five_tasks() -> None:
-    assert TASKS == ("split", "classify", "extract", "clean", "evaluate")
+    assert TASKS == ("preprocess", "classify", "extract", "clean", "evaluate")
 
 
-@pytest.mark.parametrize("task", ["split", "classify", "extract", "clean"])
+@pytest.mark.parametrize("task", ["preprocess", "classify", "extract", "clean"])
 def test_the_usual_variables_give_the_task_its_folders(task: str) -> None:
     settings = resolve(task, USUAL)
 
     assert settings.task == task and settings.model == "gemma4-31b-w4a16-vllm"
     assert settings.image_dir == Path(f"{D}/snapshot_20261021/plain_20261021")
-    assert settings.split_dir == Path(f"{D}/output_run/split")
+    assert settings.preprocess_dir == Path(f"{D}/output_run/preprocess")
     assert settings.classifications == Path(f"{D}/output_run/classifications.jsonl")
     assert settings.raw_extractions == Path(f"{D}/output_run/raw_extractions.jsonl")
     assert settings.cleaned_extractions == Path(f"{D}/output_run/cleaned_extractions.jsonl")
@@ -54,7 +54,7 @@ def test_a_job_that_makes_no_choice_reads_every_page_and_asks_the_model() -> Non
     settings = resolve("classify", USUAL)
 
     assert settings.document_types is None and settings.max_images is None
-    assert settings.photo_split is False and settings.clear_previous_output is False
+    assert settings.preprocess_photographs is False and settings.clear_previous_output is False
     assert settings.given_type is None and settings.trace_file is None
     assert settings.gpu_memory_utilization is None and settings.ground_truth is None
 
@@ -64,7 +64,7 @@ def test_each_choice_of_a_run_is_read_from_its_variable() -> None:
         **USUAL,
         "document_types": "receipt",
         "max_images": "12",
-        "photo_split": "true",
+        "preprocess_photographs": "true",
         "CLEAR_PREV_OUTPUT": "true",
         "document_type": "SROIE_RECEIPT",
         "DOC_EXTRACT_TRACE_FILE": "/data/run/sent.jsonl",
@@ -72,10 +72,10 @@ def test_each_choice_of_a_run_is_read_from_its_variable() -> None:
         "ground_truth": "/data/pages/ground_truth.jsonl",
     }
 
-    settings = resolve("split", job)
+    settings = resolve("preprocess", job)
 
     assert settings.document_types == ("receipt",) and settings.max_images == 12
-    assert settings.photo_split is True and settings.clear_previous_output is True
+    assert settings.preprocess_photographs is True and settings.clear_previous_output is True
     assert settings.given_type == "SROIE_RECEIPT"
     assert settings.trace_file == Path("/data/run/sent.jsonl")
     assert settings.gpu_memory_utilization == 0.85
@@ -281,8 +281,8 @@ def test_evaluate_is_given_its_folders_and_no_time(tmp_path: Path, stage: Called
 
 
 def test_the_other_tasks_are_given_their_folders(tmp_path: Path, stage: Called) -> None:
-    starter.run_task(settings_for("split", tmp_path))
-    assert stage.args == (tmp_path / "out" / "split", CHECKED)
+    starter.run_task(settings_for("preprocess", tmp_path))
+    assert stage.args == (tmp_path / "out" / "preprocess", CHECKED)
 
     starter.run_task(settings_for("clean", tmp_path))
     assert stage.args == (CHECKED, tmp_path / "out" / "cleaned_extractions.jsonl")

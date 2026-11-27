@@ -3,7 +3,7 @@
 Each stage that uses the cards notes what it spent in ``<output>/.stage_timing.jsonl``, and the
 evaluate stage reads the rows for its summary. That file is the one record of a run's time. The rows are
 noted in one place, ``stages.carry_on``. The rows of ``classify`` and ``extract`` make the summary's
-model time and its rate of pages a minute; the row of ``split``, which reads photographs and not pages,
+model time and its rate of pages a minute; the row of ``preprocess``, which reads photographs and not pages,
 is shown apart from them.
 
 A row holds two times, because they answer different questions:
@@ -180,7 +180,7 @@ class RunTime:
     source: str
     # The rows of the stages that read pages, when they are what the time is from; empty otherwise.
     stages: tuple[StageTiming, ...]
-    # The rows of any other stage, such as split, which reads photographs. They are in no figure above:
+    # The rows of any other stage, such as preprocess, which reads photographs. They are in no figure above:
     # a photograph is not a page, and a rate of pages a minute is of the stages that read pages.
     others: tuple[StageTiming, ...] = ()
 

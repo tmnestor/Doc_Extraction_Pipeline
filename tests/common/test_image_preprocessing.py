@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from common import photo_split
-from common.photo_split import (
+from common import image_preprocessing
+from common.image_preprocessing import (
     Box,
     box_within,
     crop_rectangles,
@@ -31,13 +31,13 @@ from common.photo_split import (
 )
 from common.prompt_catalog import PromptCatalog
 from common.stage_settings import resolve
-from stages.split import apply_reply, checked, cut_name
-from stages.split import run as run_the_stage
+from stages.preprocess import apply_reply, checked, cut_name
+from stages.preprocess import run as run_the_stage
 
 # The rules the stage goes by, with their measured values. Until 26 November 2026 they were read from
 # the settings file; a test that wants another value makes its own record with dataclasses.replace.
-CONFIG = photo_split.CONFIG
-FINDER = photo_split.FINDER
+CONFIG = image_preprocessing.CONFIG
+FINDER = image_preprocessing.FINDER
 RED, GREEN, DESK = (200, 40, 40), (40, 160, 40), (120, 120, 120)
 
 # The replies below are in the form the model gave on real photographs.
@@ -49,9 +49,9 @@ ONE = '```json\n[\n  {"box_2d": [131, 363, 923, 621], "label": "receipt"}\n]\n``
 
 
 def run(image_dir: Path, output_dir: Path) -> Path:
-    """The stage as shipped: the photo split is off, so no model is asked and none is looked for."""
+    """The stage as shipped: the switch is off, so no model is asked and none is looked for."""
 
-    settings = resolve("split", {"output": str(output_dir), "photo_split": "false"})
+    settings = resolve("preprocess", {"output": str(output_dir), "preprocess_photographs": "false"})
     assert settings.models_dir is None
 
     return run_the_stage(output_dir, checked(settings, image_dir))
@@ -219,7 +219,7 @@ def test_a_photograph_of_one_is_copied_through_byte_for_byte(tmp_path: Path) -> 
 
 
 def test_the_stage_as_shipped_copies_every_photograph_through_without_a_model(tmp_path: Path) -> None:
-    """A job that does not set photo_split: the stage changes nothing, and never loads the model."""
+    """A job that does not set preprocess_photographs: the stage changes nothing, and never loads the model."""
     data = tmp_path / "data"
     data.mkdir()
     sources = [photograph(data / f"CASE00{n}_bank_statement.png") for n in (1, 2)]
@@ -228,9 +228,11 @@ def test_the_stage_as_shipped_copies_every_photograph_through_without_a_model(tm
 
     assert sorted(p.name for p in images.iterdir()) == [p.name for p in sources]
     assert all((images / p.name).read_bytes() == p.read_bytes() for p in sources)
-    records = [json.loads(line) for line in (tmp_path / "out" / "splits.jsonl").read_text().splitlines()]
+    records = [
+        json.loads(line) for line in (tmp_path / "out" / "preprocess.jsonl").read_text().splitlines()
+    ]
     assert [r["action"] for r in records] == ["pass_through", "pass_through"]
-    assert {r["reason"] for r in records} == {"photo_split is not enabled"}
+    assert {r["reason"] for r in records} == {"preprocess_photographs is not enabled"}
 
 
 def test_a_second_run_does_not_repeat_photographs_already_recorded(tmp_path: Path) -> None:
@@ -242,7 +244,9 @@ def test_a_second_run_does_not_repeat_photographs_already_recorded(tmp_path: Pat
 
     run(data, tmp_path / "out")
 
-    records = [json.loads(line) for line in (tmp_path / "out" / "splits.jsonl").read_text().splitlines()]
+    records = [
+        json.loads(line) for line in (tmp_path / "out" / "preprocess.jsonl").read_text().splitlines()
+    ]
     assert [r["image_name"] for r in records] == [
         "CASE001_bank_statement.png",
         "CASE002_bank_statement.png",
@@ -250,7 +254,7 @@ def test_a_second_run_does_not_repeat_photographs_already_recorded(tmp_path: Pat
 
 
 def test_the_shipped_prompt_is_the_one_that_was_measured() -> None:
-    assert PromptCatalog().photo_split_prompt() == (
+    assert PromptCatalog().preprocess_prompt() == (
         "Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each "
         'receipt, in the form {"box_2d": [ymin, xmin, ymax, xmax], "label": "receipt"}, where the four numbers '
         "are normalised to 0-1000."

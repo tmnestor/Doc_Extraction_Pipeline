@@ -1,7 +1,7 @@
 """A stage that needs no model to make a record still carries on the one way.
 
 Two stages can make a record with no model asked: ``classify`` when the pages' dataset says what they
-are, and ``split`` when the photo split is off. Until 26 November 2026 each wrote its own carrying on
+are, and ``preprocess`` when its switch is off. Until 26 November 2026 each wrote its own carrying on
 beside ``stages.carry_on``, and they did not keep to it: ``classify`` kept the record of a page an earlier
 run could not classify, with its fallback type and its error, where every other path reads such a page
 again.
@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from bench import ONE_ENGINE, Bench, preprocess_checked, run_settings
 
-from bench import ONE_ENGINE, Bench, run_settings, split_checked
 from common.classification import BY_THE_DATASET
-from stages import classify, records, split
+from stages import classify, preprocess, records
 from stages.carry_on import Work, carry_on
 from stages.io import read_jsonl
 
@@ -94,37 +94,43 @@ def test_what_a_stopped_run_had_classified_is_recovered_before_the_dataset_gives
     assert not journal.exists()
 
 
-# --- split, when the photo split is off -----------------------------------------------------------------
+# --- preprocess, when its switch is off -----------------------------------------------------------------
 
 
-def split_off(bench: Bench, output: Path) -> list[dict[str, Any]]:
-    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages, photo_split=False))
-    return read_jsonl(output / "splits.jsonl")
+def preprocess_off(bench: Bench, output: Path) -> list[dict[str, Any]]:
+    preprocess.run(
+        output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages, preprocess_photographs=False)
+    )
+    return read_jsonl(output / "preprocess.jsonl")
 
 
-def test_with_the_photo_split_off_every_photograph_is_passed_through_in_order(
+def test_with_the_preprocess_photographs_off_every_photograph_is_passed_through_in_order(
     bench: Bench, tmp_path: Path
 ) -> None:
-    written = split_off(bench, tmp_path / "split")
+    written = preprocess_off(bench, tmp_path / "preprocess")
 
     assert [record["image_name"] for record in written] == bench.names
     assert all(record["action"] == "pass_through" for record in written)
-    assert sorted(path.name for path in (tmp_path / "split" / "images").iterdir()) == sorted(bench.names)
+    assert sorted(path.name for path in (tmp_path / "preprocess" / "images").iterdir()) == sorted(
+        bench.names
+    )
     assert bench.engines_started == 0
 
 
-def test_with_the_photo_split_off_a_second_run_does_nothing_again(bench: Bench, tmp_path: Path) -> None:
-    first = split_off(bench, tmp_path / "split")
-    held = (tmp_path / "split" / "splits.jsonl").read_bytes()
-
-    assert split_off(bench, tmp_path / "split") == first
-    assert (tmp_path / "split" / "splits.jsonl").read_bytes() == held
-
-
-def test_with_the_photo_split_off_a_photograph_an_earlier_run_could_not_ask_about_is_passed_through(
+def test_with_the_preprocess_photographs_off_a_second_run_does_nothing_again(
     bench: Bench, tmp_path: Path
 ) -> None:
-    output = tmp_path / "split"
+    first = preprocess_off(bench, tmp_path / "preprocess")
+    held = (tmp_path / "preprocess" / "preprocess.jsonl").read_bytes()
+
+    assert preprocess_off(bench, tmp_path / "preprocess") == first
+    assert (tmp_path / "preprocess" / "preprocess.jsonl").read_bytes() == held
+
+
+def test_with_the_preprocess_photographs_off_a_photograph_an_earlier_run_could_not_ask_about_is_passed_through(
+    bench: Bench, tmp_path: Path
+) -> None:
+    output = tmp_path / "preprocess"
     output.mkdir()
     name = bench.names[1]
     failed = {
@@ -133,9 +139,9 @@ def test_with_the_photo_split_off_a_photograph_an_earlier_run_could_not_ask_abou
         "outputs": [name],
         "error": "no answer",
     }
-    (output / "splits.jsonl").write_text(json.dumps(failed) + "\n")
+    (output / "preprocess.jsonl").write_text(json.dumps(failed) + "\n")
 
-    written = split_off(bench, output)
+    written = preprocess_off(bench, output)
 
     assert [record["image_name"] for record in written] == bench.names
     assert all("error" not in record for record in written)
@@ -144,7 +150,7 @@ def test_with_the_photo_split_off_a_photograph_an_earlier_run_could_not_ask_abou
 # --- the one sequence ----------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("stage", ["classify", "split"])
+@pytest.mark.parametrize("stage", ["classify", "preprocess"])
 def test_neither_stage_carries_on_by_itself(stage: str) -> None:
     """What carrying on is made of is used by ``carry_on`` alone, and not by these two stages."""
     source = (STAGES_FOLDER / f"{stage}.py").read_text()

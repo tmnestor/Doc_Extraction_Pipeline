@@ -12,7 +12,7 @@ It does one job, with two models, through one way in.
 
 ```mermaid
 flowchart LR
-  A[Pages] --> S[split]
+  A[Pages] --> S[preprocess]
   S --> C[classify]
   A --> C
   C --> E[extract]
@@ -29,15 +29,19 @@ is how one task finds what another wrote.
 
 | Task | Uses the cards | Reads | Writes under `output` |
 |---|---|---|---|
-| `split` | yes | the photographs in `image_dir` | `split/images/`: one image for each document in a photograph, straightened where its rows of print drift |
+| `preprocess` | yes | the photographs in `image_dir` | `preprocess/images/`: one image for each document in a photograph, set the right way up, and straightened where its rows of print drift |
 | `classify` | yes | the pages in `image_dir` | `classifications.jsonl`: the document type of each page |
 | `extract` | yes | `classifications.jsonl` and the pages | `raw_extractions.jsonl`: the model's reply for each page |
 | `clean` | no | `raw_extractions.jsonl` | `cleaned_extractions.jsonl`: the replies parsed into fields and tidied |
 | `evaluate` | no | `cleaned_extractions.jsonl` and the answer key | `evaluation/`: each field scored, with the totals |
 
-`split` is optional. It is for photographs that may hold several documents or sit at an angle, and it
-asks the model only when the job sets `photo_split=true`: without that, every photograph is passed
-through as it is. When it has run, give the later tasks `image_dir=<output>/split/images`.
+`preprocess` is optional. It is for photographs that may hold several documents, sit at an angle, or arrive
+turned a quarter or a half with no orientation tag. It asks the model only when the job sets
+`preprocess_photographs=true`: without that, every photograph is passed through as it is. When it has run,
+give the later tasks `image_dir=<output>/preprocess/images`.
+
+Until 27 November 2026 the task was called `split` and its switch `photo_split`. A job that still uses
+either name is stopped, with the new name in the message.
 
 A set of pages that are all of one type, known beforehand, is read by the same tasks: see
 [Reading pages that are all of one type](#reading-pages-that-are-all-of-one-type).
@@ -54,7 +58,7 @@ next run adds the journal to the output before it carries on. A task's output is
 pages however the run went: straight through, stopped and started again, or with failed pages read
 again. It is never in the order the cards finished them in.
 
-Because a task carries on from what its output folder holds, a folder belongs to one run. `split`,
+Because a task carries on from what its output folder holds, a folder belongs to one run. `preprocess`,
 `classify` and `extract` each note in `<output>/run_manifest.json` the model, the folder of pages and the
 commit of the code they were run with. A task that finds its own earlier note from another model, folder
 of pages or commit stops before any work and says what differs: give the run a folder of its own, or
@@ -63,7 +67,7 @@ and the commit that produced it.
 
 ## The design
 
-Five tasks make the pipeline: `split`, `classify`, `extract`, `clean` and `evaluate`. They are built to
+Five tasks make the pipeline: `preprocess`, `classify`, `extract`, `clean` and `evaluate`. They are built to
 be modular, so that any one can be run, tested or replaced alone, and cohesive, so that all five behave
 alike. Each choice below is a well-known pattern, used for the reason given.
 
@@ -209,7 +213,7 @@ What the record of a failed page holds:
 
 | Task | The record | What the later tasks do with it |
 |---|---|---|
-| `split` | `error`, and the reason "the model could not be asked". The photograph is passed through as it is | `classify` reads the photograph whole |
+| `preprocess` | `error`, and the reason "the model could not be asked". The photograph is passed through as it is | `classify` reads the photograph whole |
 | `classify` | `error`, the fallback type (`fallback_type` in `config/field_definitions.yaml`), and `type_from: fallback_not_asked` | `extract` reads the page as that type |
 | `extract` | `error`, an empty reply, and `prompt_used: error` | `clean` passes the error on with no fields. `evaluate` counts the page under "Failed Extraction" and leaves it out of the mean, and gives the mean again with each failed page as 0 |
 
@@ -239,9 +243,9 @@ that output, so that those pages are read again with any that are new:
 - `extract` reads again each page it could not read, and each page that has been given another
   document type since it was read, whose record is of the wrong fields. A page `classify` got right the
   second time is therefore read again under its own type;
-- `split` asks again about each photograph it could not ask about, and removes the image it had passed
+- `preprocess` asks again about each photograph it could not ask about, and removes the image it had passed
   through in the photograph's place. Its journal keeps each reply with the record of what was done about
-  it, and `splits.jsonl` is written when it has finished: a run that carries on does nothing a second
+  it, and `preprocess.jsonl` is written when it has finished: a run that carries on does nothing a second
   time about a photograph an earlier run had finished.
 
 Three things follow:
@@ -304,7 +308,7 @@ pages. A value of 1 stops a task at the first page that fails.
 | `gemma4-12b-unified-w4a16-vllm` | Gemma 4 12B, quantised to 4-bit weights by its maker | One engine on each card, each reading its share of the pages |
 
 Both arrangements read pages through the same code. An engine on each card is given its share of the pages
-and runs exactly what a single engine runs. That holds for every task that uses the model: `split`,
+and runs exactly what a single engine runs. That holds for every task that uses the model: `preprocess`,
 `classify` and `extract`.
 
 Both models run on vLLM 0.29.0 in one conda environment, `conda_envs/vllm_env4.yaml`.
@@ -343,7 +347,7 @@ done)
 - `$D` is the folder that holds the sets of pages and `$E` the folder this run writes to. Set
   both before the loop, for example `D=/data` and `E=/data/run_20261126`.
 - Each variable is on a line of its own, ending in `\`, so a run is read and changed a line at a
-  time. A choice for the run is one more line: `photo_split=true \`, `max_images=12 \`,
+  time. A choice for the run is one more line: `preprocess_photographs=true \`, `max_images=12 \`,
   `document_types=receipt,invoice \`.
 - `|| break` stops the loop at the first task that fails, so `extract` is not started after a
   `classify` that was refused.
@@ -363,7 +367,7 @@ own variables and runs `bash entrypoint.sh` once. Nothing in the code puts two t
 
 ```mermaid
 flowchart LR
-  P1["pod: split<br/>(optional)"] --> P2["pod: classify"]
+  P1["pod: preprocess<br/>(optional)"] --> P2["pod: classify"]
   P2 --> P3["pod: extract"]
   P3 --> P4["pod: clean"]
   P4 --> P5["pod: evaluate"]
@@ -378,7 +382,7 @@ A pod is given only what its task uses:
 
 | Pod | Variables it sets | Cards | Weights |
 |---|---|---|---|
-| `split` | `KFP_TASK=split`, `model`, `image_dir`, `output`, `photo_split=true`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
+| `preprocess` | `KFP_TASK=preprocess`, `model`, `image_dir`, `output`, `preprocess_photographs=true`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
 | `classify` | `KFP_TASK=classify`, `model`, `image_dir`, `output`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
 | `extract` | `KFP_TASK=extract`, `model`, `image_dir`, `output`, `DOC_EXTRACT_LOG_DIR`, `DOC_EXTRACT_MODELS_DIR` | yes | yes |
 | `clean` | `KFP_TASK=clean`, `output`, `DOC_EXTRACT_LOG_DIR` | no | no |
@@ -411,23 +415,23 @@ parameter as the text "None".
 | Variable | Meaning | Needed by | When it is not set |
 |---|---|---|---|
 | `KFP_TASK` | The task to run | every start | the job is stopped |
-| `model` | A registered model. One that is not registered is refused by every task given it | `split`, `classify`, `extract` | the job is stopped |
-| `image_dir` | The folder of pages, which must exist | `split`, `classify`, `extract` | the job is stopped |
+| `model` | A registered model. One that is not registered is refused by every task given it | `preprocess`, `classify`, `extract` | the job is stopped |
+| `image_dir` | The folder of pages, which must exist | `preprocess`, `classify`, `extract` | the job is stopped |
 | `output` | The folder the tasks write to. It is made if it is not there; a file, or a place the job may not write, is refused | every task | the job is stopped |
 | `ground_truth` | The answer key, a JSON lines file (`.jsonl`) | `evaluate` | the job is stopped |
 | `document_types` | `classify` reads only the pages whose file name holds one of these, written with commas and in either case: `receipt,invoice` | optional | every page is read |
 | `max_images` | `classify` reads at most this many pages: a whole number of 1 or more | optional | every page is read |
-| `photo_split` | `true`: the `split` task asks the model where each receipt is, and cuts a photograph of several | optional | `false`: every photograph is passed through, and no model is asked |
+| `preprocess_photographs` | `true`: the `preprocess` task asks the model about each photograph, sets it the right way up, and cuts a photograph of several receipts | optional | `false`: every photograph is passed through, and no model is asked |
 | `document_type` | Every page is of this document type, and `classify` asks no model. It must be a type of the schema file, whichever task is run | optional | the model is asked |
-| `CLEAR_PREV_OUTPUT` | `true` deletes the task's own earlier output first; for `split`, also the images it had cut | optional | `false`: the task carries on |
+| `CLEAR_PREV_OUTPUT` | `true` deletes the task's own earlier output first; for `preprocess`, also the images it had written | optional | `false`: the task carries on |
 | `DOC_EXTRACT_LOG_DIR` | The folder for the log | every task | the job is stopped |
-| `DOC_EXTRACT_MODELS_DIR` | The folder that holds each model's folder of weights | a start that loads a model: `extract`, `classify` unless `document_type` is set, `split` with `photo_split=true` | the job is stopped |
+| `DOC_EXTRACT_MODELS_DIR` | The folder that holds each model's folder of weights | a start that loads a model: `extract`, `classify` unless `document_type` is set, `preprocess` with `preprocess_photographs=true` | the job is stopped |
 | `DOC_EXTRACT_TRACE_FILE` | Keep everything sent to the model, and its replies, in this file | optional | it is not kept |
 | `DOC_EXTRACT_CONDA_ENV` | The conda environment's folder | optional | the folder written in `entrypoint.sh` |
 | `DOC_EXTRACT_GPU_MEMORY_UTILIZATION` | The share of each card's memory the engine may take | optional | the model's own share, in its registration |
 
 **Which pages are read is `classify`'s to decide.** `document_types` and `max_images` are read by
-`classify` alone. `split` takes every photograph in `image_dir`, and `extract` reads every page that
+`classify` alone. `preprocess` takes every photograph in `image_dir`, and `extract` reads every page that
 was classified: to read fewer, classify fewer.
 
 Two variables that are no longer read are refused by name, and not run with the setting silently
@@ -469,7 +473,7 @@ temporary folder) is not the pipeline's and is not covered by this.
 A run's settings are its variables, and nothing that shapes a run is in a file to be edited for it:
 
 - the values the code was tuned to (how many pages go to an engine call, the completion budgets, the
-  photo split's rules) are named constants beside the code that uses them, changed by a commit;
+  preprocess stage's rules) are named constants beside the code that uses them, changed by a commit;
 - what an engine is started with, and the name of the folder of its weights, are in the model's
   registration, `models/registry.py`.
 

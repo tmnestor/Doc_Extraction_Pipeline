@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from bench import Bench
+
 from common.stage_settings import resolve
 from stages import __main__ as starter
 from stages.io import read_input
@@ -135,7 +135,7 @@ def test_a_file_that_can_be_read_is_given_record_by_record(tmp_path: Path) -> No
 # --- a folder of pages -----------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["split", "classify"])
+@pytest.mark.parametrize("name", ["preprocess", "classify"])
 def test_a_folder_with_no_page_in_it_ends_with_its_reason_and_no_traceback(
     bench: Bench,
     tmp_path: Path,

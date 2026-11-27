@@ -10,7 +10,7 @@ import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from common.errors import ConfigError
 
@@ -108,7 +108,7 @@ def start_afresh(asked_for: bool, *files: Path) -> list[dict[str, Any]]:
 
     Returns:
         The records deleted, those of a journal as the stage made them. A stage that wrote more than
-        its records removes what they name: the split stage, the images it cut. Empty if not asked.
+        its records removes what they name: the preprocess stage, the images it cut. Empty if not asked.
     """
     deleted: list[dict[str, Any]] = []
     if not asked_for:
@@ -197,12 +197,12 @@ class Journal:
         self.path.unlink()
         return kept_of_each
 
-    def __enter__(self) -> "Journal":
+    def __enter__(self) -> Self:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = self.path.open("a")
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Close the journal. It is kept: only ``discard``, after the output is written, removes it."""
         if self._file is not None:
             self._file.close()

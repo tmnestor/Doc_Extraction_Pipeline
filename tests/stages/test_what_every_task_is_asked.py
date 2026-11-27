@@ -12,15 +12,15 @@ The pages are blank images made by the bench, and every reply is invented.
 from pathlib import Path
 
 import pytest
-
 from bench import ONE_ENGINE, Bench
+
 from common.errors import ConfigError
 from common.stage_settings import StageSettings, resolve
 from stages import __main__ as starter
 from stages.io import read_jsonl
 
 PARTS = ("What:", "Where:", "Expected:", "How to fix:")
-TASKS = ("split", "classify", "extract", "clean", "evaluate")
+TASKS = ("preprocess", "classify", "extract", "clean", "evaluate")
 
 
 def job(bench: Bench, out: Path, task: str, **more: str) -> StageSettings:
@@ -51,16 +51,16 @@ def test_a_document_type_that_is_no_type_is_refused_by_every_task(
 @pytest.mark.parametrize(
     ("task", "more"),
     [
-        ("split", {}),
-        ("split", {"photo_split": "true"}),
+        ("preprocess", {}),
+        ("preprocess", {"preprocess_photographs": "true"}),
         ("classify", {"document_type": "RECEIPT"}),
         ("classify", {}),
         ("extract", {}),
         ("clean", {}),
     ],
     ids=[
-        "split passing through",
-        "split asking",
+        "preprocess passing through",
+        "preprocess asking",
         "classify given the type",
         "classify",
         "extract",

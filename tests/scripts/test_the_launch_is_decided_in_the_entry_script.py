@@ -43,10 +43,11 @@ JOB_VARIABLES = (
     "ground_truth",
     "document_types",
     "max_images",
-    "photo_split",
+    "preprocess_photographs",
     "document_type",
     "dataset",
     "run_config",
+    "photo_split",
     "CLEAR_PREV_OUTPUT",
 )
 
@@ -128,20 +129,36 @@ needs_the_environment = pytest.mark.skipif(
 def test_a_task_that_is_not_one_of_the_five_is_refused(tmp_path: Path, task: str) -> None:
     result = started(a_clean_job(tmp_path, KFP_TASK=task))
 
-    refused(result, "KFP_TASK", "split, classify, extract, clean or evaluate")
+    refused(result, "KFP_TASK", "preprocess, classify, extract, clean or evaluate")
+    assert not (tmp_path / "logs").exists()
+
+
+def test_the_name_the_first_task_had_is_refused_with_the_name_it_has_now(tmp_path: Path) -> None:
+    """Until 27 November 2026 the task was split. A job written before then is told what to write now,
+    and where the task's images are, and is not told only that its task is unknown."""
+    result = started(a_clean_job(tmp_path, KFP_TASK="split"))
+
+    refused(
+        result,
+        "FATAL: KFP_TASK=split is no longer a task: it is now preprocess",
+        "KFP_TASK=preprocess",
+        "preprocess_photographs",
+        "<output>/preprocess/images",
+    )
+    assert "is not a task of this pipeline" not in result.stdout
     assert not (tmp_path / "logs").exists()
 
 
 @pytest.mark.parametrize(
     ("task", "left_out"),
     [
-        ("split", "model"),
+        ("preprocess", "model"),
         ("classify", "image_dir"),
         ("extract", "output"),
         ("clean", "output"),
         ("evaluate", "ground_truth"),
         ("clean", "DOC_EXTRACT_LOG_DIR"),
-        ("split", "DOC_EXTRACT_MODELS_DIR"),
+        ("preprocess", "DOC_EXTRACT_MODELS_DIR"),
         ("classify", "DOC_EXTRACT_MODELS_DIR"),
         ("extract", "DOC_EXTRACT_MODELS_DIR"),
     ],
@@ -159,8 +176,8 @@ def test_a_task_without_a_variable_it_needs_is_refused_and_told_which(
         "ground_truth": str(tmp_path / "ground_truth.jsonl"),
         "DOC_EXTRACT_LOG_DIR": str(tmp_path / "logs"),
         "DOC_EXTRACT_MODELS_DIR": str(tmp_path / "models"),
-        # The photo split is on, so that the split task loads a model and needs its weights.
-        "photo_split": "true",
+        # The switch is on, so that the preprocess task loads a model and needs its weights.
+        "preprocess_photographs": "true",
     }
     if blank is None:
         del job[left_out]
@@ -187,11 +204,11 @@ MODEL = "gemma4-31b-w4a16-vllm"
 @pytest.mark.parametrize(
     "job",
     [
-        {"KFP_TASK": "split"},
-        {"KFP_TASK": "split", "photo_split": "false"},
+        {"KFP_TASK": "preprocess"},
+        {"KFP_TASK": "preprocess", "preprocess_photographs": "false"},
         {"KFP_TASK": "classify", "document_type": "RECEIPT"},
     ],
-    ids=["split passing through", "split told not to ask", "classify given the type"],
+    ids=["preprocess passing through", "preprocess told not to ask", "classify given the type"],
 )
 def test_a_task_that_loads_no_model_needs_no_folder_of_weights(tmp_path: Path, job: dict[str, str]) -> None:
     """Until 26 November 2026 the three tasks that can load a model were asked for it whether or not
@@ -206,12 +223,12 @@ def test_a_task_that_loads_no_model_needs_no_folder_of_weights(tmp_path: Path, j
 @pytest.mark.parametrize(
     "job",
     [
-        {"KFP_TASK": "split", "photo_split": "True"},
+        {"KFP_TASK": "preprocess", "preprocess_photographs": "True"},
         {"KFP_TASK": "classify"},
         {"KFP_TASK": "classify", "document_type": "None"},
         {"KFP_TASK": "extract", "document_type": "RECEIPT"},
     ],
-    ids=["split asking the model", "classify", "classify with the type left blank", "extract"],
+    ids=["preprocess asking the model", "classify", "classify with the type left blank", "extract"],
 )
 def test_a_task_that_loads_a_model_needs_the_folder_of_weights(tmp_path: Path, job: dict[str, str]) -> None:
     (tmp_path / "pages").mkdir()
@@ -274,8 +291,8 @@ def test_the_format_of_the_answer_key_is_checked_for_evaluate_alone(tmp_path: Pa
         ("max_images", "2.5"),
         ("document_types", ","),
         ("document_types", " , ,"),
-        ("photo_split", "yes"),
-        ("photo_split", "1"),
+        ("preprocess_photographs", "yes"),
+        ("preprocess_photographs", "1"),
         ("CLEAR_PREV_OUTPUT", "yes"),
         ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "lots"),
         ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "0"),
@@ -297,8 +314,8 @@ def test_a_value_that_cannot_be_used_is_refused_before_anything_is_written(
     [
         ("max_images", "12"),
         ("document_types", "RECEIPT, invoice,"),
-        ("photo_split", "true"),
-        ("photo_split", "False"),
+        ("preprocess_photographs", "true"),
+        ("preprocess_photographs", "False"),
         ("CLEAR_PREV_OUTPUT", "True"),
         ("document_type", "RECEIPT"),
         ("DOC_EXTRACT_GPU_MEMORY_UTILIZATION", "0.85"),
@@ -320,7 +337,7 @@ def test_a_value_that_can_be_used_is_logged_as_the_job_set_it(
     [
         "max_images",
         "document_types",
-        "photo_split",
+        "preprocess_photographs",
         "document_type",
         "ground_truth",
         "CLEAR_PREV_OUTPUT",
@@ -337,7 +354,7 @@ def test_a_variable_that_is_empty_or_the_word_none_is_not_set(
 
     assert "FATAL" not in result.stdout.split("What this job set:")[0]
     # The log says what the task will be given: nothing, or for the two with a default, false.
-    expected = "false" if variable in ("photo_split", "CLEAR_PREV_OUTPUT") else "<not set>"
+    expected = "false" if variable in ("preprocess_photographs", "CLEAR_PREV_OUTPUT") else "<not set>"
     (line,) = [line for line in result.stdout.splitlines() if f" {variable} " in f"{line} "]
     assert line.rstrip().endswith(expected), line
 
@@ -352,7 +369,7 @@ def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(
         return line.split(name, 1)[1].strip()
 
     assert logged("KFP_TASK") == "clean" and logged("output") == str(tmp_path / "out")
-    assert logged("photo_split") == "false" and logged("CLEAR_PREV_OUTPUT") == "false"
+    assert logged("preprocess_photographs") == "false" and logged("CLEAR_PREV_OUTPUT") == "false"
     assert logged("document_types") == logged("max_images") == logged("model") == "<not set>"
     assert logged("DOC_EXTRACT_MODELS_DIR") == "<not set>"
     assert logged("DOC_EXTRACT_CONDA_ENV") == str(NO_REAL_ENVIRONMENT)
@@ -363,6 +380,8 @@ def test_every_job_variable_is_logged_and_the_two_with_a_default_say_what_it_is(
     [
         ("dataset", "sroie", "document_type"),
         ("run_config", "/data/run_20261126/run_config.yml", "the variables listed at the top"),
+        # The switch of the first task, under the name it had until 27 November 2026.
+        ("photo_split", "true", "preprocess_photographs=true"),
     ],
 )
 def test_a_variable_the_pipeline_no_longer_reads_is_refused_by_name(
@@ -374,7 +393,7 @@ def test_a_variable_the_pipeline_no_longer_reads_is_refused_by_name(
     assert not (tmp_path / "logs").exists()
 
 
-@pytest.mark.parametrize("gone", ["dataset", "run_config"])
+@pytest.mark.parametrize("gone", ["dataset", "run_config", "photo_split"])
 def test_one_of_those_left_blank_by_a_manifest_is_not_refused(tmp_path: Path, gone: str) -> None:
     result = started(a_clean_job(tmp_path, **{gone: "None"}))
 
@@ -510,3 +529,71 @@ def test_a_job_is_run_from_its_variables_alone_and_the_code_is_not_touched(tmp_p
         ["git", "status", "--short"], cwd=REPO, capture_output=True, text=True, check=True
     )
     assert after.stdout == before.stdout
+
+
+# --- the look at the cards ------------------------------------------------------------------------------
+
+
+def a_machine_with_cards(folder: Path, second_cards_state: str) -> str:
+    """A PATH on which `nvidia-smi` is a stand-in that answers the script's four questions for two cards.
+
+    The values are invented. They are written as nvidia-smi writes them: a comma and a space between.
+    """
+    folder.mkdir()
+    stand_in = folder / "nvidia-smi"
+    stand_in.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  --query-gpu=count) printf '2\\n2\\n' ;;\n"
+        "  --query-gpu=index,name,*) printf '0, NVIDIA L4, 23034 MiB, 22594 MiB, 41, 0\\n"
+        "1, NVIDIA L4, 23034 MiB, 20110 MiB, 43, 0\\n' ;;\n"
+        f"  --query-gpu=index,pstate) printf '0, P8\\n1, {second_cards_state}\\n' ;;\n"
+        f"  --query-gpu=index,pstate,*) printf 'index, pstate, ecc\\n0, P8, 0\\n1, {second_cards_state}, 0\\n' ;;\n"
+        "esac\n"
+    )
+    stand_in.chmod(0o755)
+    return f"{folder}{os.pathsep}{os.environ['PATH']}"
+
+
+@needs_the_environment
+def test_each_card_is_logged_on_a_line_of_its_own_with_its_values_evenly_set_out(tmp_path: Path) -> None:
+    """The line is set out by awk. Until 27 November 2026 a loop in bash trimmed three of the six values
+    and left the card's name and its temperature with the space nvidia-smi puts after each comma."""
+    a_reply_to_clean(tmp_path / "out")
+
+    result = started(a_clean_job(tmp_path, PATH=a_machine_with_cards(tmp_path / "bin", "P0")), A_CONDA_ENV)
+
+    assert result.returncode == 0, result.stdout[-2000:]
+    stamp = r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]"
+    for line in (
+        "  GPU 0: NVIDIA L4 | 23034 MiB total | 22594 MiB free | 41C | ECC errors: 0",
+        "  GPU 1: NVIDIA L4 | 23034 MiB total | 20110 MiB free | 43C | ECC errors: 0",
+    ):
+        assert re.search(rf"^{stamp} {re.escape(line)}$", result.stdout, flags=re.MULTILINE), result.stdout
+    assert "Detected 2 GPU(s):" in result.stdout
+    assert "report error state" not in result.stdout
+
+
+@needs_the_environment
+@pytest.mark.parametrize("state", ["ERR!", "[Unknown Error]"])
+def test_a_card_in_an_error_state_is_warned_of_and_the_job_goes_on(tmp_path: Path, state: str) -> None:
+    a_reply_to_clean(tmp_path / "out")
+
+    result = started(a_clean_job(tmp_path, PATH=a_machine_with_cards(tmp_path / "bin", state)), A_CONDA_ENV)
+
+    assert result.returncode == 0, result.stdout[-2000:]
+    assert "WARNING: One or more GPUs report error state. Run may fail." in result.stdout
+    assert f"1, {state}, 0" in result.stdout
+
+
+def test_awk_is_kept_out_of_the_path_the_log_takes() -> None:
+    """Fed from a pipe, some awks hold lines back until their input ends, and a live log would stall.
+    Measured on 27 November 2026: mawk passed on two lines sent two seconds apart together, at the end."""
+    script = (REPO / "entrypoint.sh").read_text()
+    (redirection,) = [line for line in script.splitlines() if line.startswith("exec > ")]
+
+    assert redirection == 'exec > >(tee -a "$LOG_FILE") 2>&1'
+    # Only what every awk has: no function that gawk alone gives.
+    code = [line for line in script.splitlines() if "awk " in line and not line.lstrip().startswith("#")]
+    assert len(code) == 2
+    assert not any(word in line for line in code for word in ("strftime", "gensub", "systime", "asort"))

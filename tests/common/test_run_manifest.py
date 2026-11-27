@@ -145,12 +145,12 @@ def test_a_stage_starting_afresh_checks_nothing_and_notes_itself_anew(
 
 
 def test_each_stage_has_its_own_note(tmp_path: Path, commit: dict[str, Any]) -> None:
-    """The split stage reads the photographs and the classify stage reads what it wrote: two folders."""
-    note(tmp_path, "split", image_dir="/photographs")
-    note(tmp_path, "classify", image_dir="/out/split/images")
+    """The preprocess stage reads the photographs and the classify stage reads what it wrote: two folders."""
+    note(tmp_path, "preprocess", image_dir="/photographs")
+    note(tmp_path, "classify", image_dir="/out/preprocess/images")
 
-    assert list(run_manifest.read(tmp_path)) == ["split", "classify"]
-    assert note(tmp_path, "split", image_dir="/photographs").image_dir == "/photographs"
+    assert list(run_manifest.read(tmp_path)) == ["preprocess", "classify"]
+    assert note(tmp_path, "preprocess", image_dir="/photographs").image_dir == "/photographs"
 
 
 def test_a_stage_run_another_way_than_the_one_it_reads_is_said_and_allowed(
@@ -175,7 +175,7 @@ def test_stages_run_the_same_way_are_not_remarked_on(
 
     with caplog.at_level(logging.WARNING):
         run_manifest.warn_if_made_another_way(tmp_path, "extract", after="classify")
-        run_manifest.warn_if_made_another_way(tmp_path, "extract", after="split")
+        run_manifest.warn_if_made_another_way(tmp_path, "extract", after="preprocess")
 
     assert caplog.records == []
 
@@ -234,7 +234,7 @@ class Called:
 @pytest.fixture
 def stage(monkeypatch: pytest.MonkeyPatch) -> Called:
     called = Called()
-    for task in ("split", "classify", "extract", "clean", "evaluate"):
+    for task in ("preprocess", "classify", "extract", "clean", "evaluate"):
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "run", called)
         monkeypatch.setattr(importlib.import_module(f"stages.{task}"), "check", lambda task: None)
     return called
@@ -265,22 +265,22 @@ def test_a_second_model_may_start_the_stage_afresh(
     assert run_manifest.read(tmp_path / "out")["classify"].model == ANOTHER_MODEL
 
 
-def test_the_split_stage_started_afresh_is_a_new_run_like_the_others(
+def test_the_preprocess_stage_started_afresh_is_a_new_run_like_the_others(
     tmp_path: Path, stage: Called, commit: dict[str, Any]
 ) -> None:
     """Until 26 November 2026 CLEAR_PREV_OUTPUT did nothing for split, so its earlier output was always
     carried on from and another model was refused. It now deletes what split wrote, as for every stage."""
-    starter.run_task(settings_for("split", tmp_path))
+    starter.run_task(settings_for("preprocess", tmp_path))
 
-    starter.run_task(settings_for("split", tmp_path, model=ANOTHER_MODEL, CLEAR_PREV_OUTPUT="true"))
+    starter.run_task(settings_for("preprocess", tmp_path, model=ANOTHER_MODEL, CLEAR_PREV_OUTPUT="true"))
 
-    assert run_manifest.read(tmp_path / "out")["split"].model == ANOTHER_MODEL
+    assert run_manifest.read(tmp_path / "out")["preprocess"].model == ANOTHER_MODEL
 
 
 def test_every_stage_that_carries_on_leaves_a_note_and_the_others_leave_none(
     tmp_path: Path, stage: Called, commit: dict[str, Any], caplog: pytest.LogCaptureFixture
 ) -> None:
-    for task in ("split", "classify", "extract"):
+    for task in ("preprocess", "classify", "extract"):
         starter.run_task(settings_for(task, tmp_path))
     with caplog.at_level(logging.INFO):
         for task in ("clean", "evaluate"):

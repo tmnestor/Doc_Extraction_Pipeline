@@ -1,11 +1,11 @@
-# The question the split task puts first, about each photograph once its rows of print run across it:
+# The question the preprocess task puts first, about each photograph once its rows of print run across it:
 # is it the right way up, or upside down? The reply read is YES or NO. On NO the photograph is turned
 # half way round before anything else is asked about it.
 upright: |
   Is the printed text the right way up, so that it can be
   read without turning the image? Answer YES or NO.
 
-# The question the split task then puts about each photograph. The reply read is a JSON list
+# The question the preprocess task then puts about each photograph. The reply read is a JSON list
 # of {"box_2d": [ymin, xmin, ymax, xmax]} on a 0 to 1000 scale, one object for each receipt.
 prompt: |
   Detect every paper receipt in this photograph. Reply with JSON only: a list with one object for each receipt, in the form {"box_2d": [ymin, xmin, ymax, xmax], "label": "receipt"}, where the four numbers are normalised to 0-1000.

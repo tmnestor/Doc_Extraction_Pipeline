@@ -1,4 +1,8 @@
-"""Stage 0: Split photographs of several receipts into one image per receipt (GPU).
+"""Stage 0: preprocess. Hand the later stages one upright, level image for each document (GPU).
+
+Until 27 November 2026 the stage was called ``split``, after one of the things it does. It sets a photograph
+the right way up, cuts a photograph of several receipts into one image for each, and levels or rectifies an
+image whose print drifts: the name described the second and hid the rest.
 
 Runs before classify. Each photograph is first set the right way up: one lying on its side is set on end by
 its print, and the model says whether it is then upside down. A photograph that arrives turned a quarter or
@@ -9,8 +13,8 @@ Each photograph is then shown to the model, which says where each receipt is. A 
 holding one receipt, or one the model's answer is unclear about, is copied through unchanged; a photograph the
 model clearly says holds several is cut into one image per receipt. Each image, cut or whole, is then left
 alone unless its rows of print drift far enough to mislead a reader. One that does is rectified from its four
-corners when they can be trusted, and otherwise turned so its rows run level. See `common.photo_split` for
-the rules.
+corners when they can be trusted, and otherwise turned so its rows run level. See
+`common.image_preprocessing` for the rules.
 
 Writes into the output directory:
 
@@ -18,18 +22,21 @@ Writes into the output directory:
                     ones as <photograph>.png, and cut images as <photograph>__r<n>.png. Anything the stage
                     alters is written as PNG, so a JPEG is never compressed twice. The later stages read
                     their images from here.
-    splits.jsonl    one record per photograph: what was done, why, the boxes, the images written, how far
+    preprocess.jsonl
+                    one record per photograph: what was done, why, the boxes, the images written, how far
                     each was turned to level its print, whether it was rectified, how far its rows of
-                    print drift (in text heights), and the model's reply.
+                    print drift (in text heights), and the model's reply. A photograph that was cut has
+                    the action "split", as it always had.
 
-Unless the job sets `photo_split=true`, every photograph is copied through and the model is not loaded.
+Unless the job sets `preprocess_photographs=true`, every photograph is copied through and the model is not
+loaded.
 
 Every image in the directory is examined: the selection the later stages apply (document types, a limit on the
 number of images) is applied by them, to what this stage writes.
 
 Started by ``python -m stages`` with ``KFP_TASK`` naming it:
 
-    KFP_TASK=split model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh
+    KFP_TASK=preprocess model=<a registered model> image_dir=<folder> output=<folder> bash entrypoint.sh
 """
 
 import logging
@@ -38,9 +45,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from common import photo_split
+from common import image_preprocessing
 from common.engine_calls import EngineWatch, groups_of, in_engine_calls
-from common.photo_split import PhotoSplitConfig
+from common.errors import ConfigError
+from common.image_preprocessing import PreprocessConfig
 from common.pipeline_ops import check_processor
 from common.prompt_catalog import PromptCatalog
 from common.sheet_finder import FinderParams
@@ -54,7 +62,7 @@ from .records import failed
 logger = logging.getLogger(__name__)
 
 IMAGES_DIR = "images"
-RECORDS_FILE = "splits.jsonl"
+RECORDS_FILE = "preprocess.jsonl"
 
 
 def cut_name(photograph: Path, number: int) -> str:
@@ -104,7 +112,7 @@ def apply_reply(
     photograph: Path,
     reply: str,
     images_dir: Path,
-    config: PhotoSplitConfig,
+    config: PreprocessConfig,
     finder: FinderParams | None = None,
     upright_turn: int = 0,
 ) -> dict[str, Any]:
@@ -112,9 +120,9 @@ def apply_reply(
 
     Args:
         photograph: The photograph's path.
-        reply: The model's reply to the photo split prompt.
+        reply: The model's reply to the question of where the receipts are.
         images_dir: Where the resulting image or images are written.
-        config: The photo split's rules.
+        config: The stage's rules.
         finder: The values for finding print and its direction.
             Needed when `config.straighten` is true; None leaves every image as it lies.
         upright_turn: How far the photograph was turned anticlockwise to set its print the right way
@@ -122,11 +130,11 @@ def apply_reply(
             reply's boxes are of the photograph so turned, and so is every image written.
 
     Returns:
-        The record for splits.jsonl.
+        The record for preprocess.jsonl.
     """
     from PIL import Image, ImageOps
 
-    from common.photo_split import (
+    from common.image_preprocessing import (
         box_within,
         crop_rectangles,
         decide,
@@ -243,12 +251,12 @@ def ask_about_photographs(
     model's reply for each photograph, and the stage's ``run`` acts on the replies.
 
     A photograph is first set the right way up, since one that arrives turned with no orientation tag
-    is read worse. One lying on its side is set on end by its print (``photo_split.lies_on_its_side``),
+    is read worse. One lying on its side is set on end by its print (``image_preprocessing.lies_on_its_side``),
     which cannot tell the right way up from upside down. The model is then asked whether the print is
     the right way up, and on NO the photograph is turned half way round. Only then is it asked where the
     receipts are, so its boxes are of the photograph the right way up. So a call here is two engine calls.
 
-    Photographs go ``photo_split.CONFIG.batch_size`` to an engine call. A call that fails is tried again
+    Photographs go ``image_preprocessing.CONFIG.batch_size`` to an engine call. A call that fails is tried again
     one photograph at a time, and a photograph that still fails comes back with its error and no reply
     (``common.engine_calls``).
 
@@ -262,8 +270,8 @@ def ask_about_photographs(
         For each photograph, in the order given: image_name, image_path, raw_response, error,
         processing_time and upright_turn, how far it was turned anticlockwise to set it the right way up.
     """
-    config = photo_split.CONFIG
-    prompt, is_it_upright = (PromptCatalog().photo_split_prompt(key) for key in ("prompt", "upright"))
+    config = image_preprocessing.CONFIG
+    prompt, is_it_upright = (PromptCatalog().preprocess_prompt(key) for key in ("prompt", "upright"))
     watch = EngineWatch()
     turns: dict[Path, int] = {}
 
@@ -271,13 +279,15 @@ def ask_about_photographs(
         images = []
         for photograph in batch:
             image = processor.load_document_image(str(photograph))
-            turns[photograph] = 90 * photo_split.lies_on_its_side(image, photo_split.FINDER, config)
-            images.append(photo_split.turned_upright(image, turns[photograph]))
+            turns[photograph] = 90 * image_preprocessing.lies_on_its_side(
+                image, image_preprocessing.FINDER, config
+            )
+            images.append(image_preprocessing.turned_upright(image, turns[photograph]))
         said = processor.ask(images, [is_it_upright] * len(images), config.upright_max_tokens)
         for index, (photograph, reply) in enumerate(zip(batch, said, strict=True)):
-            if photo_split.said_upright(reply) is False:
+            if image_preprocessing.said_upright(reply) is False:
                 turns[photograph] += 180
-                images[index] = photo_split.turned_upright(images[index], 180)
+                images[index] = image_preprocessing.turned_upright(images[index], 180)
         return processor.ask(images, [prompt] * len(images), config.max_tokens)
 
     asked: list[dict[str, Any]] = []
@@ -315,10 +325,10 @@ def _remove_the_images_of(records: list[dict[str, Any]], images_dir: Path) -> No
 class Checked:
     """What the stage is run with, read and checked."""
 
-    # Whether the photo split is on: the model is asked where the receipts are, and a photograph of
+    # Whether photographs are preprocessed: the model is asked where the receipts are, and a photograph of
     # several is cut. Off, every photograph is passed through and no model is asked.
     enabled: bool
-    # The run's settings. None when the photo split is off: no model is asked, and none is looked for.
+    # The run's settings. None when they are not: no model is asked, and none is looked for.
     settings: StageSettings | None
     # Every image of the folder, in the order of their names. The selection the later stages apply
     # (document types, a limit on the number of images) is theirs to apply, to what this stage writes.
@@ -326,14 +336,14 @@ class Checked:
 
 
 def checked(settings: StageSettings, image_dir: Path) -> Checked:
-    """Whether the photo split is on, the run's settings and the photographs, each read and checked.
+    """Whether photographs are preprocessed, the run's settings and the photographs, each read and checked.
 
     The one place the stage works out what it is run with. What it gives is what ``run`` is handed:
-    nothing is read or worked out a second time. The rules of the split itself are not settings: they
-    are ``common.photo_split.CONFIG`` and ``FINDER``.
+    nothing is read or worked out a second time. The stage's own rules are not settings: they
+    are ``common.image_preprocessing.CONFIG`` and ``FINDER``.
 
     Args:
-        settings: The run's settings. Its ``photo_split`` says whether the photo split is on: with
+        settings: The run's settings. Its ``preprocess_photographs`` says whether they are: with
             it off no model is asked, and a model's folder that is not there does not stop the stage.
         image_dir: The folder of photographs.
 
@@ -344,11 +354,11 @@ def checked(settings: StageSettings, image_dir: Path) -> Checked:
     if not photographs:
         raise no_pages_in(image_dir, "")
     logger.info("Found %d photographs in %s", len(photographs), image_dir)
-    if not settings.photo_split:
+    if not settings.preprocess_photographs:
         return Checked(False, None, photographs)
     # Read here, before any engine is started: each is asked for again where the model is asked.
-    PromptCatalog().photo_split_prompt()
-    PromptCatalog().photo_split_prompt("upright")
+    PromptCatalog().preprocess_prompt()
+    PromptCatalog().preprocess_prompt("upright")
     return Checked(True, settings, photographs)
 
 
@@ -359,6 +369,18 @@ def check(task: StageSettings) -> Checked:
         ConfigError: With what is wrong, where, what is expected and how to mend it.
     """
     assert task.image_dir is not None
+    # The folder the stage wrote to while it was called split. Left beside this run's, a later stage
+    # pointed at it would read the images of that earlier run.
+    earlier = task.output / "split"
+    if earlier.exists():
+        raise ConfigError(
+            f"What: the output folder holds a folder named split, which this stage wrote before it was "
+            f"renamed preprocess on 27 November 2026. Its images are an earlier run's.\n"
+            f"Where: {earlier.resolve()}, under the folder the job's variable output names.\n"
+            f"Expected: an output folder with no split folder in it. This stage writes "
+            f"{task.preprocess_dir.name}/images and {task.preprocess_dir.name}/{RECORDS_FILE}.\n"
+            f"How to fix: give this run a folder of its own in `output`, or delete {earlier}."
+        )
     found = checked(task, task.image_dir)
     if found.settings is not None:
         check_processor(found.settings)
@@ -366,25 +388,25 @@ def check(task: StageSettings) -> Checked:
 
 
 def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Path:
-    """Split every photograph in a directory, writing images/ and splits.jsonl.
+    """Preprocess every photograph in a directory, writing images/ and preprocess.jsonl.
 
     A run carries on from what an earlier one left (``stages.carry_on``): photographs already dealt with
-    are not asked about again, a photograph an earlier run could not ask about is, and splits.jsonl is
+    are not asked about again, a photograph an earlier run could not ask about is, and preprocess.jsonl is
     left in the photographs' order however the run went. The model's reply about each photograph goes
     with the record of what was done about it into a journal, the moment it has been acted on: a run
     that stops part way keeps both, and the next run has nothing to do about those photographs again.
 
     Args:
-        output_dir: Directory to write images/ and splits.jsonl into.
-        checked: Whether the photo split is on, the run's settings and the photographs: what
+        output_dir: Directory to write images/ and preprocess.jsonl into.
+        checked: Whether photographs are preprocessed, the run's settings and the photographs: what
             ``checked`` gave.
         timing: The run's output folder, to note a row of the stage's time in. None: no row.
 
     Returns:
         The directory the later stages read their images from.
     """
-    split_config, app_cfg, photographs = photo_split.CONFIG, checked.settings, checked.photographs
-    finder = photo_split.FINDER if split_config.straighten else None
+    stage_config, app_cfg, photographs = image_preprocessing.CONFIG, checked.settings, checked.photographs
+    finder = image_preprocessing.FINDER if stage_config.straighten else None
 
     images_dir = output_dir / IMAGES_DIR
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -399,11 +421,11 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
 
     if not checked.enabled:
         # Every photograph is copied through, and no engine is started. The stage carries on the one
-        # way all the same: what a run with the photo split on had done before it stopped is kept as
+        # way all the same: what a run that preprocessed photographs had done before it stopped is kept as
         # that run left it, and a photograph such a run could not ask about is passed through.
         def copy_through(photograph: Path) -> dict[str, Any]:
             shutil.copy2(photograph, images_dir / photograph.name)
-            reason = "photo_split is not enabled"
+            reason = "preprocess_photographs is not enabled"
             return _record(
                 photograph, "pass_through", reason, [], [photograph.name], [0.0], [False], "", [None], 0
             )
@@ -411,7 +433,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
         copied = carry_on(
             None,
             Work(
-                stage="split",
+                stage="preprocess",
                 output=records_path,
                 items=photographs,
                 name_of=lambda photograph: photograph.name,
@@ -421,7 +443,8 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
             ),
         )
         logger.info(
-            "photo_split is not enabled: copied %d photographs through unchanged", len(copied.records)
+            "preprocess_photographs is not enabled: copied %d photographs through unchanged",
+            len(copied.records),
         )
         return images_dir
 
@@ -433,7 +456,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
         nonlocal acted_on
         photograph = Path(asked["image_path"])
         record = apply_reply(
-            photograph, asked["raw_response"], images_dir, split_config, finder, asked["upright_turn"]
+            photograph, asked["raw_response"], images_dir, stage_config, finder, asked["upright_turn"]
         )
         if asked.get("error"):
             # The model could not be asked about this photograph, in a shared call or alone. It is
@@ -450,7 +473,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
     carried = carry_on(
         app_cfg,
         Work(
-            stage="split",
+            stage="preprocess",
             output=records_path,
             items=photographs,
             name_of=lambda photograph: photograph.name,
@@ -467,7 +490,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
     records = carried.records
     logger.info("Engines: %s", carried.arrangement)
     logger.info(
-        "Split questions complete: %d photographs in %.1fs (%.2fs/photograph)",
+        "Preprocess questions complete: %d photographs in %.1fs (%.2fs/photograph)",
         len(records),
         carried.model_seconds,
         carried.model_seconds / len(records),
@@ -488,7 +511,7 @@ def run(output_dir: Path, checked: Checked, *, timing: Path | None = None) -> Pa
     return images_dir
 
 
-BANNER = "Stage 0: split, one image for each document in a photograph (GPU)"
+BANNER = "Stage 0: preprocess, one upright, level image for each document in a photograph (GPU)"
 
 
 def start(task: StageSettings, checked: Checked) -> str:
@@ -498,13 +521,13 @@ def start(task: StageSettings, checked: Checked) -> str:
     26 November 2026 it deleted nothing: an image an earlier run had cut was then read by the stages
     after this one, beside whatever the new run made of the same photograph.
     """
-    task.split_dir.mkdir(parents=True, exist_ok=True)
-    deleted = start_afresh(task.clear_previous_output, task.split_dir / RECORDS_FILE)
-    _remove_the_images_of(deleted, task.split_dir / IMAGES_DIR)
+    task.preprocess_dir.mkdir(parents=True, exist_ok=True)
+    deleted = start_afresh(task.clear_previous_output, task.preprocess_dir / RECORDS_FILE)
+    _remove_the_images_of(deleted, task.preprocess_dir / IMAGES_DIR)
     images = run(
-        task.split_dir,
+        task.preprocess_dir,
         checked,
         # The row of the stage's time goes with the other stages', in the run's output folder.
         timing=task.output,
     )
-    return f"Split complete. Later stages read their images from: {images}"
+    return f"Preprocess complete. Later stages read their images from: {images}"

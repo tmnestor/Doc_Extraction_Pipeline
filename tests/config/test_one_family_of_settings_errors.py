@@ -73,11 +73,11 @@ def test_a_run_stopped_by_any_of_them_ends_with_the_reason_and_not_a_traceback(
     def refuses(*args: object, **kwargs: object) -> None:
         raise FieldSchemaError("What: margin_frac is 7.\nWhere: here\nExpected: a share\nHow to fix: so")
 
-    monkeypatch.setattr("stages.split.run", refuses)
-    monkeypatch.setattr("stages.split.check", lambda task: None)
+    monkeypatch.setattr("stages.preprocess.run", refuses)
+    monkeypatch.setattr("stages.preprocess.check", lambda task: None)
     (tmp_path / "pages").mkdir()
     for name, value in {
-        "KFP_TASK": "split",
+        "KFP_TASK": "preprocess",
         "model": "gemma4-31b-w4a16-vllm",
         "image_dir": str(tmp_path / "pages"),
         "output": str(tmp_path / "out"),

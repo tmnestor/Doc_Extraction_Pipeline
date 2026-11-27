@@ -1,6 +1,6 @@
 """What each stage hands to the model must not change unless a change is meant.
 
-`model_inputs.py` runs `classify`, `extract` and `split` on invented pages, and `classify` and `extract`
+`model_inputs.py` runs `classify`, `extract` and `preprocess` on invented pages, and `classify` and `extract`
 again on a dataset whose pages are all of one type, with a stand-in for the
 engine, and returns what the engine was given: the arguments each engine was built with and the cards it
 was put on, and for every call its requests in order, its sampling settings and its chat arguments. The
@@ -24,7 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
 
-from model_inputs import record_model_inputs  # noqa: E402
+from model_inputs import record_model_inputs
 
 MODELS = ("gemma4-31b-w4a16-vllm", "gemma4-12b-unified-w4a16-vllm")
 

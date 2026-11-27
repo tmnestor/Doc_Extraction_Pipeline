@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from common import photo_split
+from common import image_preprocessing
 from common.errors import ConfigError
-from common.photo_split import lies_on_its_side, said_upright, turned_upright
+from common.image_preprocessing import lies_on_its_side, said_upright, turned_upright
 from common.prompt_catalog import PromptCatalog
-from stages.split import apply_reply
+from stages.preprocess import apply_reply
 
-CONFIG, FINDER = photo_split.CONFIG, photo_split.FINDER
+CONFIG, FINDER = image_preprocessing.CONFIG, image_preprocessing.FINDER
 RED, GREEN, DESK = (200, 40, 40), (40, 160, 40), (120, 120, 120)
 
 
@@ -88,21 +88,21 @@ def test_the_models_answer_is_read_as_yes_no_or_neither(reply: str, upright: boo
 
 def test_the_shipped_question_is_the_one_that_was_measured() -> None:
     """As put to the 31B on 27 November 2026: right on 1,024 of 1,024 pages upright or upside down."""
-    assert PromptCatalog().photo_split_prompt("upright") == (
+    assert PromptCatalog().preprocess_prompt("upright") == (
         "Is the printed text the right way up, so that it can be\n"
         "read without turning the image? Answer YES or NO."
     )
 
 
 def test_a_file_with_no_question_of_which_way_up_is_refused(tmp_path: Path) -> None:
-    (tmp_path / "photo_split.yaml").write_text("prompt: where is each receipt\n")
+    (tmp_path / "preprocess.yaml").write_text("prompt: where is each receipt\n")
 
     with pytest.raises(ConfigError) as refused:
-        PromptCatalog(tmp_path).photo_split_prompt("upright")
+        PromptCatalog(tmp_path).preprocess_prompt("upright")
 
     message = str(refused.value)
     assert all(part in message for part in ("What:", "Where:", "Expected:", "How to fix:"))
-    assert str(tmp_path / "photo_split.yaml") in message and "upright:" in message
+    assert str(tmp_path / "preprocess.yaml") in message and "upright:" in message
 
 
 # ---- what is written is the photograph the right way up ------------------------------------------------

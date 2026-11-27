@@ -17,7 +17,7 @@ from pathlib import Path
 
 from models.registry import get_model
 
-TASKS = ("split", "classify", "extract", "clean", "evaluate")
+TASKS = ("preprocess", "classify", "extract", "clean", "evaluate")
 
 _MEMORY_SHARE = "DOC_EXTRACT_GPU_MEMORY_UTILIZATION"
 
@@ -37,8 +37,9 @@ class StageSettings:
     document_types: tuple[str, ...] | None = None
     # At most this many pages are read. None: every page.
     max_images: int | None = None
-    # Whether the split task asks the model where each receipt is and cuts a photograph of several.
-    photo_split: bool = False
+    # Whether the preprocess task asks the model about each photograph: which way up it is, and where
+    # each receipt is, so that a photograph of several is cut.
+    preprocess_photographs: bool = False
     # The document type the job gives every page, in which case classify asks no model.
     given_type: str | None = None
     # The file that what is sent to the model is kept in. None: it is not kept.
@@ -57,8 +58,8 @@ class StageSettings:
     # Every file a stage writes is under the output folder, so that one stage finds what another wrote.
 
     @property
-    def split_dir(self) -> Path:
-        return self.output / "split"
+    def preprocess_dir(self) -> Path:
+        return self.output / "preprocess"
 
     @property
     def classifications(self) -> Path:
@@ -98,7 +99,7 @@ def resolve(task: str, environ: Mapping[str, str]) -> StageSettings:
         clear_previous_output=environ.get("CLEAR_PREV_OUTPUT") == "true",
         document_types=types or None,
         max_images=int(environ["max_images"]) if "max_images" in environ else None,
-        photo_split=environ.get("photo_split") == "true",
+        preprocess_photographs=environ.get("preprocess_photographs") == "true",
         given_type=environ.get("document_type"),
         trace_file=path("DOC_EXTRACT_TRACE_FILE"),
         gpu_memory_utilization=float(environ[_MEMORY_SHARE]) if _MEMORY_SHARE in environ else None,

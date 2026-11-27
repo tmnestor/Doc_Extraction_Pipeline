@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
+
 from common import classification, run_manifest
 from common.errors import ConfigError
 from common.prompt_catalog import PromptCatalog
@@ -46,8 +46,8 @@ def task(bench: Bench, name: str, out: Path, model: str = ONE_ENGINE, **more: st
         "output": str(out),
         "ground_truth": str(out.parent / "ground_truth.jsonl"),
         "DOC_EXTRACT_MODELS_DIR": str(bench.models),
-        # The photo split is on, so that the split task loads a model as the other two do.
-        "photo_split": "true",
+        # The switch is on, so that the preprocess task loads a model as the other two do.
+        "preprocess_photographs": "true",
         **more,
     }
     return resolve(name, environ)
@@ -184,7 +184,7 @@ def test_the_engine_loader_reads_a_models_numbers_from_its_registration(model: s
 # --- a task is worked out once: what its check built is what it runs with ------------------------------
 
 
-@pytest.mark.parametrize("name", ["split", "classify", "extract"])
+@pytest.mark.parametrize("name", ["preprocess", "classify", "extract"])
 def test_what_a_stages_check_gives_is_what_its_run_is_handed(
     bench: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:

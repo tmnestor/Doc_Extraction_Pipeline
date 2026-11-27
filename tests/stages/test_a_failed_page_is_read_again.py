@@ -22,13 +22,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, preprocess_checked
 
-from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench
-from bench import split_checked
 from common.engine_calls import StageStopped
 from common.stage_timing import read_stage_timings
 from stages import __main__ as starter
-from stages import split
+from stages import preprocess
 from stages.io import read_jsonl, take_out
 from stages.records import failed
 
@@ -355,32 +354,32 @@ def test_a_job_whose_engine_stops_answering_ends_with_its_reason_and_exit_code_o
     assert not (tmp_path / "out" / "classifications.jsonl").exists()
 
 
-# --- the split stage ------------------------------------------------------------------------------------
+# --- the preprocess stage ------------------------------------------------------------------------------------
 
 TWO_RECEIPTS = '[{"box_2d": [0, 0, 1000, 480], "label": "receipt"}, {"box_2d": [0, 520, 1000, 1000], "label": "receipt"}]'
 
 
-def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
+def test_a_photograph_preprocess_could_not_ask_about_is_asked_about_again(
     bench: Bench, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     stop_after(bench, 100)
-    output = tmp_path / "out" / "split"
+    output = tmp_path / "out" / "preprocess"
     bench.processor.dead_from_attempt = 1
 
     with caplog.at_level(logging.WARNING):
-        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
+        preprocess.run(output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages))
 
     assert "The model could not be asked about 6 of 6 photograph(s)" in caplog.text
-    first = records_by_name(output / "splits.jsonl")
+    first = records_by_name(output / "preprocess.jsonl")
     assert set(first) == set(bench.names) and all(record["error"] for record in first.values())
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names
 
     # This time the model answers, and says each photograph holds two receipts.
     bench.processor.dead_from_attempt = None
     bench.processor.ask = lambda images, prompts, max_tokens: [TWO_RECEIPTS] * len(images)  # type: ignore[method-assign]
-    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
+    preprocess.run(output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages))
 
-    second = records_by_name(output / "splits.jsonl")
+    second = records_by_name(output / "preprocess.jsonl")
     assert set(second) == set(bench.names) and not any(record.get("error") for record in second.values())
     written = sorted(path.name for path in (output / "images").iterdir())
     assert written == sorted(name for record in second.values() for name in record["outputs"])
@@ -390,15 +389,15 @@ def test_a_photograph_split_could_not_ask_about_is_asked_about_again(
     assert not set(written) & set(bench.names)
 
 
-def test_split_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Path) -> None:
+def test_preprocess_stops_when_its_engine_stops_answering(bench: Bench, tmp_path: Path) -> None:
     stop_after(bench, 2)
-    output = tmp_path / "out" / "split"
+    output = tmp_path / "out" / "preprocess"
     bench.processor.dead_from_attempt = 2
 
     with pytest.raises(StageStopped):
-        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
+        preprocess.run(output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages))
 
     # The first call's two photographs were dealt with and are kept: the model's replies in the
     # stage's journal, and the images written.
-    assert sorted(records_by_name(output / "splits.jsonl.journal")) == bench.names[:2]
+    assert sorted(records_by_name(output / "preprocess.jsonl.journal")) == bench.names[:2]
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:2]

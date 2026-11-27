@@ -1,4 +1,4 @@
-"""What every stage keeps to, from split to evaluate: the five stand alone, and the five behave alike.
+"""What every stage keeps to, from preprocess to evaluate: the five stand alone, and the five behave alike.
 
 A stage stands alone:
 
@@ -31,18 +31,18 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
+
 from common.engine_calls import StageStopped
-from stages import split
+from stages import preprocess
 from stages.io import read_jsonl
 
-STAGES = ("split", "classify", "extract", "clean", "evaluate")
+STAGES = ("preprocess", "classify", "extract", "clean", "evaluate")
 SHARED = {"io", "records", "carry_on"}
-STAGES_FOLDER = Path(inspect.getfile(split)).parent
+STAGES_FOLDER = Path(inspect.getfile(preprocess)).parent
 # The file each stage writes, under a run's output folder, in the order the stages run.
 FILES = (
-    "split/splits.jsonl",
+    "preprocess/preprocess.jsonl",
     "classifications.jsonl",
     "raw_extractions.jsonl",
     "cleaned_extractions.jsonl",
@@ -195,16 +195,16 @@ def through_all_five(bench: Bench, out: Path, model: str, *, stop_each_card_stag
         # Two requests that fail one after another stop a stage: the bench has six pages.
         bench.stop_after(2)
 
-    def split_it() -> Path:
-        return bench.split(out / "split", model)
+    def preprocess_it() -> Path:
+        return bench.preprocess(out / "preprocess", model)
 
     def classify_it() -> Path:
-        return bench.classify(classifications, model, pages=out / "split" / "images")
+        return bench.classify(classifications, model, pages=out / "preprocess" / "images")
 
     def extract_it() -> Path:
         return bench.extract(classifications, raw_extractions, model)
 
-    for stage in (split_it, classify_it, extract_it):
+    for stage in (preprocess_it, classify_it, extract_it):
         if stop_each_card_stage_once:
             left_part_done(bench, model, stage)
             assert [p.name for p in out.rglob("*.journal")], "the stop left nothing to carry on from"
@@ -224,7 +224,7 @@ def test_the_five_stages_give_the_same_files_however_often_the_run_was_stopped(
 
     for file in FILES:
         assert comparable(stopped / file, stopped) == comparable(straight / file, straight), file
-    assert sorted(p.name for p in (stopped / "split" / "images").iterdir()) == bench.names
+    assert sorted(p.name for p in (stopped / "preprocess" / "images").iterdir()) == bench.names
 
 
 @pytest.mark.parametrize("model", BOTH)

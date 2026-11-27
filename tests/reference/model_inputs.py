@@ -177,7 +177,7 @@ def stand_in_vllm(recorder: Recorder, model_folder: Path) -> types.ModuleType:
             ]
 
         def reply(self, kind: str) -> str:
-            if recorder.stage == "split":
+            if recorder.stage == "preprocess":
                 return SPLIT_REPLY
             if recorder.stage == "dataset_sroie":
                 return SROIE_REPLY
@@ -228,7 +228,7 @@ def run_settings(model: str, models: Path, **choices: Any) -> Any:
     Args:
         model: A registered model.
         models: The folder that holds each model's folder of weights (``models_folder``).
-        choices: Fields of ``StageSettings`` to set: ``document_types``, ``max_images``, ``photo_split``.
+        choices: Fields of ``StageSettings`` to set: ``document_types``, ``max_images``, ``preprocess_photographs``.
     """
     from common.stage_settings import StageSettings
 
@@ -244,14 +244,18 @@ def run_settings(model: str, models: Path, **choices: Any) -> Any:
     )
 
 
-def split_checked(model: str, models: Path, photographs: Path, *, photo_split: bool = True) -> Any:
-    """What the split stage's check gives for a model and a folder of photographs.
+def preprocess_checked(
+    model: str, models: Path, photographs: Path, *, preprocess_photographs: bool = True
+) -> Any:
+    """What the preprocess stage's check gives for a model and a folder of photographs.
 
-    The photo split is on, as a job sets it with ``photo_split=true``, unless the test says otherwise.
+    The switch is on, as a job sets it with ``preprocess_photographs=true``, unless the test says otherwise.
     """
-    from stages import split
+    from stages import preprocess
 
-    return split.checked(run_settings(model, models, photo_split=photo_split), photographs)
+    return preprocess.checked(
+        run_settings(model, models, preprocess_photographs=preprocess_photographs), photographs
+    )
 
 
 def models_folder(folder: Path) -> Path:
@@ -307,7 +311,7 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         The engines built, the calls made to them and the prompt texts those calls refer to.
     """
     from models.registry import get_model
-    from stages import classify, extract, split
+    from stages import classify, extract, preprocess
 
     pages, output = folder / "pages", folder / "output"
     write_pages(pages)
@@ -321,8 +325,8 @@ def record_model_inputs(model: str, folder: Path) -> dict[str, Any]:
         classifications = classify.run(output / "classifications.jsonl", classify.checked(pages, settings))
         recorder.stage = "extract"
         extract.run(output / "raw_extractions.jsonl", extract.checked(classifications, settings))
-        recorder.stage = "split"
-        split.run(output / "split", split_checked(model, models, pages))
+        recorder.stage = "preprocess"
+        preprocess.run(output / "preprocess", preprocess_checked(model, models, pages))
         # A set of pages that are all of one type (document_type=SROIE_RECEIPT): given their type by
         # classify, which asks no model, and read by extract by the prompt of that type.
         receipts = folder / "receipts"

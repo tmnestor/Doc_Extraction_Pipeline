@@ -1,7 +1,7 @@
 """A stage that stops part way keeps what it had read, however its engines are arranged.
 
 Until 24 November 2026 only the extract stage with one engine wrote each record as it was made. The
-classify stage, the split stage, and the extract stage with an engine on each card wrote when they had
+classify stage, the preprocess stage, and the extract stage with an engine on each card wrote when they had
 read every page, so a run that stopped part way lost the whole stage: on the quantised 12B, which runs an
 engine on each card, that was every run.
 
@@ -24,16 +24,15 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
 
 
-from common import vllm_dp  # noqa: E402
-from common.stage_settings import resolve  # noqa: E402
-from common.stage_timing import read_stage_timings  # noqa: E402
-from stages import __main__ as starter  # noqa: E402
-from stages import split  # noqa: E402
-from stages.classify import classify_pages  # noqa: E402
-from stages.io import Journal, read_jsonl  # noqa: E402
+from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped, preprocess_checked
 
-
-from bench import AN_ENGINE_ON_EACH_CARD, KINDS, ONE_ENGINE, Bench, Stopped, split_checked  # noqa: E402
+from common import vllm_dp
+from common.stage_settings import resolve
+from common.stage_timing import read_stage_timings
+from stages import __main__ as starter
+from stages import preprocess
+from stages.classify import classify_pages
+from stages.io import Journal, read_jsonl
 
 
 def names_in(path: Path) -> list[str]:
@@ -240,30 +239,32 @@ def test_when_a_card_fails_what_every_card_had_read_is_kept(bench: Bench, tmp_pa
     assert not journal.path.exists()
 
 
-# --- the split stage ----------------------------------------------------------------------------------
+# --- the preprocess stage ----------------------------------------------------------------------------------
 
 
-def test_split_stopped_part_way_keeps_the_photographs_it_had_finished(bench: Bench, tmp_path: Path) -> None:
-    output = tmp_path / "out" / "split"
+def test_preprocess_stopped_part_way_keeps_the_photographs_it_had_finished(
+    bench: Bench, tmp_path: Path
+) -> None:
+    output = tmp_path / "out" / "preprocess"
     bench.processor.stop_at_call = 3
 
     with pytest.raises(Stopped):
-        split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
+        preprocess.run(output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages))
 
     # Two calls of two photographs were asked and acted on before the run stopped. Their replies are in
     # the journal, their images are written, and the stage's own file is not yet there.
-    assert not (output / "splits.jsonl").exists()
-    assert names_in(output / "splits.jsonl.journal") == bench.names[:4]
-    assert "raw_response" in read_jsonl(output / "splits.jsonl.journal")[0]
+    assert not (output / "preprocess.jsonl").exists()
+    assert names_in(output / "preprocess.jsonl.journal") == bench.names[:4]
+    assert "raw_response" in read_jsonl(output / "preprocess.jsonl.journal")[0]
     assert sorted(path.name for path in (output / "images").iterdir()) == bench.names[:4]
 
     bench.processor.stop_at_call = None
     bench.processor.calls.clear()
-    split.run(output, split_checked(ONE_ENGINE, bench.models, bench.pages))
+    preprocess.run(output, preprocess_checked(ONE_ENGINE, bench.models, bench.pages))
 
     assert bench.processor.calls == [["2 photographs"]]
-    assert names_in(output / "splits.jsonl") == bench.names
-    assert not (output / "splits.jsonl.journal").exists()
+    assert names_in(output / "preprocess.jsonl") == bench.names
+    assert not (output / "preprocess.jsonl.journal").exists()
 
 
 # --- starting afresh ----------------------------------------------------------------------------------

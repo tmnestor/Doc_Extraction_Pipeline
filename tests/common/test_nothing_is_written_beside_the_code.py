@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench
+
 from common import run_manifest, stage_settings
 from common.stage_settings import resolve
 from stages import __main__ as starter
@@ -145,14 +145,14 @@ def test_a_whole_run_of_the_five_tasks_writes_nothing_beside_the_code(
     _WATCHING.append([])
     try:
         for name in stage_settings.TASKS:
-            if name == "split":
+            if name == "preprocess":
                 continue  # its images would become the pages: it is run on its own, below
             starter.run_task(resolve(name, job))
-        starter.run_task(resolve("split", environ(bench, tmp_path / "photographs", model=model)))
+        starter.run_task(resolve("preprocess", environ(bench, tmp_path / "photographs", model=model)))
         starter.run_task(resolve("classify", {**job, "CLEAR_PREV_OUTPUT": "true"}))
     finally:
         seen = _WATCHING.pop()
 
     assert seen == []
     assert (out / "evaluation" / "evaluation_results.jsonl").is_file()
-    assert (tmp_path / "photographs" / "split" / "splits.jsonl").is_file()
+    assert (tmp_path / "photographs" / "preprocess" / "preprocess.jsonl").is_file()

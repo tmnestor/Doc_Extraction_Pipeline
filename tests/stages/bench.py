@@ -17,11 +17,11 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
-from model_inputs import InProcessContext, models_folder, run_settings, split_checked
+from model_inputs import InProcessContext, models_folder, preprocess_checked, run_settings
 
-from common import cards, engine_calls, extraction_batching, photo_split, vllm_dp
+from common import cards, engine_calls, extraction_batching, image_preprocessing, vllm_dp
 from common.prompt_catalog import PromptCatalog
-from stages import classify, clean, evaluate, extract, split
+from stages import classify, clean, evaluate, extract, preprocess
 
 ONE_ENGINE = "gemma4-31b-w4a16-vllm"
 AN_ENGINE_ON_EACH_CARD = "gemma4-12b-unified-w4a16-vllm"
@@ -29,12 +29,12 @@ KINDS = ("bank_statement", "invoice", "receipt")
 
 
 def asks_which_way_up(prompts: list[str]) -> bool:
-    """Whether a call puts the split stage's first question, of whether each photograph is the right way up.
+    """Whether a call puts the preprocess stage's first question, of whether each photograph is the right way up.
 
     The stage puts two questions about a batch of photographs, in two calls. The stand-in answers the
     first YES and does not count it: a call it counts is a batch asked where its receipts are.
     """
-    return bool(prompts) and prompts[0] == PromptCatalog().photo_split_prompt("upright")
+    return bool(prompts) and prompts[0] == PromptCatalog().preprocess_prompt("upright")
 
 
 class Stopped(BaseException):
@@ -108,10 +108,10 @@ class Bench:
         monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         monkeypatch.setattr(cards, "listed_by_nvidia_smi", lambda: 2)
         monkeypatch.setattr(
-            photo_split,
+            image_preprocessing,
             "CONFIG",
             dataclasses.replace(
-                photo_split.CONFIG,
+                image_preprocessing.CONFIG,
                 batch_size=2,
                 straighten=False,
                 rectify_pages=False,
@@ -145,9 +145,16 @@ class Bench:
         """Have a stage stop when this many requests in a row have failed."""
         self.monkeypatch.setattr(engine_calls, "STOP_AFTER_FAILED_REQUESTS", failures)
 
-    def split(self, output: Path, model: str = ONE_ENGINE, *, photo_split: bool = True) -> Path:
-        """Run the split stage on the bench's pages. Gives the folder the later stages read images from."""
-        return split.run(output, split_checked(model, self.models, self.pages, photo_split=photo_split))
+    def preprocess(
+        self, output: Path, model: str = ONE_ENGINE, *, preprocess_photographs: bool = True
+    ) -> Path:
+        """Run the preprocess stage on the bench's pages. Gives the folder the later stages read images from."""
+        return preprocess.run(
+            output,
+            preprocess_checked(
+                model, self.models, self.pages, preprocess_photographs=preprocess_photographs
+            ),
+        )
 
     def classify(
         self, output: Path, model: str = ONE_ENGINE, pages: Path | None = None, **choices: Any

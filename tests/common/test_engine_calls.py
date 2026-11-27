@@ -1,7 +1,7 @@
 """Several requests to an engine call, and one at a time when a call fails.
 
 Until 24 November 2026 this was written out in each stage that uses the model: three times with small
-differences, and in the split stage not at all, where one photograph the engine refused ended the stage.
+differences, and in the preprocess stage not at all, where one photograph the engine refused ended the stage.
 
 The items are invented words; nothing here is a page.
 """

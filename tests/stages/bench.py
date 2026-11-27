@@ -17,14 +17,24 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reference"))
 
-from model_inputs import InProcessContext, models_folder, run_settings, split_checked  # noqa: E402
+from model_inputs import InProcessContext, models_folder, run_settings, split_checked
 
-from common import cards, engine_calls, extraction_batching, photo_split, vllm_dp  # noqa: E402
-from stages import classify, clean, evaluate, extract, split  # noqa: E402
+from common import cards, engine_calls, extraction_batching, photo_split, vllm_dp
+from common.prompt_catalog import PromptCatalog
+from stages import classify, clean, evaluate, extract, split
 
 ONE_ENGINE = "gemma4-31b-w4a16-vllm"
 AN_ENGINE_ON_EACH_CARD = "gemma4-12b-unified-w4a16-vllm"
 KINDS = ("bank_statement", "invoice", "receipt")
+
+
+def asks_which_way_up(prompts: list[str]) -> bool:
+    """Whether a call puts the split stage's first question, of whether each photograph is the right way up.
+
+    The stage puts two questions about a batch of photographs, in two calls. The stand-in answers the
+    first YES and does not count it: a call it counts is a batch asked where its receipts are.
+    """
+    return bool(prompts) and prompts[0] == PromptCatalog().photo_split_prompt("upright")
 
 
 class Stopped(BaseException):
@@ -75,6 +85,8 @@ class Processor:
         return Image.open(image_path)
 
     def ask(self, images: list[Any], prompts: list[str], max_tokens: int) -> list[str]:
+        if asks_which_way_up(prompts):
+            return ["YES"] * len(images)
         self._called([f"{len(images)} photographs"])
         return ["[]"] * len(images)
 

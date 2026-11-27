@@ -15,10 +15,20 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from bench import (
+    AN_ENGINE_ON_EACH_CARD,
+    ONE_ENGINE,
+    Bench,
+    Stopped,
+    asks_which_way_up,
+    run_settings,
+    split_checked,
+)
+from PIL import Image
 
-from bench import AN_ENGINE_ON_EACH_CARD, ONE_ENGINE, Bench, Stopped
-from bench import run_settings, split_checked
+from common import photo_split
 from common.engine_calls import StageStopped
+from common.prompt_catalog import PromptCatalog
 from common.stage_settings import resolve
 from common.stage_timing import read_stage_timings
 from stages import split
@@ -121,6 +131,8 @@ def two_receipts_in_each(bench: Bench) -> None:
     """Every photograph is answered as holding two receipts, by a call the bench still counts."""
 
     def replies(images: list[Any], prompts: list[str], max_tokens: int) -> list[str]:
+        if asks_which_way_up(prompts):
+            return ["YES"] * len(images)
         bench.processor._called([f"{len(images)} photographs"])
         return [TWO_RECEIPTS] * len(images)
 
@@ -232,12 +244,112 @@ def test_asking_about_photographs_gives_the_replies_and_writes_nothing(
     assert asked == seen
     assert [record["image_name"] for record in asked] == bench.names
     assert all(
-        set(record) == {"image_name", "image_path", "raw_response", "error", "processing_time"}
+        set(record)
+        == {"image_name", "image_path", "raw_response", "error", "processing_time", "upright_turn"}
         and record["raw_response"] == "[]"
         and record["error"] is None
+        and record["upright_turn"] == 0
         for record in asked
     )
     assert list(tmp_path.glob("**/splits.jsonl")) == []
+
+
+# --- a photograph is set the right way up before it is asked about ----------------------------------------
+
+
+def printed_page() -> Image.Image:
+    """A white page of print: rows of letter-sized marks, with a heading to tell its top from its bottom."""
+    page = Image.new("RGB", (300, 600), "white")
+    page.paste((20, 20, 20), (30, 20, 200, 50))
+    for top in range(80, 560, 22):
+        for left in range(24 + top % 9, 270, 9):
+            if (top + left) % 7:
+                page.paste((30, 30, 30), (left, top, left + 5, top + 10))
+    return page
+
+
+class ToldWhichWayUp:
+    """Stands in for the processor: answers the first question as it is told to, and keeps what it was shown."""
+
+    def __init__(self, upright: str) -> None:
+        self.upright = upright
+        self.shown: list[tuple[str, int, list[Image.Image]]] = []
+
+    def load_document_image(self, image_path: str) -> Image.Image:
+        return Image.open(image_path)
+
+    def ask(self, images: list[Any], prompts: list[str], max_tokens: int) -> list[str]:
+        self.shown.append((prompts[0], max_tokens, [image.copy() for image in images]))
+        return [self.upright if asks_which_way_up(prompts) else "[]"] * len(images)
+
+
+@pytest.mark.parametrize(
+    ("stored_turned", "says", "turn_recorded", "ends_upright"),
+    [
+        # What a model that answers rightly says of a photograph stored each way up.
+        (0, "YES", 0, True),
+        (180, "NO", 180, True),
+        (90, "NO", 270, True),
+        (270, "YES", 90, True),
+        # The model's answer is what decides between the right way up and upside down.
+        (90, "YES", 90, False),
+        (0, "NO", 180, False),
+        (180, "I cannot say", 0, False),
+    ],
+)
+def test_a_photograph_is_set_the_right_way_up_before_it_is_asked_where_its_receipts_are(
+    bench: Bench, tmp_path: Path, stored_turned: int, says: str, turn_recorded: int, ends_upright: bool
+) -> None:
+    """Set on end by its print, then turned half way round when the model says it is upside down."""
+    page = printed_page()
+    photograph = tmp_path / "page.png"
+    page.rotate(stored_turned, expand=True).save(photograph)
+    processor = ToldWhichWayUp(says)
+
+    (asked,) = split.ask_about_photographs(processor, [photograph], run_settings(ONE_ENGINE, bench.models))
+
+    assert asked["upright_turn"] == turn_recorded
+    (first, budget, _), (second, _, (boxes_asked_of,)) = processor.shown
+    assert first == PromptCatalog().photo_split_prompt("upright")
+    assert budget == photo_split.CONFIG.upright_max_tokens
+    assert second == PromptCatalog().photo_split_prompt()
+    as_stored = page.rotate(stored_turned, expand=True)
+    assert boxes_asked_of.tobytes() == as_stored.rotate(turn_recorded, expand=True).tobytes()
+    assert (boxes_asked_of.size == page.size and boxes_asked_of.tobytes() == page.tobytes()) is ends_upright
+
+
+def test_a_photograph_the_model_could_not_be_asked_about_is_left_the_way_up_it_came(
+    bench: Bench, tmp_path: Path
+) -> None:
+    photograph = tmp_path / "page.png"
+    printed_page().rotate(90, expand=True).save(photograph)
+    bench.processor.dead_from_attempt = 1
+
+    (asked,) = split.ask_about_photographs(
+        bench.processor, [photograph], run_settings(ONE_ENGINE, bench.models)
+    )
+
+    assert asked["error"] and asked["upright_turn"] == 0
+
+
+def test_the_stage_writes_a_photograph_it_set_the_right_way_up_as_png_and_records_the_turn(
+    bench: Bench, tmp_path: Path
+) -> None:
+    photographs, output = tmp_path / "photographs", tmp_path / "split"
+    photographs.mkdir()
+    page = printed_page()
+    page.rotate(90, expand=True).save(photographs / "sideways.jpg", quality=95)
+    page.save(photographs / "upright.jpg", quality=95)
+
+    split.run(output, split_checked(ONE_ENGINE, bench.models, photographs))
+
+    sideways, upright = read_jsonl(output / "splits.jsonl")
+    assert (sideways["upright_turn"], sideways["outputs"]) == (90, ["sideways.png"])
+    assert (upright["upright_turn"], upright["outputs"]) == (0, ["upright.jpg"])
+    assert (output / "images" / "upright.jpg").read_bytes() == (photographs / "upright.jpg").read_bytes()
+    with Image.open(output / "images" / "sideways.png") as written:
+        # Set on end. The stand-in says YES to every photograph, so it is not turned further.
+        assert written.size == page.size
 
 
 # --- stopped, and stopping ------------------------------------------------------------------------------

@@ -18,6 +18,25 @@
 classification:
   opening: "Look at this document image and answer each question:"
   questions:
+    # AN EXPERIMENT, NOT FOR MERGING (27 November 2026). Two questions about which way up the page is,
+    # put first so that a long answer to a later question cannot crowd them out of the reply. No rule
+    # uses either: the replies are read afterwards, to see whether the model can tell.
+    - label: TURN
+      answer: number
+      ask: |
+        Which way up is the printed text on this page?
+        Answer 0 if it is the right way up and reads normally.
+        Answer 180 if it is upside down.
+        Answer 90 if the page lies on its side with the tops of
+        the letters pointing to the left edge of the image.
+        Answer 270 if the page lies on its side with the tops of
+        the letters pointing to the right edge of the image.
+        Answer with one number: 0, 90, 180 or 270.
+    - label: UPRIGHT
+      answer: yes_no
+      ask: |
+        Is the printed text the right way up, so that it can be
+        read without turning the image? Answer YES or NO.
     - label: COLUMNS
       answer: columns
       ask: |
